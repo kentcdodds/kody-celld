@@ -55,6 +55,100 @@ describe('parsePackageManifest', () => {
 	})
 })
 
+describe('kody.webhooks + kody.subscriptions', () => {
+	const exportsMap = { '.': './index.js', './hook': './lib/other.js' }
+
+	it('parses declarations with defaults', () => {
+		const parsed = parsePackageManifest(
+			manifest({
+				exports: exportsMap,
+				kody: {
+					webhooks: [
+						{ name: 'github', export: './hook' },
+						{
+							name: 'stripe',
+							export: '.',
+							responseMode: 'sync',
+							inputMode: 'params',
+							rateLimitPerMinute: 5,
+							verification: {
+								type: 'hmac-sha256',
+								header: 'stripe-signature',
+								secretName: 'stripeSecret',
+								signedPayload: 'timestamp.body',
+							},
+							replay: {
+								timestampHeader: 'stripe-signature',
+								timestampFormat: 'stripe-signature',
+								toleranceSeconds: 60,
+							},
+						},
+					],
+					subscriptions: { 'email.message.received': { handler: './lib/other.js' } },
+				},
+			}),
+		)
+		assert.equal(parsed.webhooks.length, 2)
+		assert.deepEqual(parsed.webhooks[0], {
+			name: 'github',
+			export: 'hook',
+			entry: 'lib/other.js',
+			responseMode: 'ack',
+			inputMode: 'request',
+			rateLimitPerMinute: 60,
+		})
+		assert.equal(parsed.webhooks[1]?.verification?.encoding, 'hex')
+		assert.equal(parsed.webhooks[1]?.replay?.toleranceSeconds, 60)
+		assert.deepEqual(parsed.subscriptions, [{ topic: 'email.message.received', handler: 'lib/other.js' }])
+	})
+
+	it('rejects invalid declarations', () => {
+		const bad = (webhooks: unknown) => () => parsePackageManifest(manifest({ exports: exportsMap, kody: { webhooks } }))
+		assert.throws(bad([{ name: 'Bad Name', export: '.' }]), /invalid_manifest/)
+		assert.throws(bad([{ name: 'a', export: './nope' }]), /not in package\.json#exports/)
+		assert.throws(
+			bad([
+				{ name: 'a', export: '.' },
+				{ name: 'a', export: '.' },
+			]),
+			/invalid_manifest/,
+		)
+		assert.throws(bad([{ name: 'a', export: '.', responseMode: 'later' }]), /responseMode/)
+		assert.throws(bad([{ name: 'a', export: '.', rateLimitPerMinute: 0 }]), /rateLimitPerMinute/)
+		assert.throws(
+			bad([{ name: 'a', export: '.', verification: { type: 'md5', header: 'x', secretName: 's' } }]),
+			/invalid_manifest/,
+		)
+		assert.throws(
+			bad([
+				{
+					name: 'a',
+					export: '.',
+					verification: { type: 'hmac-sha256', header: 'x', secretName: 's', secret: 'inline' },
+				},
+			]),
+			/invalid_manifest/,
+		)
+		assert.throws(
+			bad([
+				{
+					name: 'a',
+					export: '.',
+					verification: { type: 'hmac-sha256', header: 'x', secretName: 's', signedPayload: 'timestamp.body' },
+				},
+			]),
+			/replay\.timestampHeader/,
+		)
+		assert.throws(
+			() =>
+				parsePackageManifest(
+					manifest({ exports: exportsMap, kody: { subscriptions: { 'email.bogus': { handler: './index.js' } } } }),
+				),
+			/unknown topic/,
+		)
+	})
+})
+
 describe('parseKodyPackageSpecifier', () => {
 	it('splits scoped and unscoped specifiers', () => {
 		assert.deepEqual(parseKodyPackageSpecifier('kody:@scope/pkg/create'), {

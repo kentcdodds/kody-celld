@@ -7,21 +7,23 @@ with an S3-compatible bucket for durability.
 It is deliberately the _core_, not full product parity with
 [kentcdodds/kody](https://github.com/kentcdodds/kody):
 
-| Surface                                                            | Status                                                                                                               |
-| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| MCP `search` + `execute` (streamable HTTP, JSON-RPC)               | Working, smoke-tested                                                                                                |
-| Packages (save local / in-memory, run, import)                     | Working, smoke-tested (`kody:@scope/pkg/export`, `packageStorage`)                                                   |
-| Secrets (encrypted store + host-gated injection)                   | Working, smoke-tested (`{{secret:name}}`, `{{secret-basic:...}}`)                                                    |
-| Jobs (package-owned cron / interval / once)                        | Working, smoke-tested against the real celld cron trigger                                                            |
-| Docker: single node (NAS / home server) and fleet                  | Working, smoke-tested (`compose.yaml`, `compose.fleet.yaml` + MinIO + Caddy)                                         |
-| Master-key rotation                                                | Working, smoke-tested (`KODY_MASTER_KEY_PREVIOUS` + `POST /admin/secrets/rekey`)                                     |
-| Limits, quotas, `usageGet`, admin audit log                        | Working, smoke-tested ([docs/operations.md](./docs/operations.md))                                                   |
-| AI chat/embeddings (Ollama, LM Studio, vLLM, OpenAI, Anthropic, …) | Working, smoke-tested adapters ([docs/ai.md](./docs/ai.md))                                                          |
-| Memories (`metaMemory*`) + semantic search                         | Working, smoke-tested: FTS5 + sqlite-vec built in, Qdrant adapter, optional LLM re-rank ([docs/ai.md](./docs/ai.md)) |
-| Blob storage (`blob*`, raw HTTP routes, signed links)              | Working, smoke-tested: celld R2 binding built in, direct S3 adapter ([docs/blobs.md](./docs/blobs.md))               |
-| Browser rendering (content, screenshots, PDF)                      | Working, smoke-tested adapters: self-hosted browserless overlay or Cloudflare ([docs/browser.md](./docs/browser.md)) |
-| npm imports inside `execute`                                       | Experimental via esm.sh (see [provision matrix](./docs/known-gaps.md))                                               |
-| Email, webhooks, OAuth, web UI, …                                  | Planned as built-ins and/or adapters — status per feature in the [provision matrix](./docs/known-gaps.md)            |
+| Surface                                                            | Status                                                                                                                                                  |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MCP `search` + `execute` (streamable HTTP, JSON-RPC)               | Working, smoke-tested                                                                                                                                   |
+| Packages (save local / in-memory, run, import)                     | Working, smoke-tested (`kody:@scope/pkg/export`, `packageStorage`)                                                                                      |
+| Secrets (encrypted store + host-gated injection)                   | Working, smoke-tested (`{{secret:name}}`, `{{secret-basic:...}}`)                                                                                       |
+| Jobs (package-owned cron / interval / once)                        | Working, smoke-tested against the real celld cron trigger                                                                                               |
+| Docker: single node (NAS / home server) and fleet                  | Working, smoke-tested (`compose.yaml`, `compose.fleet.yaml` + MinIO + Caddy)                                                                            |
+| Master-key rotation                                                | Working, smoke-tested (`KODY_MASTER_KEY_PREVIOUS` + `POST /admin/secrets/rekey`)                                                                        |
+| Limits, quotas, `usageGet`, admin audit log                        | Working, smoke-tested ([docs/operations.md](./docs/operations.md))                                                                                      |
+| AI chat/embeddings (Ollama, LM Studio, vLLM, OpenAI, Anthropic, …) | Working, smoke-tested adapters ([docs/ai.md](./docs/ai.md))                                                                                             |
+| Memories (`metaMemory*`) + semantic search                         | Working, smoke-tested: FTS5 + sqlite-vec built in, Qdrant adapter, optional LLM re-rank ([docs/ai.md](./docs/ai.md))                                    |
+| Blob storage (`blob*`, raw HTTP routes, signed links)              | Working, smoke-tested: celld R2 binding built in, direct S3 adapter ([docs/blobs.md](./docs/blobs.md))                                                  |
+| Browser rendering (content, screenshots, PDF)                      | Working, smoke-tested adapters: self-hosted browserless overlay or Cloudflare ([docs/browser.md](./docs/browser.md))                                    |
+| npm imports inside `execute`                                       | Experimental via esm.sh (see [provision matrix](./docs/known-gaps.md))                                                                                  |
+| Email (inboxes, send/reply, subscriptions)                         | Working, smoke-tested: self-hosted SMTP `mail-bridge` overlay + Postmark/Mailgun/SendGrid/Resend/Cloudflare adapters ([docs/email.md](./docs/email.md)) |
+| Package inbound webhooks (mint/rotate, HMAC, replay, deliveries)   | Working, smoke-tested ([docs/webhooks.md](./docs/webhooks.md))                                                                                          |
+| OAuth integrations, MCP OAuth, web UI, registry                    | Planned as built-ins and/or adapters — status per feature in the [provision matrix](./docs/known-gaps.md)                                               |
 
 **New here? Start with [docs/getting-started.md](./docs/getting-started.md)** —
 it goes from zero to a running Kody in one Docker container (or a two-node
@@ -57,7 +59,7 @@ npm run dev          # celld dev . --port 8787  (state persists in .celld/dev)
 In another terminal:
 
 ```sh
-npm run smoke        # mcp, packages, secrets, jobs, limits, memory, blobs, browser against http://127.0.0.1:8787
+npm run smoke        # mcp, packages, secrets, jobs, limits, memory, blobs, browser, webhooks, email against http://127.0.0.1:8787
 npm run smoke:cron   # same, plus waits (~60s) for celld's real cron trigger to run a job
 ```
 

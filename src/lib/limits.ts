@@ -20,6 +20,10 @@ export type Limits = {
 	auditRetentionCount: number
 	/** Serialized cap for `__mcpContent` blocks (images, audio) returned by execute. */
 	mcpContentLimitBytes: number
+	/** Largest inbound webhook body accepted at `/webhooks/...`. */
+	webhookMaxBodyBytes: number
+	/** Largest stored email (text + html + attachments) per message. */
+	emailMaxBytes: number
 }
 
 export type Quotas = {
@@ -37,6 +41,14 @@ export type Quotas = {
 	blobs: number
 	/** Total stored blob bytes per user. */
 	blobBytes: number
+	/** Stored email messages (inbound + outbound) per user. */
+	emailMessages: number
+	/** Outbound emails a user may send per UTC day. */
+	emailSendsPerDay: number
+	/** Inbound emails accepted for a user per UTC day. */
+	emailReceivesPerDay: number
+	/** Minted webhook URLs per user. */
+	webhooks: number
 }
 
 export type LimitEnv = Partial<
@@ -48,13 +60,19 @@ export type LimitEnv = Partial<
 		| 'KODY_RESPONSE_LIMIT_BYTES'
 		| 'KODY_AUDIT_RETENTION_COUNT'
 		| 'KODY_MCP_CONTENT_LIMIT_BYTES'
+		| 'KODY_WEBHOOK_MAX_BODY_BYTES'
+		| 'KODY_EMAIL_MAX_BYTES'
 		| 'KODY_QUOTA_RUNS_PER_DAY'
 		| 'KODY_QUOTA_EXECUTE_MS_PER_DAY'
 		| 'KODY_QUOTA_PACKAGES'
 		| 'KODY_QUOTA_SECRETS'
 		| 'KODY_QUOTA_JOBS'
 		| 'KODY_QUOTA_BLOBS'
-		| 'KODY_QUOTA_BLOB_BYTES',
+		| 'KODY_QUOTA_BLOB_BYTES'
+		| 'KODY_QUOTA_EMAIL_MESSAGES'
+		| 'KODY_QUOTA_EMAIL_SENDS_PER_DAY'
+		| 'KODY_QUOTA_EMAIL_RECEIVES_PER_DAY'
+		| 'KODY_QUOTA_WEBHOOKS',
 		string | undefined
 	>
 >
@@ -67,6 +85,8 @@ export const defaultLimits: Limits = {
 	responseLimitBytes: 100_000,
 	auditRetentionCount: 10_000,
 	mcpContentLimitBytes: 512_000,
+	webhookMaxBodyBytes: 1_048_576,
+	emailMaxBytes: 10_485_760,
 }
 
 /** All zero: unlimited unless the operator says otherwise. */
@@ -78,6 +98,10 @@ export const defaultQuotas: Quotas = {
 	jobs: 0,
 	blobs: 0,
 	blobBytes: 0,
+	emailMessages: 0,
+	emailSendsPerDay: 0,
+	emailReceivesPerDay: 0,
+	webhooks: 0,
 }
 
 export const quotaKeys = Object.keys(defaultQuotas) as Array<keyof Quotas>
@@ -125,6 +149,12 @@ export function limitsFromEnv(env: LimitEnv): Limits {
 		mcpContentLimitBytes: read('KODY_MCP_CONTENT_LIMIT_BYTES', env, (raw) =>
 			integer(raw, defaultLimits.mcpContentLimitBytes, { min: 10_000, max: 50_000_000 }),
 		),
+		webhookMaxBodyBytes: read('KODY_WEBHOOK_MAX_BODY_BYTES', env, (raw) =>
+			integer(raw, defaultLimits.webhookMaxBodyBytes, { min: 1_024, max: 50_000_000 }),
+		),
+		emailMaxBytes: read('KODY_EMAIL_MAX_BYTES', env, (raw) =>
+			integer(raw, defaultLimits.emailMaxBytes, { min: 10_000, max: 100_000_000 }),
+		),
 	}
 }
 
@@ -140,6 +170,14 @@ export function quotasFromEnv(env: LimitEnv): Quotas {
 		jobs: read('KODY_QUOTA_JOBS', env, (raw) => nonNegative(raw, defaultQuotas.jobs)),
 		blobs: read('KODY_QUOTA_BLOBS', env, (raw) => nonNegative(raw, defaultQuotas.blobs)),
 		blobBytes: read('KODY_QUOTA_BLOB_BYTES', env, (raw) => nonNegative(raw, defaultQuotas.blobBytes)),
+		emailMessages: read('KODY_QUOTA_EMAIL_MESSAGES', env, (raw) => nonNegative(raw, defaultQuotas.emailMessages)),
+		emailSendsPerDay: read('KODY_QUOTA_EMAIL_SENDS_PER_DAY', env, (raw) =>
+			nonNegative(raw, defaultQuotas.emailSendsPerDay),
+		),
+		emailReceivesPerDay: read('KODY_QUOTA_EMAIL_RECEIVES_PER_DAY', env, (raw) =>
+			nonNegative(raw, defaultQuotas.emailReceivesPerDay),
+		),
+		webhooks: read('KODY_QUOTA_WEBHOOKS', env, (raw) => nonNegative(raw, defaultQuotas.webhooks)),
 	}
 }
 

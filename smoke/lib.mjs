@@ -143,6 +143,12 @@ export class McpClient {
 		return json.result
 	}
 
+	/** Like callDirect but returns the raw outcome so callers can assert on refusals. */
+	async callDirectRaw(capability, args = {}) {
+		const { status, json } = await request(`/api/call/${capability}`, { method: 'POST', token: this.token, body: args })
+		return { status, isError: !(status === 200 && json.ok), payload: json }
+	}
+
 	/** Calls a single capability from inside an execute run. */
 	async call(capability, args = {}) {
 		return this.run(

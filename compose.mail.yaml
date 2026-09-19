@@ -1,0 +1,45 @@
+# Overlay: self-hosted email without a mail API account.
+#
+#   COMPOSE_FILE=compose.yaml:compose.mail.yaml    # in .env
+#   KODY_EMAIL_DOMAIN=kody.example.com
+#   KODY_EMAIL_INBOUND_TOKEN=<openssl rand -hex 32>
+#   MAIL_BRIDGE_TOKEN=<openssl rand -hex 32>
+#   MAIL_BRIDGE_SMTP_URL=smtps://user:pass@smtp.example.com:465   # or empty for direct MX delivery
+#   docker compose up -d
+#
+# The bridge listens on port 25 for mail addressed to KODY_EMAIL_DOMAIN and
+# forwards it to POST /email/inbound/bridge; Kody sends through POST /send on
+# the bridge, which relays via MAIL_BRIDGE_SMTP_URL. Point your domain's MX at
+# this host and open TCP 25 on your router/firewall. For a fleet, run the same
+# container anywhere that can reach a node and set KODY_EMAIL_OUTBOUND_URL to
+# it. See docs/email.md.
+services:
+  mail-bridge:
+    build: ./mail-bridge
+    image: ${MAIL_BRIDGE_IMAGE:-kody-mail-bridge:local}
+    restart: unless-stopped
+    init: true
+    ports:
+      - '${MAIL_BRIDGE_SMTP_PUBLIC_PORT:-25}:25'
+    environment:
+      KODY_URL: http://kody:8080
+      KODY_EMAIL_DOMAIN: ${KODY_EMAIL_DOMAIN:?set KODY_EMAIL_DOMAIN in .env}
+      KODY_EMAIL_INBOUND_TOKEN: ${KODY_EMAIL_INBOUND_TOKEN:?set KODY_EMAIL_INBOUND_TOKEN in .env}
+      MAIL_BRIDGE_TOKEN: ${MAIL_BRIDGE_TOKEN:?set MAIL_BRIDGE_TOKEN in .env}
+      MAIL_BRIDGE_SMTP_URL: ${MAIL_BRIDGE_SMTP_URL:-}
+      MAIL_BRIDGE_HOSTNAME: ${MAIL_BRIDGE_HOSTNAME:-mail.${KODY_EMAIL_DOMAIN}}
+      MAIL_BRIDGE_MAX_BYTES: ${MAIL_BRIDGE_MAX_BYTES:-}
+      # Optional STARTTLS for inbound SMTP: mount a cert/key and set these paths.
+      MAIL_BRIDGE_TLS_CERT: ${MAIL_BRIDGE_TLS_CERT:-}
+      MAIL_BRIDGE_TLS_KEY: ${MAIL_BRIDGE_TLS_KEY:-}
+    depends_on:
+      kody:
+        condition: service_started
+
+  kody:
+    environment:
+      KODY_EMAIL_DOMAIN: ${KODY_EMAIL_DOMAIN:?set KODY_EMAIL_DOMAIN in .env}
+      KODY_EMAIL_INBOUND_TOKEN: ${KODY_EMAIL_INBOUND_TOKEN:?set KODY_EMAIL_INBOUND_TOKEN in .env}
+      KODY_EMAIL_OUTBOUND_PROVIDER: ${KODY_EMAIL_OUTBOUND_PROVIDER:-bridge}
+      KODY_EMAIL_OUTBOUND_URL: ${KODY_EMAIL_OUTBOUND_URL:-http://mail-bridge:8025}
+      KODY_EMAIL_OUTBOUND_TOKEN: ${KODY_EMAIL_OUTBOUND_TOKEN:-${MAIL_BRIDGE_TOKEN}}

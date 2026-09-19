@@ -117,6 +117,36 @@ the SSRF guard. Screenshots become MCP `image` blocks through the
 validates the blocks, the MCP server emits them ahead of the JSON text block,
 and run history keeps only a size summary. [browser.md](./browser.md).
 
+## Email and webhooks
+
+Both are HTTP-boundary features of the Worker (`src/index.ts` routes
+`/webhooks/*`, `/email/inbound/*`, `/email/events/*`) that end in an ordinary
+`executeRun` with package provenance, so package code sees the same
+`packageStorage()` / `{{secret:…}}` world as a job or an MCP call.
+
+`src/webhooks/ingress.ts` resolves `/webhooks/:userId/:handle/:secret`, asks
+the `UserCell` to admit the delivery (constant-time secret compare against the
+current and — during rotation — previous secret, enabled flag, rate limit),
+verifies HMAC signatures **inside the cell** (`webhookSignatureCheck`, so the
+stored secret never crosses RPC), applies replay/idempotency rules, records the
+delivery and runs the declared export with `kind: 'webhook'`. Credentials are
+revealed only by `GET /api/webhooks/:handle/url` (audited); `webhookUrlApply`
+pushes them to a provider through the secrets gateway as a `{{webhookUrl}}`
+placeholder so neither the client nor package code needs to read them.
+[webhooks.md](./webhooks.md).
+
+`src/email/inbound.ts` turns each provider's payload (JSON, multipart form or
+raw `message/rfc822` via `postal-mime`) into one `InboundEmail`;
+`src/email/service.ts` authenticates the request with the deployment inbound
+token, routes recipients to inbox owners through the `RegistryCell`
+(`inbox_locals`, plus-addressing), classifies by sender rules, stores in the
+`UserCell` (`email_messages`, `email_attachments`) and dispatches
+`email.message.*` subscriptions. `src/email/outbound.ts` builds provider
+requests (bridge, Resend, Postmark, Mailgun, SendGrid) with the operator token
+attached host-side; `src/email/events.ts` normalizes delivery webhooks back
+onto stored messages. `mail-bridge/` is the self-hosted SMTP sidecar that makes
+the `bridge` provider real. [email.md](./email.md).
+
 ## AI, memories, semantic search
 
 `src/ai/config.ts` parses `KODY_AI_*` / `KODY_VECTOR_*` once per cell;

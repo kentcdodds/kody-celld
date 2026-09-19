@@ -103,24 +103,40 @@ curl -s "$BASE/admin/audit?actor=admin&action=secret_host." -H "authorization: B
 
 `action` filters by prefix. Actions recorded today:
 
-| Action                                                                       | Actor | Target       | Details                                    |
-| ---------------------------------------------------------------------------- | ----- | ------------ | ------------------------------------------ |
-| `user.create`, `token.issue`                                                 | admin | user id      | email / label                              |
-| `secret_host.approve`, `secret_host.revoke`                                  | admin | user id      | host                                       |
-| `quota.set`, `quota.clear`                                                   | admin | user id      | the override                               |
-| `jobs.dispatch`                                                              | admin | —            | jobs ran / skipped                         |
-| `secret.rekey`                                                               | admin | —            | current key id, rows resealed / remaining  |
-| `memory.reindex`                                                             | admin | user id      | embedding model, rows re-embedded          |
-| `secret.save`, `secret.delete`                                               | user  | secret name  | scope, package name                        |
-| `package.save`, `package.delete`                                             | user  | package name | version, source, job names                 |
-| `job.enable`, `job.disable`                                                  | user  | job id       | —                                          |
-| `memory.create`, `memory.update`, `memory.delete.soft`, `memory.delete.hard` | user  | memory id    | category, status, package (never the text) |
+| Action                                                                                | Actor | Target               | Details                                                      |
+| ------------------------------------------------------------------------------------- | ----- | -------------------- | ------------------------------------------------------------ |
+| `user.create`, `token.issue`                                                          | admin | user id              | email / label                                                |
+| `secret_host.approve`, `secret_host.revoke`                                           | admin | user id              | host                                                         |
+| `quota.set`, `quota.clear`                                                            | admin | user id              | the override                                                 |
+| `jobs.dispatch`                                                                       | admin | —                    | jobs ran / skipped                                           |
+| `secret.rekey`                                                                        | admin | —                    | current key id, rows resealed / remaining                    |
+| `memory.reindex`                                                                      | admin | user id              | embedding model, rows re-embedded                            |
+| `secret.save`, `secret.delete`                                                        | user  | secret name          | scope, package name                                          |
+| `package.save`, `package.delete`                                                      | user  | package name         | version, source, job names                                   |
+| `job.enable`, `job.disable`                                                           | user  | job id               | —                                                            |
+| `memory.create`, `memory.update`, `memory.delete.soft`, `memory.delete.hard`          | user  | memory id            | category, status, package (never the text)                   |
+| `webhook.mint`, `webhook.rotate`, `webhook.delete`, `webhook.apply`, `webhook.reveal` | user  | handle               | package + webhook name, provider host (never the URL secret) |
+| `email.inbox.claim`, `email.inbox.release`, `email.destination.verify`, `email.send`  | user  | address / message id | provider, recipient count (never bodies or codes)            |
 
 **What is never in the log:** secret values, encrypted blobs, API tokens, the
 admin token, master keys, run code or run results. Callers pass names and ids
 only (`src/lib/audit.ts`), and the smoke test asserts that a freshly generated
 secret value and a user token do not appear anywhere in `GET /admin/audit`.
 The log is a record of _who changed what_, not a copy of the data.
+
+## Email and webhook limits
+
+| Variable                            | Default    | Notes                                                                |
+| ----------------------------------- | ---------- | -------------------------------------------------------------------- |
+| `KODY_WEBHOOK_MAX_BODY_BYTES`       | `1048576`  | Inbound webhook body cap (`413`).                                    |
+| `KODY_EMAIL_MAX_BYTES`              | `10485760` | Stored size per message incl. attachments (`413` / SMTP `552`).      |
+| `KODY_QUOTA_EMAIL_MESSAGES`         | `0`        | Stored messages per user; oldest are not evicted, new are refused.   |
+| `KODY_QUOTA_EMAIL_SENDS_PER_DAY`    | `0`        | `emailSend`/`emailReply` per user per UTC day.                       |
+| `KODY_QUOTA_EMAIL_RECEIVES_PER_DAY` | `0`        | Accepted inbound messages per user per UTC day (`429` / SMTP `452`). |
+
+Per-webhook rate limits come from the package manifest
+(`rateLimitPerMinute`, capped at 600). Email counters show up in `usageGet`
+(`emailMessages`, `emailSends`, `emailReceives`). See [email.md](./email.md) and [webhooks.md](./webhooks.md).
 
 ## Smoke coverage
 
