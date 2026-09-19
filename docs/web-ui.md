@@ -141,7 +141,14 @@ Rendering flow for a page:
    route component in `client/routes/`.
 4. In the browser, `client/entry.tsx` hydrates only the islands the page
    embedded (`clientEntry()` → `/build/client-entry.js#ExportName`); no data
-   fetching happens client-side and every form still round-trips.
+   fetching happens client-side and every form still round-trips. `run()`
+   would otherwise replay same-origin links and forms as `fetch()` frame
+   navigations; the entry stops the Navigation API event first so they stay
+   native document navigations (OAuth consent and connect flows redirect
+   cross-origin, which a fetch under `connect-src 'self'` cannot follow).
+   Do not name a form field `method` or `enctype`: the runtime reads those
+   `HTMLFormElement` properties on submit and a field of that name shadows
+   them with the element.
 
 The Worker typecheck (`tsconfig.worker-typecheck.json`) maps
 `#client/app-root.tsx` to `src/app/ssr-stubs/app-root.ts` so DOM-only code
