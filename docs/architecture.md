@@ -68,8 +68,10 @@ Outbound `fetch()` in an isolate goes to `FetchGateway.fetch` on the host:
    nothing leaves the box.
 
 Values are encrypted in `UserCell` with AES-GCM under an HKDF key derived from
-`KODY_MASTER_KEY` and the user id (`src/lib/crypto.ts`). Rotating the master
-key requires re-encryption (not implemented — see known gaps).
+`KODY_MASTER_KEY` and the user id (`src/lib/crypto.ts`). Each row records the
+16-hex `key_id` of the master key that sealed it; retired keys stay readable
+via `KODY_MASTER_KEY_PREVIOUS` until `POST /admin/secrets/rekey` has re-sealed
+every row (see [secrets.md](./secrets.md#master-key-rotation)).
 
 ## Jobs
 

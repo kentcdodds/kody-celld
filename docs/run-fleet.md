@@ -1,10 +1,14 @@
 # Run a fleet
 
-> **Verification status:** the local path (`celld dev`) and `celld deploy --dry-run`
-> of the rendered fleet config were exercised in this experiment. A real
-> bucket-backed multi-node fleet was **not** run — no S3 credentials were
-> available. Everything below follows the celld 0.5 CLI/docs and should be
-> treated as the checklist for that first fleet run.
+> **Verification status:** a real two-node, bucket-backed fleet was run with
+> the bundled [`compose.fleet.yaml` + `compose.minio.yaml`](../compose.fleet.yaml)
+> (celld 0.5.0, MinIO RELEASE.2025-09-07, Caddy 2): `npm run smoke:cron`
+> through the load balancer passed (MCP, packages, secrets, jobs, fleet-wide
+> cron dispatch), and stopping `node-a` left `node-b` serving all state.
+> The Docker path is the recommended way to run a fleet — see
+> [getting-started.md](./getting-started.md#path-b-fleet-two-nodes--a-bucket).
+> This page is the manual/bare-metal equivalent and the reference for the
+> knobs the compose files set.
 
 ## Minimum fleet
 
@@ -100,37 +104,47 @@ curl -s -X POST https://kody.example.com/admin/users \
   -H "authorization: Bearer $KODY_ADMIN_TOKEN" -H 'content-type: application/json' \
   -d '{"email":"kent@example.com"}'            # -> { user, token }
 
-# run the smoke scenarios that do not need loopback against the fleet
+# run the smoke scenarios that do not need a local echo server against the fleet
 for s in mcp packages jobs; do
   KODY_URL=https://kody.example.com KODY_ADMIN_TOKEN=$KODY_ADMIN_TOKEN node smoke/run.mjs --only $s
 done
 ```
 
-The `secrets` scenario starts a loopback echo server to prove injection and
-denial without touching a third party, so it only runs against a node on the
-same machine (`celld dev`, or a fleet node reached over SSH port-forwarding
-with `KODY_ALLOW_INSECURE_SECRET_HOSTS=127.0.0.1` rendered into the config).
+The `secrets` scenario starts an HTTP echo server to prove injection and
+denial without touching a third party. The Worker must be able to reach it:
+set `SMOKE_ECHO_HOST` to the name the nodes can resolve (it binds `0.0.0.0`
+when that is not loopback) and render `KODY_ALLOW_INSECURE_SECRET_HOSTS=<that
+host>` into the config for the duration of the test. The compose fleet does
+this with `host.docker.internal`.
 
 ## Operations
 
 - **Rotate the admin token:** re-render + `fleet:deploy`. Existing user tokens
   are unaffected.
-- **Rotate the master key:** not supported yet — the store keeps a single key
-  id. See known gaps.
+- **Rotate the master key:** see [secrets.md](./secrets.md#master-key-rotation).
 - **Inspect cells:** `celld cell list UserCell --bucket $CELLD_BUCKET`.
 - **Logs:** node stdout (`RUST_LOG=info`), plus `GET /admin/users/:id/runs`
   for per-user run history and gateway events.
 - **Backups:** the bucket _is_ the durable copy; snapshot it with your
   provider's versioning/replication.
 
-## Not verified in this experiment
+## Verified and not verified
 
-- Two-node ownership hand-off and `fleet` durability acks.
-- Cron ownership election on a multi-node fleet (single-node `celld dev` cron
-  was verified).
-- Bucket providers other than what celld's own test-suite covers.
+Verified with the compose fleet on one Docker host:
+
+- Deploy to a MinIO bucket, two nodes adopting the deployment, Caddy
+  round-robin in front.
+- Full smoke (`mcp`, `packages`, `secrets`, `jobs`) plus a real fleet-wide
+  cron dispatch through the load balancer.
+- Node loss: `docker compose stop node-a`, then the full smoke again against
+  `node-b` alone, which served the state written earlier through `node-a`.
+
+Not verified here (nothing in the code depends on it, but measure before you
+rely on it):
+
+- Nodes on separate machines over a real private network (same celld
+  mechanics, different latency).
+- Bucket providers other than MinIO and what celld's own test-suite covers
+  (AWS S3, R2, GCS, Azure are supported by celld).
 - Performance under concurrent `execute` load (Worker Loader isolate reuse is
-  per node; a fleet will cold-start per node).
-
-Provide bucket credentials (`AWS_*`, `S3_ENDPOINT`, `CELLD_BUCKET`) and two
-hosts on a private network to close these.
+  per node; a fleet cold-starts per node).

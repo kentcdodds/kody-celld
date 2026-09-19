@@ -1,0 +1,84 @@
+# Multi-node kody-celld fleet: two celld nodes sharing an S3-compatible bucket,
+# a one-shot deploy job, and Caddy as TLS terminator / load balancer.
+#
+#   cp .env.example .env     # set KODY_ADMIN_TOKEN, KODY_MASTER_KEY, KODY_PUBLIC_URL, bucket creds
+#   docker compose up -d     # .env's COMPOSE_FILE adds compose.minio.yaml for a bundled bucket
+#   docker compose run --rm deploy    # re-run after every code change
+#
+# Using AWS S3 / Cloudflare R2 / GCS / Azure / another MinIO instead of the
+# bundled one: drop compose.minio.yaml from COMPOSE_FILE and point CELLD_BUCKET,
+# S3_ENDPOINT and the AWS_* variables at it.
+#
+# Add nodes by copying the `node-b` block. Port 9000 (celld's peer/operator
+# listener) is never published; only Caddy is.
+x-bucket-env: &bucket-env
+  CELLD_BUCKET: ${CELLD_BUCKET:-s3://kody-celld}
+  S3_ENDPOINT: ${S3_ENDPOINT:-}
+  AWS_REGION: ${AWS_REGION:-us-east-1}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:?set AWS_ACCESS_KEY_ID in .env}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:?set AWS_SECRET_ACCESS_KEY in .env}
+
+x-node: &node
+  build: .
+  image: ${KODY_IMAGE:-kody-celld:local}
+  init: true
+  restart: unless-stopped
+  environment:
+    <<: *bucket-env
+    CELLD_TRUST_FORWARDED_HEADERS: '1'
+    RUST_LOG: ${CELLD_RUST_LOG:-warn}
+  extra_hosts:
+    - 'host.docker.internal:host-gateway'
+  depends_on:
+    deploy:
+      condition: service_completed_successfully
+
+services:
+  deploy:
+    build: .
+    image: ${KODY_IMAGE:-kody-celld:local}
+    command: ['deploy']
+    restart: 'no'
+    environment:
+      <<: *bucket-env
+      KODY_CREATE_BUCKET: ${KODY_CREATE_BUCKET:-0}
+      KODY_ADMIN_TOKEN: ${KODY_ADMIN_TOKEN:?set KODY_ADMIN_TOKEN in .env (32+ random characters)}
+      KODY_MASTER_KEY: ${KODY_MASTER_KEY:?set KODY_MASTER_KEY in .env (32+ random characters)}
+      KODY_MASTER_KEY_PREVIOUS: ${KODY_MASTER_KEY_PREVIOUS:-}
+      KODY_PUBLIC_URL: ${KODY_PUBLIC_URL:?set KODY_PUBLIC_URL in .env}
+      KODY_ALLOW_HTTP_PUBLIC_URL: ${KODY_ALLOW_HTTP_PUBLIC_URL:-0}
+      KODY_ALLOW_INSECURE_SECRET_HOSTS: ${KODY_ALLOW_INSECURE_SECRET_HOSTS:-}
+
+  node-a:
+    <<: *node
+    command: ['node', '--internal-listen', '0.0.0.0:9000', '--advertise', 'node-a:9000']
+    volumes:
+      - node-a-state:/var/lib/celld
+
+  node-b:
+    <<: *node
+    command: ['node', '--internal-listen', '0.0.0.0:9000', '--advertise', 'node-b:9000']
+    volumes:
+      - node-b-state:/var/lib/celld
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - '${KODY_HTTP_PORT:-80}:80'
+      - '${KODY_HTTPS_PORT:-443}:443'
+    environment:
+      KODY_SITE_ADDRESS: ${KODY_SITE_ADDRESS:-:80}
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - node-a
+      - node-b
+
+volumes:
+  node-a-state:
+  node-b-state:
+  caddy-data:
+  caddy-config:

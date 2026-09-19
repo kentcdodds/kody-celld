@@ -35,8 +35,12 @@ const base = JSON.parse(stripJsonComments(await readFile(path.join(root, 'wrangl
 const adminToken = required('KODY_ADMIN_TOKEN', { minLength: 32 })
 const masterKey = required('KODY_MASTER_KEY', { minLength: 32 })
 const publicUrl = required('KODY_PUBLIC_URL')
-if (!/^https:\/\//.test(publicUrl)) {
-	console.error('KODY_PUBLIC_URL must be an https:// URL; terminate TLS in front of celld.')
+const allowHttp = process.env.KODY_ALLOW_HTTP_PUBLIC_URL === '1'
+if (!/^https:\/\//.test(publicUrl) && !(allowHttp && /^http:\/\//.test(publicUrl))) {
+	console.error(
+		'KODY_PUBLIC_URL must be an https:// URL; terminate TLS in front of celld ' +
+			'(or set KODY_ALLOW_HTTP_PUBLIC_URL=1 for a trusted private network).',
+	)
 	process.exit(1)
 }
 for (const [name, value] of [
@@ -58,6 +62,7 @@ const rendered = {
 		...(process.env.KODY_ALLOW_INSECURE_SECRET_HOSTS
 			? { KODY_ALLOW_INSECURE_SECRET_HOSTS: process.env.KODY_ALLOW_INSECURE_SECRET_HOSTS }
 			: {}),
+		...(process.env.KODY_MASTER_KEY_PREVIOUS ? { KODY_MASTER_KEY_PREVIOUS: process.env.KODY_MASTER_KEY_PREVIOUS } : {}),
 	},
 }
 

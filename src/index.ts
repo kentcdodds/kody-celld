@@ -112,6 +112,31 @@ async function handleAdmin(request: Request, env: Env, ctx: ExecutionContext, ur
 		return json(await dispatchDueJobs(env, ctx.exports))
 	}
 
+	if (segments.length === 3 && segments[1] === 'secrets' && segments[2] === 'rekey' && request.method === 'POST') {
+		// Master-key rotation step 2: re-seal every user's secrets with KODY_MASTER_KEY.
+		const users = await registry.listUsers()
+		const perUser: Array<{ userId: string; resealed: number; remaining: number }> = []
+		let currentKeyId = ''
+		for (const user of users) {
+			const userCell = getUserCell(env, user.id)
+			await userCell.init(user.id)
+			const result = await userCell.secretRekey()
+			currentKeyId = result.currentKeyId
+			perUser.push({ userId: user.id, resealed: result.resealed, remaining: result.remaining })
+		}
+		const remaining = perUser.reduce((sum, u) => sum + u.remaining, 0)
+		return json({
+			currentKeyId,
+			resealed: perUser.reduce((sum, u) => sum + u.resealed, 0),
+			remaining,
+			users: perUser,
+			next:
+				remaining === 0
+					? 'Every secret uses the current key; KODY_MASTER_KEY_PREVIOUS can be removed.'
+					: 'Some secrets could not be re-sealed; keep KODY_MASTER_KEY_PREVIOUS and check the logs.',
+		})
+	}
+
 	if (segments.length >= 3 && segments[1] === 'users') {
 		const userId = decodeURIComponent(segments[2] ?? '')
 		const user = await registry.getUser(userId)
