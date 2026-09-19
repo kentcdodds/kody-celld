@@ -6,9 +6,15 @@
     "suspicious": "warn"
   },
   "rules": {
-    "no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    "no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_"
+      }
+    ],
     "typescript/consistent-type-imports": "error",
     "no-console": "off"
   },
-  "ignorePatterns": ["node_modules", ".celld"]
+  "ignorePatterns": ["node_modules", ".celld", "public/build"]
 }

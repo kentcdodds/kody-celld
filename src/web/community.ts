@@ -1,6 +1,8 @@
+import { renderPage } from '#app/render.tsx'
+import { type CommunityListingView } from '#universal/loader-data.ts'
 import type { Env } from '../env.ts'
 import type { CommunityListing } from '../packages/community-store.ts'
-import { formatWhen, html, page, type Html } from './html.ts'
+import { appSessionOf } from './http.ts'
 import { readWebSession } from './session.ts'
 
 /**
@@ -13,28 +15,15 @@ export function isCommunityRoute(pathname: string) {
 	return pathname === '/community' || pathname.startsWith('/community/')
 }
 
-const nav = [
-	{ href: '/community', label: 'Community' },
-	{ href: '/account', label: 'Account' },
-]
-
-function listingRow(listing: CommunityListing) {
-	return html`<tr>
-		<td>
-			<a href="/community/${encodeURIComponent(listing.name)}"><strong>${listing.name}</strong></a>
-			${listing.description ? html`<br /><span class="muted small">${listing.description}</span>` : ''}
-		</td>
-		<td>${listing.version}</td>
-		<td>${listing.publisher}</td>
-		<td>${listing.installs}</td>
-		<td>${formatWhen(listing.updatedAt)}</td>
-	</tr>`
-}
-
-function installSnippet(env: Env, listing: CommunityListing): Html {
-	return html`<pre><code>// from any MCP client connected to ${env.KODY_PUBLIC_URL}/mcp
-execute: import { kody } from 'kody:runtime'
-export default () => kody.communityInstall({ name: ${JSON.stringify(listing.name)} })</code></pre>`
+function listingView(listing: CommunityListing): CommunityListingView {
+	return {
+		name: listing.name,
+		version: listing.version,
+		description: listing.description || null,
+		publisher: listing.publisher,
+		installs: listing.installs,
+		updatedAt: listing.updatedAt,
+	}
 }
 
 export async function handleCommunity(request: Request, env: Env, url: URL): Promise<Response> {
@@ -42,8 +31,7 @@ export async function handleCommunity(request: Request, env: Env, url: URL): Pro
 		return new Response('method not allowed', { status: 405, headers: { allow: 'GET, HEAD' } })
 	}
 	const registry = env.REGISTRY.getByName('registry')
-	const session = await readWebSession(request, env)
-	const who = session ? html`${session.user.email}` : html`<a href="/signin">Sign in</a>`
+	const session = appSessionOf(await readWebSession(request, env))
 	const name = decodeURIComponent(url.pathname.slice('/community/'.length))
 
 	if (url.pathname === '/community' || url.pathname === '/community/') {
@@ -52,126 +40,49 @@ export async function handleCommunity(request: Request, env: Env, url: URL): Pro
 			registry.communitySearch({ query, limit: 50 }),
 			registry.communityStats(),
 		])
-		return page({
+		return renderPage({
 			title: 'Community packages',
-			nav,
-			current: '/community',
-			who,
-			body: html`<div class="card">
-					<p class="muted">
-						${stats.packages} package${stats.packages === 1 ? '' : 's'} from ${stats.publishers}
-						publisher${stats.publishers === 1 ? '' : 's'}, ${stats.installs} install${stats.installs === 1 ? '' : 's'}.
-						Publish your own with <code>communityPublish</code> or from <a href="/account/packages">your packages</a>.
-					</p>
-					<form method="get" action="/community" class="row">
-						<input name="q" placeholder="Search name, description, keywords" value="${query}" />
-						<button type="submit">Search</button>
-					</form>
-				</div>
-				<div class="card">
-					<table>
-						<tr>
-							<th>Package</th>
-							<th>Version</th>
-							<th>Publisher</th>
-							<th>Installs</th>
-							<th>Updated</th>
-						</tr>
-						${
-							listings.length === 0
-								? html`<tr>
-										<td colspan="5" class="muted">${query ? 'No packages match.' : 'Nothing published yet.'}</td>
-									</tr>`
-								: listings.map(listingRow)
-						}
-					</table>
-				</div>`,
+			pathname: '/community',
+			session,
+			data: { page: 'community', query, stats, listings: listings.map(listingView) },
 		})
 	}
 
 	const pkg = await registry.communityGet(name)
 	if (!pkg) {
-		return page({
+		return renderPage({
 			title: 'Not found',
-			nav,
-			who,
+			pathname: url.pathname,
+			session,
 			status: 404,
-			body: html`<div class="card">
-				<p>No community package named <code>${name}</code>.</p>
-				<p><a href="/community">Back to the catalog</a></p>
-			</div>`,
+			data: { page: 'communityNotFound', name },
 		})
 	}
-	const exportsList = Object.entries(pkg.manifest.exports)
-	const jobs = Object.entries(pkg.manifest.jobs)
-	return page({
+	return renderPage({
 		title: pkg.name,
-		nav,
-		current: '/community',
-		who,
-		body: html`<div class="card">
-				<p>
-					<a href="/community">Community</a> / <strong>${pkg.name}</strong> <span class="badge">v${pkg.version}</span>
-				</p>
-				${pkg.description ? html`<p>${pkg.description}</p>` : ''}
-				<p class="muted small">
-					by ${pkg.publisher} · ${pkg.installs} install${pkg.installs === 1 ? '' : 's'} · ${pkg.fileCount} files ·
-					published ${formatWhen(pkg.publishedAt)} · updated ${formatWhen(pkg.updatedAt)}
-					${pkg.keywords.length > 0 ? html`· ${pkg.keywords.map((k) => html`<span class="badge">${k}</span> `)}` : ''}
-				</p>
-				${installSnippet(env, pkg)}
-			</div>
-			<div class="card">
-				<h2>Exports</h2>
-				<table>
-					<tr>
-						<th>Export</th>
-						<th>Module</th>
-					</tr>
-					${exportsList.map(
-						([exportName, path]) =>
-							html`<tr>
-								<td><code>kody:${pkg.name}${exportName === '.' ? '' : `/${exportName}`}</code></td>
-								<td><code>${path}</code></td>
-							</tr>`,
-					)}
-				</table>
-				${
-					jobs.length > 0
-						? html`<h2>Jobs</h2>
-								<table>
-									<tr>
-										<th>Job</th>
-										<th>Export</th>
-										<th>Schedule</th>
-									</tr>
-									${jobs.map(
-										([jobName, job]) =>
-											html`<tr>
-												<td>${jobName}</td>
-												<td><code>${job.entry}</code></td>
-												<td><code>${JSON.stringify(job.schedule)}</code></td>
-											</tr>`,
-									)}
-								</table>`
-						: ''
-				}
-				<h2>Files</h2>
-				<ul>
-					${Object.keys(pkg.files)
-						.sort()
-						.map((file) => html`<li><code>${file}</code></li>`)}
-				</ul>
-			</div>
-			<div class="card">
-				<h2>README</h2>
-				<pre>${pkg.readme || '(empty)'}</pre>
-				${
-					pkg.agents
-						? html`<h2>AGENTS</h2>
-								<pre>${pkg.agents}</pre>`
-						: ''
-				}
-			</div>`,
+		pathname: url.pathname,
+		session,
+		data: {
+			page: 'communityDetail',
+			publicUrl: env.KODY_PUBLIC_URL,
+			pkg: {
+				...listingView(pkg),
+				publishedAt: pkg.publishedAt,
+				fileCount: pkg.fileCount,
+				keywords: pkg.keywords,
+				exports: Object.entries(pkg.manifest.exports).map(([exportName, path]) => ({
+					specifier: `kody:${pkg.name}${exportName === '.' ? '' : `/${exportName}`}`,
+					path,
+				})),
+				jobs: Object.entries(pkg.manifest.jobs).map(([jobName, job]) => ({
+					name: jobName,
+					entry: job.entry,
+					schedule: JSON.stringify(job.schedule),
+				})),
+				files: Object.keys(pkg.files).sort(),
+				readme: pkg.readme,
+				agents: pkg.agents || null,
+			},
+		},
 	})
 }

@@ -9,3 +9,4 @@ node_modules
 wrangler.fleet.jsonc
 *.local
 .DS_Store
+public/build

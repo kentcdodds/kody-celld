@@ -5,28 +5,15 @@ import { KodyError } from '../lib/errors.ts'
 import { loadEmailConfig } from '../email/service.ts'
 import { defaultPublisher } from '../capabilities/community.ts'
 import { fetchPackageSource, packageSourceHostsFromEnv, parsePackageSource } from '../packages/install.ts'
-import { formatWhen, html, page, raw, readForm, redirect, type Html } from './html.ts'
+import { renderPage } from '#app/render.tsx'
+import { type AppLoaderData, type PageFlash } from '#universal/loader-data.ts'
+import { appSessionOf, readForm, redirect } from './http.ts'
 import { assertCsrf, readWebSession, type WebSession } from './session.ts'
-import { passwordForm } from './signin.ts'
+import { passwordFormView } from './signin.ts'
 
 const registry = (env: Env) => env.REGISTRY.getByName('registry')
 
-const nav = [
-	{ href: '/account', label: 'Overview' },
-	{ href: '/account/clients', label: 'MCP clients' },
-	{ href: '/account/tokens', label: 'API tokens' },
-	{ href: '/account/secrets', label: 'Secrets' },
-	{ href: '/account/packages', label: 'Packages' },
-	{ href: '/account/jobs', label: 'Jobs' },
-	{ href: '/account/runs', label: 'Runs' },
-	{ href: '/account/integrations', label: 'Integrations' },
-	{ href: '/account/inbox', label: 'Inbox' },
-	{ href: '/account/sessions', label: 'Sessions' },
-]
-
-type Flash = { kind: 'ok' | 'error'; text: string } | null
-
-const flashes: Record<string, NonNullable<Flash>> = {
+const flashes: Record<string, PageFlash> = {
 	welcome: { kind: 'ok', text: 'Your account is ready. Connect an MCP client or create an API token to get started.' },
 	saved: { kind: 'ok', text: 'Saved.' },
 	revoked: { kind: 'ok', text: 'Revoked.' },
@@ -40,22 +27,16 @@ const flashes: Record<string, NonNullable<Flash>> = {
 
 function view(
 	session: WebSession,
-	input: { title: string; current: string; body: Html; flash?: Flash; status?: number },
+	input: { title: string; current: string; data: AppLoaderData; flash?: PageFlash | null; status?: number },
 ) {
-	return page({
+	return renderPage({
 		title: input.title,
-		nav,
-		current: input.current,
-		who: html`${session.user.email}
-			<form method="post" action="/signout"><button class="small" type="submit">Sign out</button></form>`,
+		pathname: input.current,
+		session: appSessionOf(session),
 		flash: input.flash ?? null,
 		...(input.status === undefined ? {} : { status: input.status }),
-		body: input.body,
+		data: input.data,
 	})
-}
-
-function csrfInput(session: WebSession) {
-	return html`<input type="hidden" name="csrf" value="${session.csrf}" />`
 }
 
 export function isAccountRoute(pathname: string) {
@@ -89,61 +70,22 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 				title: 'Account',
 				current: '/account',
 				flash,
-				body: html` <div class="card">
-						<p>
-							Signed in as <strong>${session.user.email}</strong> · member since ${formatWhen(session.user.createdAt)}
-						</p>
-						<p>
-							MCP endpoint: <code>${env.KODY_PUBLIC_URL}/mcp</code><br />
-							<span class="muted small"
-								>Add it to any MCP client that supports OAuth (Claude, Cursor, VS Code, …) and approve the connection
-								here — no token pasting needed. Clients without OAuth can use an API token.</span
-							>
-						</p>
-						<p class="row">
-							<span class="badge">${grants.length} connected client${grants.length === 1 ? '' : 's'}</span>
-							<span class="badge">${tokens.length} API token${tokens.length === 1 ? '' : 's'}</span>
-							<span class="badge ${hasPassword ? 'ok' : 'warn'}">${hasPassword ? 'password set' : 'no password'}</span>
-						</p>
-					</div>
-					<h2>Today</h2>
-					<div class="card">
-						<table>
-							<tr>
-								<th>Runs</th>
-								<th>Errors</th>
-								<th>Execute time</th>
-								<th>Packages</th>
-								<th>Secrets</th>
-								<th>Jobs</th>
-								<th>Blobs</th>
-							</tr>
-							<tr>
-								<td>${usage.today.runs}${usage.quotas.runsPerDay ? html` / ${usage.quotas.runsPerDay}` : ''}</td>
-								<td>${usage.today.errors}</td>
-								<td>
-									${Math.round(usage.today.executeMs / 1000)}
-									s${usage.quotas.executeMsPerDay ? html` / ${Math.round(usage.quotas.executeMsPerDay / 1000)} s` : ''}
-								</td>
-								<td>${usage.counts.packages}${usage.quotas.packages ? html` / ${usage.quotas.packages}` : ''}</td>
-								<td>${usage.counts.secrets}${usage.quotas.secrets ? html` / ${usage.quotas.secrets}` : ''}</td>
-								<td>${usage.counts.jobs}</td>
-								<td>${usage.counts.blobs} (${Math.round(usage.counts.blobBytes / 1024)} KiB)</td>
-							</tr>
-						</table>
-						<p class="muted small">
-							Execute timeout ${usage.limits.executeTimeoutMs} ms · runs retained ${usage.limits.runRetentionCount}
-						</p>
-					</div>
-					<h2>Password</h2>
-					<div class="card">
-						${passwordForm({
-							action: '/account/password',
-							submit: hasPassword ? 'Change password' : 'Set password',
-							requireCurrent: hasPassword,
-							csrf: session.csrf,
-						})}
-					</div>`,
+				data: {
+					page: 'account',
+					csrf: session.csrf,
+					email: session.user.email,
+					createdAt: session.user.createdAt,
+					publicUrl: env.KODY_PUBLIC_URL,
+					grantCount: grants.length,
+					tokenCount: tokens.length,
+					hasPassword,
+					usage,
+					passwordForm: passwordFormView({
+						action: '/account/password',
+						submit: hasPassword ? 'Change password' : 'Set password',
+						requireCurrent: hasPassword,
+					}),
+				},
 			})
 		}
 
@@ -178,53 +120,19 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 				title: 'MCP clients',
 				current: '/account/clients',
 				flash,
-				body: html` <p class="muted">
-						Applications you approved through OAuth. Revoking a client invalidates its access and refresh tokens
-						immediately; it will have to ask for approval again.
-					</p>
-					<div class="card">
-						${
-							grants.length === 0
-								? html`<p class="muted">
-										No connected clients yet. Point an MCP client at <code>${env.KODY_PUBLIC_URL}/mcp</code>.
-									</p>`
-								: html`<table>
-											<tr>
-												<th>Client</th>
-												<th>Approved</th>
-												<th>Last used</th>
-												<th>Active devices</th>
-												<th></th>
-											</tr>
-											${grants.map(
-												(grant) =>
-													html`<tr>
-														<td>
-															<strong>${grant.clientName}</strong><br /><span class="muted small"
-																><code>${grant.clientId}</code></span
-															>
-														</td>
-														<td>${formatWhen(grant.createdAt)}</td>
-														<td>${formatWhen(grant.lastUsedAt)}</td>
-														<td>${grant.activeFamilies}</td>
-														<td>
-															<form method="post" action="/account/clients">
-																${csrfInput(session)}
-																<input type="hidden" name="action" value="revoke" />
-																<input type="hidden" name="grantId" value="${grant.id}" />
-																<button class="small danger" type="submit">Revoke</button>
-															</form>
-														</td>
-													</tr>`,
-											)}
-										</table>
-										<form method="post" action="/account/clients" style="margin-top:12px">
-											${csrfInput(session)}
-											<input type="hidden" name="action" value="revoke_all" />
-											<button class="danger" type="submit">Revoke all clients</button>
-										</form>`
-						}
-					</div>`,
+				data: {
+					page: 'accountMcpOauthClients',
+					csrf: session.csrf,
+					publicUrl: env.KODY_PUBLIC_URL,
+					grants: grants.map((grant) => ({
+						id: grant.id,
+						clientId: grant.clientId,
+						clientName: grant.clientName,
+						createdAt: grant.createdAt,
+						lastUsedAt: grant.lastUsedAt,
+						activeFamilies: grant.activeFamilies,
+					})),
+				},
 			})
 		}
 
@@ -247,62 +155,18 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 				title: 'API tokens',
 				current: '/account/tokens',
 				flash,
-				body: html` ${
-						issued
-							? html`<div class="card">
-									<p><strong>New token "${issued.label}"</strong> — copy it now, it is not shown again:</p>
-									<pre class="secret">${issued.token}</pre>
-									<p class="muted small">
-										Use as <code>Authorization: Bearer …</code> against <code>${env.KODY_PUBLIC_URL}/mcp</code> or
-										<code>/api</code>.
-									</p>
-								</div>`
-							: ''
-					}
-					<div class="card">
-						<table>
-							<tr>
-								<th>Label</th>
-								<th>Id</th>
-								<th>Created</th>
-								<th>Last used</th>
-								<th></th>
-							</tr>
-							${
-								tokens.length === 0
-									? html`<tr>
-											<td colspan="5" class="muted">No API tokens.</td>
-										</tr>`
-									: ''
-							}
-							${tokens.map(
-								(token) =>
-									html`<tr>
-										<td>${token.label}</td>
-										<td><code>${token.id}</code></td>
-										<td>${formatWhen(token.createdAt)}</td>
-										<td>${formatWhen(token.lastUsedAt)}</td>
-										<td>
-											<form method="post" action="/account/tokens">
-												${csrfInput(session)}
-												<input type="hidden" name="action" value="revoke" />
-												<input type="hidden" name="tokenId" value="${token.id}" />
-												<button class="small danger" type="submit">Revoke</button>
-											</form>
-										</td>
-									</tr>`,
-							)}
-						</table>
-					</div>
-					<h2>Create a token</h2>
-					<div class="card">
-						<form method="post" action="/account/tokens" class="stack">
-							${csrfInput(session)}
-							<input type="hidden" name="action" value="create" />
-							<label>Label <input name="label" placeholder="laptop, CI, my-script" maxlength="80" /></label>
-							<div><button class="primary" type="submit">Create token</button></div>
-						</form>
-					</div>`,
+				data: {
+					page: 'accountApiTokens',
+					csrf: session.csrf,
+					publicUrl: env.KODY_PUBLIC_URL,
+					tokens: tokens.map((token) => ({
+						id: token.id,
+						label: token.label,
+						createdAt: token.createdAt,
+						lastUsedAt: token.lastUsedAt,
+					})),
+					issued: issued ? { kind: 'token', label: issued.label, value: issued.token, expiresAt: null } : null,
+				},
 			})
 		}
 
@@ -333,85 +197,18 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 				title: 'Secrets',
 				current: '/account/secrets',
 				flash,
-				body: html` <p class="muted">
-						Values are encrypted at rest and only ever injected into outbound requests to approved hosts by the fetch
-						gateway. Reference them in code as <code>{{secret:NAME}}</code>.
-					</p>
-					<div class="card">
-						<table>
-							<tr>
-								<th>Name</th>
-								<th>Scope</th>
-								<th>Description</th>
-								<th>Updated</th>
-								<th></th>
-							</tr>
-							${
-								secrets.length === 0
-									? html`<tr>
-											<td colspan="5" class="muted">No secrets yet.</td>
-										</tr>`
-									: ''
-							}
-							${secrets.map(
-								(secret) =>
-									html`<tr>
-										<td><code>${secret.name}</code></td>
-										<td>
-											${secret.scope}${secret.packageName ? html` <span class="muted small">(${secret.packageName})</span>` : ''}
-										</td>
-										<td>${secret.description ?? html`<span class="muted">—</span>`}</td>
-										<td>${formatWhen(secret.updatedAt)}</td>
-										<td>
-											<form method="post" action="/account/secrets">
-												${csrfInput(session)}
-												<input type="hidden" name="action" value="delete" />
-												<input type="hidden" name="name" value="${secret.name}" />
-												<input type="hidden" name="packageName" value="${secret.packageName ?? ''}" />
-												<button class="small danger" type="submit">Delete</button>
-											</form>
-										</td>
-									</tr>`,
-							)}
-						</table>
-					</div>
-					<h2>Add or replace a secret</h2>
-					<div class="card">
-						<form method="post" action="/account/secrets" class="stack" autocomplete="off">
-							${csrfInput(session)}
-							<input type="hidden" name="action" value="save" />
-							<label>Name <input name="name" pattern="[a-zA-Z0-9._-]+" placeholder="GITHUB_TOKEN" required /></label>
-							<label>Value <textarea name="value" required spellcheck="false"></textarea></label>
-							<label>Description <input name="description" placeholder="what it is for" /></label>
-							<div><button class="primary" type="submit">Save secret</button></div>
-						</form>
-					</div>
-					<h2>Approved hosts</h2>
-					<div class="card">
-						<p class="muted small">
-							Secrets are only injected into requests to these hosts. Approvals are made by the operator (admin console)
-							— ask them to approve a new host.
-						</p>
-						${
-							hosts.length === 0
-								? html`<p class="muted">No approved hosts.</p>`
-								: html`<table>
-										<tr>
-											<th>Host</th>
-											<th>Approved</th>
-											<th>By</th>
-										</tr>
-										${hosts.map(
-											(host) =>
-												html`<tr>
-													<td><code>${host.host}</code></td>
-													<td>${formatWhen(host.approvedAt)}</td>
-													<td>${host.approvedBy}</td>
-												</tr>`,
-										)}
-									</table>`
-						}
-					</div>`,
+				data: {
+					page: 'accountSecrets',
+					csrf: session.csrf,
+					secrets: secrets.map((secret) => ({
+						name: secret.name,
+						scope: secret.scope,
+						packageName: secret.packageName ?? null,
+						description: secret.description ?? null,
+						updatedAt: secret.updatedAt,
+					})),
+					hosts: hosts.map((host) => ({ host: host.host, approvedAt: host.approvedAt, approvedBy: host.approvedBy })),
+				},
 			})
 		}
 
@@ -467,97 +264,29 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 				title: 'Packages',
 				current: '/account/packages',
 				flash,
-				body: html`<div class="card">
-						<h2>Install from GitHub or URL</h2>
-						${installError ? html`<p class="flash error">${installError}</p>` : ''}
-						<form method="post" action="/account/packages" class="row">
-							${csrfInput(session)}
-							<input type="hidden" name="action" value="install" />
-							<label
-								>Source
-								<input
-									name="source"
-									required
-									placeholder="github:owner/repo/sub/dir#ref or https://…/package.tgz"
-									value="${installError ? (form.source ?? '') : ''}"
-							/></label>
-							<label
-								>Subdirectory (optional)
-								<input name="subdir" placeholder="examples/hello" value="${installError ? (form.subdir ?? '') : ''}"
-							/></label>
-							<button type="submit">Install</button>
-						</form>
-						<p class="muted small">
-							Allowed source hosts:
-							<code>${packageSourceHostsFromEnv(env).join(', ')}</code> (<code>KODY_PACKAGE_SOURCE_HOSTS</code>).
-						</p>
-					</div>
-					<div class="card">
-						<table>
-							<tr>
-								<th>Name</th>
-								<th>Version</th>
-								<th>Files</th>
-								<th>Jobs</th>
-								<th>Updated</th>
-								<th></th>
-							</tr>
-							${
-								packages.length === 0
-									? html`<tr>
-											<td colspan="6" class="muted">
-												No packages saved. Use <code>packageSave</code> from an MCP client.
-											</td>
-										</tr>`
-									: ''
-							}
-							${packages.map(
-								(pkg) =>
-									html`<tr>
-										<td>
-											<strong>${pkg.name}</strong
-											>${pkg.manifest.description ? html`<br /><span class="muted small">${pkg.manifest.description}</span>` : ''}
-										</td>
-										<td>${pkg.version}<br /><span class="muted small">${pkg.source}</span></td>
-										<td>${pkg.fileCount}</td>
-										<td>${Object.keys(pkg.manifest.jobs ?? {}).length}</td>
-										<td>${formatWhen(pkg.updatedAt)}</td>
-										<td class="row">
-											${(() => {
-												const listing = publishedByName.get(pkg.name)
-												return html`<form method="post" action="/account/packages">
-														${csrfInput(session)}
-														<input type="hidden" name="action" value="publish" />
-														<input type="hidden" name="name" value="${pkg.name}" />
-														<button class="small" type="submit" ${pkg.manifest.hidden ? raw('disabled') : ''}>
-															${listing ? (listing.version === pkg.version ? 'Republish' : `Publish v${pkg.version}`) : 'Publish'}
-														</button>
-													</form>
-													${
-														listing
-															? html`<a class="small" href="/community/${encodeURIComponent(pkg.name)}"
-																		>v${listing.version} public</a
-																	>
-																	<form method="post" action="/account/packages">
-																		${csrfInput(session)}
-																		<input type="hidden" name="action" value="unpublish" />
-																		<input type="hidden" name="name" value="${pkg.name}" />
-																		<button class="small" type="submit">Unpublish</button>
-																	</form>`
-															: ''
-													}`
-											})()}
-											<form method="post" action="/account/packages">
-												${csrfInput(session)}
-												<input type="hidden" name="action" value="delete" />
-												<input type="hidden" name="name" value="${pkg.name}" />
-												<button class="small danger" type="submit">Delete</button>
-											</form>
-										</td>
-									</tr>`,
-							)}
-						</table>
-					</div>`,
+				data: {
+					page: 'accountPackages',
+					csrf: session.csrf,
+					sourceHosts: packageSourceHostsFromEnv(env),
+					installError,
+					installDraft: installError
+						? { source: form.source ?? '', subdir: form.subdir ?? '' }
+						: { source: '', subdir: '' },
+					packages: packages.map((pkg) => {
+						const listing = publishedByName.get(pkg.name)
+						return {
+							name: pkg.name,
+							version: pkg.version,
+							description: pkg.manifest.description ?? null,
+							source: pkg.source,
+							fileCount: pkg.fileCount,
+							jobCount: Object.keys(pkg.manifest.jobs ?? {}).length,
+							hidden: pkg.manifest.hidden === true,
+							updatedAt: pkg.updatedAt,
+							published: listing ? { version: listing.version } : null,
+						}
+					}),
+				},
 			})
 		}
 
@@ -574,52 +303,23 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 				title: 'Jobs',
 				current: '/account/jobs',
 				flash,
-				body: html`<div class="card">
-					<table>
-						<tr>
-							<th>Job</th>
-							<th>Schedule</th>
-							<th>Next run</th>
-							<th>Last run</th>
-							<th>Status</th>
-							<th></th>
-						</tr>
-						${
-							jobs.length === 0
-								? html`<tr>
-										<td colspan="6" class="muted">No jobs. Jobs come from package manifests.</td>
-									</tr>`
-								: ''
-						}
-						${jobs.map(
-							(job) =>
-								html`<tr>
-									<td>
-										<strong>${job.packageName}/${job.jobName}</strong
-										>${job.description ? html`<br /><span class="muted small">${job.description}</span>` : ''}
-									</td>
-									<td>
-										<code>${JSON.stringify(job.schedule)}</code
-										>${job.timezone ? html` <span class="muted small">${job.timezone}</span>` : ''}
-									</td>
-									<td>${job.enabled ? formatWhen(job.nextRunAt) : html`<span class="muted">paused</span>`}</td>
-									<td>${formatWhen(job.lastRunAt)}</td>
-									<td>
-										${job.lastStatus ?? '—'}${job.lastError ? html`<br /><span class="small" style="color:var(--danger)">${job.lastError}</span>` : ''}
-									</td>
-									<td>
-										<form method="post" action="/account/jobs">
-											${csrfInput(session)}
-											<input type="hidden" name="action" value="toggle" />
-											<input type="hidden" name="id" value="${job.id}" />
-											<input type="hidden" name="enabled" value="${job.enabled ? 'false' : 'true'}" />
-											<button class="small" type="submit">${job.enabled ? 'Pause' : 'Resume'}</button>
-										</form>
-									</td>
-								</tr>`,
-						)}
-					</table>
-				</div>`,
+				data: {
+					page: 'accountJobs',
+					csrf: session.csrf,
+					jobs: jobs.map((job) => ({
+						id: job.id,
+						packageName: job.packageName,
+						jobName: job.jobName,
+						description: job.description ?? null,
+						schedule: JSON.stringify(job.schedule),
+						timezone: job.timezone ?? null,
+						enabled: job.enabled,
+						nextRunAt: job.nextRunAt,
+						lastRunAt: job.lastRunAt,
+						lastStatus: job.lastStatus,
+						lastError: job.lastError,
+					})),
+				},
 			})
 		}
 
@@ -629,40 +329,18 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 			return view(session, {
 				title: 'Runs',
 				current: '/account/runs',
-				body: html`<div class="card">
-					<table>
-						<tr>
-							<th>When</th>
-							<th>Kind</th>
-							<th>Package</th>
-							<th>Status</th>
-							<th>Duration</th>
-							<th>Error</th>
-						</tr>
-						${
-							runs.length === 0
-								? html`<tr>
-										<td colspan="6" class="muted">No runs yet.</td>
-									</tr>`
-								: ''
-						}
-						${runs.map(
-							(run) =>
-								html`<tr>
-									<td>${formatWhen(run.createdAt)}</td>
-									<td>${run.kind}</td>
-									<td>${run.packageName ?? html`<span class="muted">ad hoc</span>`}</td>
-									<td>
-										<span class="badge ${run.status === 'success' ? 'ok' : run.status === 'error' ? 'warn' : ''}"
-											>${run.status}</span
-										>
-									</td>
-									<td>${run.durationMs === null ? '—' : `${run.durationMs} ms`}</td>
-									<td class="small">${run.error ? `${run.error.name}: ${run.error.message}` : ''}</td>
-								</tr>`,
-						)}
-					</table>
-				</div>`,
+				data: {
+					page: 'accountActivity',
+					runs: runs.map((run) => ({
+						id: run.id,
+						createdAt: run.createdAt,
+						kind: run.kind,
+						packageName: run.packageName,
+						status: run.status,
+						durationMs: run.durationMs,
+						error: run.error ? `${run.error.name}: ${run.error.message}` : null,
+					})),
+				},
 			})
 		}
 
@@ -679,55 +357,17 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 				title: 'Integrations',
 				current: '/account/integrations',
 				flash,
-				body: html`<p class="muted">
-						OAuth connections to third-party APIs (<code>{{integration-token:name}}</code>). Configure and connect them
-						from an MCP client with <code>integrationSave</code> / <code>integrationConnect</code>.
-					</p>
-					<div class="card">
-						<table>
-							<tr>
-								<th>Name</th>
-								<th>Provider</th>
-								<th>Status</th>
-								<th>Expires</th>
-								<th>Hosts</th>
-								<th></th>
-							</tr>
-							${
-								integrations.length === 0
-									? html`<tr>
-											<td colspan="6" class="muted">No integrations.</td>
-										</tr>`
-									: ''
-							}
-							${integrations.map(
-								(integration) =>
-									html`<tr>
-										<td><strong>${integration.name}</strong></td>
-										<td>${integration.provider}</td>
-										<td>
-											<span class="badge ${integration.status === 'connected' ? 'ok' : 'warn'}"
-												>${integration.status}</span
-											>
-										</td>
-										<td>${formatWhen(integration.expiresAt)}</td>
-										<td class="small">${integration.allowedHosts.join(', ')}</td>
-										<td>
-											${
-												integration.status === 'connected'
-													? html`<form method="post" action="/account/integrations">
-															${csrfInput(session)}
-															<input type="hidden" name="action" value="disconnect" />
-															<input type="hidden" name="name" value="${integration.name}" />
-															<button class="small danger" type="submit">Disconnect</button>
-														</form>`
-													: ''
-											}
-										</td>
-									</tr>`,
-							)}
-						</table>
-					</div>`,
+				data: {
+					page: 'accountIntegrations',
+					csrf: session.csrf,
+					integrations: integrations.map((integration) => ({
+						name: integration.name,
+						provider: integration.provider,
+						status: integration.status,
+						expiresAt: integration.expiresAt,
+						allowedHosts: integration.allowedHosts,
+					})),
+				},
 			})
 		}
 
@@ -738,9 +378,7 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 				return view(session, {
 					title: 'Inbox',
 					current: '/account/inbox',
-					body: html`<div class="card">
-						<p class="muted">Email is not configured on this server (<code>KODY_EMAIL_DOMAIN</code>).</p>
-					</div>`,
+					data: { page: 'accountEmail', domain: null, addresses: [], messages: [] },
 				})
 			}
 			const [locals, messages] = await Promise.all([
@@ -750,46 +388,22 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 			return view(session, {
 				title: 'Inbox',
 				current: '/account/inbox',
-				body: html`<div class="card">
-						<p>
-							Addresses:
-							${
-								locals.length === 0
-									? html`<span class="muted">none claimed (use <code>emailInboxClaim</code>)</span>`
-									: locals.map((local) => html`<code>${local.local}@${config.domain}</code> `)
-							}
-						</p>
-					</div>
-					<div class="card">
-						<table>
-							<tr>
-								<th>Received</th>
-								<th>From</th>
-								<th>Subject</th>
-								<th>Class</th>
-								<th>Size</th>
-							</tr>
-							${
-								messages.length === 0
-									? html`<tr>
-											<td colspan="5" class="muted">No messages.</td>
-										</tr>`
-									: ''
-							}
-							${messages.map(
-								(message) =>
-									html`<tr>
-										<td>${formatWhen(message.receivedAt)}</td>
-										<td>
-											${message.direction === 'outbound' ? html`<span class="muted">→</span> ${message.to.map((t) => t.address).join(', ')}` : message.from.address}
-										</td>
-										<td>${message.subject}<br /><span class="muted small">${message.snippet}</span></td>
-										<td>${message.classification ?? message.direction}</td>
-										<td>${Math.round(message.sizeBytes / 1024)} KiB</td>
-									</tr>`,
-							)}
-						</table>
-					</div>`,
+				data: {
+					page: 'accountEmail',
+					domain: config.domain,
+					addresses: locals.map((local) => `${local.local}@${config.domain}`),
+					messages: messages.map((message) => ({
+						id: message.id,
+						receivedAt: message.receivedAt,
+						direction: message.direction,
+						counterpart:
+							message.direction === 'outbound' ? message.to.map((t) => t.address).join(', ') : message.from.address,
+						subject: message.subject,
+						snippet: message.snippet,
+						classification: message.classification,
+						sizeBytes: message.sizeBytes,
+					})),
+				},
 			})
 		}
 
@@ -813,43 +427,18 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 				title: 'Browser sessions',
 				current: '/account/sessions',
 				flash,
-				body: html`<div class="card">
-					<table>
-						<tr>
-							<th>Device</th>
-							<th>Signed in</th>
-							<th>Last seen</th>
-							<th>Expires</th>
-							<th></th>
-						</tr>
-						${sessions.map(
-							(item) =>
-								html`<tr>
-									<td class="small">
-										${item.userAgent ?? 'unknown'}${item.id === session.session.id ? html` <span class="badge ok">this browser</span>` : ''}
-									</td>
-									<td>${formatWhen(item.createdAt)}</td>
-									<td>${formatWhen(item.lastSeenAt)}</td>
-									<td>${formatWhen(item.expiresAt)}</td>
-									<td>
-										<form method="post" action="/account/sessions">
-											${csrfInput(session)}
-											<input type="hidden" name="action" value="revoke" />
-											<input type="hidden" name="sessionId" value="${item.id}" />
-											<button class="small danger" type="submit">
-												${item.id === session.session.id ? 'Sign out' : 'Revoke'}
-											</button>
-										</form>
-									</td>
-								</tr>`,
-						)}
-					</table>
-					<form method="post" action="/account/sessions" style="margin-top:12px">
-						${csrfInput(session)}
-						<input type="hidden" name="action" value="revoke_others" />
-						<button type="submit">Sign out other browsers</button>
-					</form>
-				</div>`,
+				data: {
+					page: 'accountSessions',
+					csrf: session.csrf,
+					sessions: sessions.map((item) => ({
+						id: item.id,
+						userAgent: item.userAgent,
+						createdAt: item.createdAt,
+						lastSeenAt: item.lastSeenAt,
+						expiresAt: item.expiresAt,
+						current: item.id === session.session.id,
+					})),
+				},
 			})
 		}
 	}

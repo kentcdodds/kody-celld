@@ -1,9 +1,15 @@
 # Web UI: sign-in, account, operator console
 
-kody-celld ships a small server-rendered web UI so that people who self-host
-it do not have to drive everything with `curl` and an admin token. It is
-deliberately minimal (no JavaScript, no build step, no framework): every page
-is a plain HTML form posted back to the same route. The MCP surface is
+kody-celld ships a server-rendered web UI so that people who self-host it do
+not have to drive everything with `curl` and an admin token. It is built on the
+same stack and design system as [kentcdodds/kody](https://github.com/kentcdodds/kody)
+— Remix 3 (`remix/ui` components, `remix/routes` typed routes,
+`remix/ui/server` streaming SSR) with a Vite-built browser bundle — so that
+upstream UI changes can be ported with a path strip (see
+[Porting UI changes from kody](#porting-ui-changes-from-kody)). Every page is
+still a plain HTML form posted back to the same route and works with
+JavaScript disabled; the browser bundle only hydrates small islands (copy
+buttons, double-confirm buttons, the header menu, toasts). The MCP surface is
 unchanged — the UI is a convenience layer over the same cells and
 capabilities.
 
@@ -100,12 +106,86 @@ Everything the console does is also available on the JSON `/admin/*` API
 ([operations.md](./operations.md)), and every action is recorded in the audit
 log with `via: 'console'`.
 
+## How it is built
+
+The layout mirrors `packages/worker/` in kody so files line up one-to-one:
+
+| kody-celld                            | kody (`packages/worker/`)   | What lives there                                                                                                       |
+| ------------------------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `client/`                             | `client/`                   | `remix/ui` components: `app-root.tsx` (shell + route dispatch), `routes/*.tsx` (one per page), header, footer, islands |
+| `universal/`                          | `universal/`                | code shared by Worker and browser: `routes.ts` (typed routes), `loader-data.ts` (page payloads), `styles/`, icons      |
+| `src/app/`                            | `src/app/`                  | Worker-side SSR: `render.tsx` (`renderPage`), `ssr-document.tsx`, `security-headers.ts`, `ssr-stubs/`                  |
+| `public/`                             | `public/`                   | static assets served by celld: `styles.css`, `fonts/`, `page-init.js`, `build/` (Vite output, git-ignored)             |
+| `src/web/*.ts`, `src/oauth/routes.ts` | `src/app/routes/*` handlers | request handling: auth gates, form parsing, mutations; they build an `AppLoaderData` and call `renderPage()`           |
+
+Import aliases are the same as upstream: `#client/*`, `#universal/*`,
+`#app/*` (`tsconfig.json`, `vite.config.ts`). Design tokens
+(`universal/styles/tokens.ts`), style primitives
+(`universal/styles/style-primitives.ts`), `public/styles.css`, the self-hosted
+fonts and the icon glyphs are copied from kody verbatim; keep them that way
+and put kody-celld-specific styling in the page components.
+
+Rendering flow for a page:
+
+1. The handler (e.g. `src/web/account.ts`) authenticates, reads the form with
+   `readForm()`, mutates, and builds a **serialisable** payload — one variant
+   of the `AppLoaderData` union in `universal/loader-data.ts`. Only data the
+   page may show goes in there (never token values after issuance, never
+   secret values, never session ids).
+2. `renderPage()` (`src/app/render.tsx`) streams `<AppRoot>` inside
+   `SsrDocument` with `renderToStream` from `remix/ui/server`, prepends the
+   doctype, applies the security headers, and lets the handler override
+   status / headers.
+3. `client/app-root.tsx` renders the shell (skip link, `SiteHeader`, flash,
+   `<main>`, `SiteFooter`, `Toaster`) and dispatches on `data.page` to the
+   route component in `client/routes/`.
+4. In the browser, `client/entry.tsx` hydrates only the islands the page
+   embedded (`clientEntry()` → `/build/client-entry.js#ExportName`); no data
+   fetching happens client-side and every form still round-trips. `run()`
+   would otherwise replay same-origin links and forms as `fetch()` frame
+   navigations; the entry stops the Navigation API event first so they stay
+   native document navigations (OAuth consent and connect flows redirect
+   cross-origin, which a fetch under `connect-src 'self'` cannot follow).
+   Do not name a form field `method` or `enctype`: the runtime reads those
+   `HTMLFormElement` properties on submit and a field of that name shadows
+   them with the element.
+
+The Worker typecheck (`tsconfig.worker-typecheck.json`) maps
+`#client/app-root.tsx` to `src/app/ssr-stubs/app-root.ts` so DOM-only code
+never enters the Workers type-world; `tsconfig.client.json` checks `client/`
+with the DOM lib. celld's esbuild reads `tsconfig.json` (no stub) and bundles
+the real components for SSR.
+
+Build: `npm run build:client` (Vite → `public/build/`). `npm run dev`,
+`npm run fleet:deploy` and the Dockerfile run it for you; celld serves
+`public/` through `assets.directory` in `wrangler.jsonc`.
+
+## Porting UI changes from kody
+
+1. Find the upstream change under `packages/worker/{client,universal,public,src/app}`.
+   The same relative path exists here (drop the `packages/worker/` prefix).
+2. Tokens, primitives, `styles.css`, fonts, icons, `SiteHeader`/`SiteFooter`,
+   `RecordTable`, `CopyTextButton`, `DoubleCheck`, `Toaster`, `UserAvatar`:
+   apply the diff as-is.
+3. Route components: apply the visual diff, then reconcile props against the
+   matching `AppLoaderData` variant. kody's routes read from its D1/DO data
+   model; ours come from the celld cells, so field names may differ — change
+   the loader data (and the handler that fills it) rather than fetching in the
+   component.
+4. Anything that needs new browser behaviour becomes a small island exported
+   from `client/entry.tsx`; do not move form handling into the client.
+5. Run `npm run validate`, `npm run dev` + `node smoke/run.mjs --only web`
+   (and `oauth-server`, `community` when touching those pages).
+
+Not ported on purpose: kody's client-side router / no-flash navigation, the
+landing page and marketing sections, Cloudflare Turnstile, OG image rendering.
+
 ## Security notes
 
 - Responses set `Content-Security-Policy: default-src 'none'; …`,
   `X-Frame-Options: DENY`, `Referrer-Policy: same-origin`, `Cache-Control:
-no-store`. Rendering goes through an auto-escaping `html` tagged template;
-  raw markup is opt-in (`raw()`) and only used for constant strings.
+no-store` (`src/app/security-headers.ts`). `remix/ui` escapes all
+  interpolated text; there is no raw-HTML escape hatch in the page components.
 - Secrets, token values, master keys and admin tokens never appear on a page
   except the one-time token reveal after creation.
 - Failed sign-ins (password, token, console) are audited with the method but

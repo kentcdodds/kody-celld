@@ -12,8 +12,11 @@ import { getUserCell } from '../execute/engine.ts'
 import { dispatchDueJobs } from '../jobs/dispatcher.ts'
 import { recordAudit } from '../lib/audit.ts'
 import { KodyError } from '../lib/errors.ts'
-import { formatWhen, html, page, readForm, redirect, type Html } from './html.ts'
-import { endConsoleSession, readConsoleSession, startConsoleSession, type ConsoleSession } from './session.ts'
+import { renderPage } from '#app/render.tsx'
+import { type AppSession } from '#universal/app-session.ts'
+import { type AppLoaderData, type PageFlash } from '#universal/loader-data.ts'
+import { appSessionOf, readForm, redirect } from './http.ts'
+import { endConsoleSession, readConsoleSession, readWebSession, startConsoleSession } from './session.ts'
 import { issueSigninLink } from './signin.ts'
 
 const registry = (env: Env) => env.REGISTRY.getByName('registry')
@@ -22,26 +25,16 @@ export function isConsoleRoute(pathname: string) {
 	return pathname === '/console' || pathname.startsWith('/console/')
 }
 
-const nav = [
-	{ href: '/console', label: 'Users' },
-	{ href: '/console/audit', label: 'Audit log' },
-	{ href: '/console/config', label: 'Configuration' },
-]
-
 function view(
-	session: ConsoleSession,
-	input: { title: string; current: string; body: Html; flash?: { kind: 'ok' | 'error'; text: string } | null },
+	shellSession: AppSession | null,
+	input: { title: string; current: string; data: AppLoaderData; flash?: PageFlash | null },
 ) {
-	return page({
+	return renderPage({
 		title: input.title,
-		nav,
-		current: input.current,
-		who: html`admin console
-			<form method="post" action="/console/signout">
-				<input type="hidden" name="csrf" value="${session.csrf}" /><button class="small" type="submit">Sign out</button>
-			</form>`,
+		pathname: input.current,
+		session: shellSession,
 		flash: input.flash ?? null,
-		body: input.body,
+		data: input.data,
 	})
 }
 
@@ -66,6 +59,8 @@ export async function handleConsole(request: Request, env: Env, ctx: ExecutionCo
 
 	const session = await readConsoleSession(request, env)
 	if (!session) return signinPage(null)
+	// The site header shows whoever is signed in as a user in this browser; the console cookie is separate.
+	const shellSession = appSessionOf(await readWebSession(request, env), { isAdmin: true })
 	if (post && !constantTimeEqualString(form.csrf ?? '', session.csrf)) {
 		throw new KodyError('csrf_mismatch', 'This form has expired. Reload the page and try again.', { status: 403 })
 	}
@@ -108,85 +103,18 @@ export async function handleConsole(request: Request, env: Env, ctx: ExecutionCo
 			}
 		}
 		const users = await registry(env).listUsers()
-		return view(session, {
+		return view(shellSession, {
 			title: 'Users',
 			current: '/console',
 			flash,
-			body: html` ${
-					issued
-						? html`<div class="card">
-								<p>
-									<strong
-										>${issued.kind === 'invite' ? 'One-time sign-in link' : 'API token'} for ${issued.email}</strong
-									>
-									— hand it over out of band; it is not shown
-									again${issued.expiresAt ? html` and expires ${formatWhen(issued.expiresAt)}` : ''}.
-								</p>
-								<pre class="secret">${issued.value}</pre>
-							</div>`
-						: ''
-				}
-				<div class="card">
-					<table>
-						<tr>
-							<th>Email</th>
-							<th>Id</th>
-							<th>Created</th>
-							<th></th>
-						</tr>
-						${
-							users.length === 0
-								? html`<tr>
-										<td colspan="4" class="muted">No users yet.</td>
-									</tr>`
-								: ''
-						}
-						${users.map(
-							(user) =>
-								html`<tr>
-									<td>${user.email}</td>
-									<td><code>${user.id}</code></td>
-									<td>${formatWhen(user.createdAt)}</td>
-									<td class="row">
-										<a class="button small" href="/console/users/${encodeURIComponent(user.id)}">Manage</a>
-										<form method="post" action="/console">
-											<input type="hidden" name="csrf" value="${session.csrf}" />
-											<input type="hidden" name="action" value="invite" />
-											<input type="hidden" name="userId" value="${user.id}" />
-											<button class="small" type="submit">Sign-in link</button>
-										</form>
-										<form method="post" action="/console">
-											<input type="hidden" name="csrf" value="${session.csrf}" />
-											<input type="hidden" name="action" value="token" />
-											<input type="hidden" name="userId" value="${user.id}" />
-											<button class="small" type="submit">API token</button>
-										</form>
-									</td>
-								</tr>`,
-						)}
-					</table>
-				</div>
-				<h2>Add a user</h2>
-				<div class="card">
-					<p class="muted small">
-						Creates the account and a one-time invite link (valid 7 days) the person uses to set a password.
-					</p>
-					<form method="post" action="/console" class="stack">
-						<input type="hidden" name="csrf" value="${session.csrf}" />
-						<input type="hidden" name="action" value="create" />
-						<label>Email <input name="email" type="email" required /></label>
-						<div><button class="primary" type="submit">Create and invite</button></div>
-					</form>
-				</div>
-				<h2>Jobs</h2>
-				<div class="card">
-					<form method="post" action="/console" class="row">
-						<input type="hidden" name="csrf" value="${session.csrf}" />
-						<input type="hidden" name="action" value="dispatch" />
-						<button type="submit">Run due jobs now</button>
-						<span class="muted small">Same as the cron trigger firing.</span>
-					</form>
-				</div>`,
+			data: {
+				page: 'adminUsers',
+				csrf: session.csrf,
+				users: users.map((user) => ({ id: user.id, email: user.email, createdAt: user.createdAt })),
+				issued: issued
+					? { kind: issued.kind, label: issued.email, value: issued.value, expiresAt: issued.expiresAt }
+					: null,
+			},
 		})
 	}
 
@@ -222,86 +150,25 @@ export async function handleConsole(request: Request, env: Env, ctx: ExecutionCo
 			registry(env).sessionList(user.id),
 			userCell.jobList(),
 		])
-		return view(session, {
+		return view(shellSession, {
 			title: user.email,
 			current: '/console',
 			flash,
-			body: html` <div class="card">
-					<p><code>${user.id}</code> · created ${formatWhen(user.createdAt)}</p>
-					<p class="row">
-						<span class="badge">${tokens.length} API tokens</span>
-						<span class="badge">${grants.length} MCP clients</span>
-						<span class="badge">${sessions.length} browser sessions</span>
-						<span class="badge">${jobs.length} jobs</span>
-						<span class="badge">${usage.today.runs} runs today</span>
-					</p>
-					<form method="post" action="${base}">
-						<input type="hidden" name="csrf" value="${session.csrf}" />
-						<input type="hidden" name="action" value="revoke_sessions" />
-						<button class="danger" type="submit">Sign out everywhere</button>
-					</form>
-				</div>
-				<h2>Approved secret hosts</h2>
-				<div class="card">
-					<p class="muted small">
-						Only the operator can approve hosts; secrets are injected solely into requests to these hosts.
-					</p>
-					<table>
-						<tr>
-							<th>Host</th>
-							<th>Approved</th>
-							<th>By</th>
-							<th></th>
-						</tr>
-						${
-							hosts.length === 0
-								? html`<tr>
-										<td colspan="4" class="muted">None.</td>
-									</tr>`
-								: ''
-						}
-						${hosts.map(
-							(host) =>
-								html`<tr>
-									<td><code>${host.host}</code></td>
-									<td>${formatWhen(host.approvedAt)}</td>
-									<td>${host.approvedBy}</td>
-									<td>
-										<form method="post" action="${base}">
-											<input type="hidden" name="csrf" value="${session.csrf}" />
-											<input type="hidden" name="action" value="revoke_host" />
-											<input type="hidden" name="host" value="${host.host}" />
-											<button class="small danger" type="submit">Revoke</button>
-										</form>
-									</td>
-								</tr>`,
-						)}
-					</table>
-					<form method="post" action="${base}" class="row" style="margin-top:12px">
-						<input type="hidden" name="csrf" value="${session.csrf}" />
-						<input type="hidden" name="action" value="approve_host" />
-						<input name="host" placeholder="api.example.com" required style="max-width:320px" />
-						<button class="primary" type="submit">Approve host</button>
-					</form>
-				</div>
-				<h2>Quotas</h2>
-				<div class="card">
-					<table>
-						<tr>
-							<th>Runs / day</th>
-							<th>Execute ms / day</th>
-							<th>Packages</th>
-							<th>Secrets</th>
-						</tr>
-						<tr>
-							<td>${usage.quotas.runsPerDay || 'unlimited'}</td>
-							<td>${usage.quotas.executeMsPerDay || 'unlimited'}</td>
-							<td>${usage.quotas.packages || 'unlimited'}</td>
-							<td>${usage.quotas.secrets || 'unlimited'}</td>
-						</tr>
-					</table>
-					<p class="muted small">Override with <code>PUT /admin/users/${user.id}/quota</code>.</p>
-				</div>`,
+			data: {
+				page: 'adminUserDetail',
+				csrf: session.csrf,
+				user: { id: user.id, email: user.email, createdAt: user.createdAt },
+				action: base,
+				counts: {
+					tokens: tokens.length,
+					grants: grants.length,
+					sessions: sessions.length,
+					jobs: jobs.length,
+					runsToday: usage.today.runs,
+				},
+				hosts: hosts.map((host) => ({ host: host.host, approvedAt: host.approvedAt, approvedBy: host.approvedBy })),
+				quotas: usage.quotas,
+			},
 		})
 	}
 
@@ -312,30 +179,21 @@ export async function handleConsole(request: Request, env: Env, ctx: ExecutionCo
 			actor: url.searchParams.get('actor') ?? undefined,
 			action: url.searchParams.get('action') ?? undefined,
 		})
-		return view(session, {
+		return view(shellSession, {
 			title: 'Audit log',
 			current: '/console/audit',
-			body: html`<div class="card">
-				<table>
-					<tr>
-						<th>When</th>
-						<th>Actor</th>
-						<th>Action</th>
-						<th>Target</th>
-						<th>Details</th>
-					</tr>
-					${entries.map(
-						(entry) =>
-							html`<tr>
-								<td>${formatWhen(entry.at)}</td>
-								<td>${entry.actor}</td>
-								<td><code>${entry.action}</code></td>
-								<td class="small">${entry.target ?? ''}</td>
-								<td class="small"><code>${entry.details ? JSON.stringify(entry.details) : ''}</code></td>
-							</tr>`,
-					)}
-				</table>
-			</div>`,
+			data: {
+				page: 'adminAudit',
+				csrf: session.csrf,
+				entries: entries.map((entry) => ({
+					id: entry.id,
+					at: entry.at,
+					actor: entry.actor,
+					action: entry.action,
+					target: entry.target,
+					details: entry.details ? JSON.stringify(entry.details) : null,
+				})),
+			},
 		})
 	}
 
@@ -347,21 +205,16 @@ export async function handleConsole(request: Request, env: Env, ctx: ExecutionCo
 			['email', describeEmailConfig(loadEmailConfig(env))],
 			['npm', describeNpmConfig(npmConfigFromEnv(env))],
 		]
-		return view(session, {
+		return view(shellSession, {
 			title: 'Configuration',
 			current: '/console/config',
-			body: html`<div class="card">
-					<p>
-						kody-celld ${KODY_CELLD_VERSION} · public URL <code>${env.KODY_PUBLIC_URL}</code> · MCP
-						<code>${env.KODY_PUBLIC_URL}/mcp</code>
-					</p>
-					<p class="muted small">Adapter settings come from the environment; secrets are never shown here.</p>
-				</div>
-				${sections.map(
-					([name, value]) =>
-						html`<h2>${name}</h2>
-							<pre>${JSON.stringify(value, null, 2)}</pre>`,
-				)}`,
+			data: {
+				page: 'adminConfig',
+				csrf: session.csrf,
+				version: KODY_CELLD_VERSION,
+				publicUrl: env.KODY_PUBLIC_URL,
+				sections: sections.map(([name, value]) => ({ name, json: JSON.stringify(value, null, 2) })),
+			},
 		})
 	}
 
@@ -375,19 +228,11 @@ async function requireUser(env: Env, userId: string) {
 }
 
 function signinPage(error: string | null) {
-	return page({
+	return renderPage({
 		title: 'Admin console',
+		pathname: '/console',
 		status: error ? 401 : 200,
 		flash: error ? { kind: 'error', text: error } : null,
-		body: html`<div class="card">
-			<p>
-				Sign in with the deployment's <code>KODY_ADMIN_TOKEN</code>. Looking for your own account?
-				<a href="/signin">User sign-in</a>.
-			</p>
-			<form method="post" action="/console/signin" class="stack">
-				<label>Admin token <input name="token" type="password" autocomplete="off" required /></label>
-				<div><button class="primary" type="submit">Sign in</button></div>
-			</form>
-		</div>`,
+		data: { page: 'adminLogin' },
 	})
 }

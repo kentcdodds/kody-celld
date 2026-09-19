@@ -20,7 +20,10 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci && npm cache clean --force
 COPY . .
-RUN chmod +x docker/entrypoint.sh docker/healthcheck.sh && mkdir -p /data /var/lib/celld
+# Browser bundle (Vite, remix/ui hydration) into public/build; celld serves
+# public/ as static assets next to the Worker.
+RUN npm run build:client \
+  && chmod +x docker/entrypoint.sh docker/healthcheck.sh && mkdir -p /data /var/lib/celld
 
 ENV PATH=/app/node_modules/.bin:$PATH \
     NODE_ENV=production \

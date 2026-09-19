@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { passwordProblem } from './signin.ts'
+import { passwordProblem } from './password-form.ts'
 
 describe('passwordProblem', () => {
 	it('checks confirmation and strength before any one-time token is spent', () => {

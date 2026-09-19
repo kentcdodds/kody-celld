@@ -3,7 +3,8 @@ import { sessionSignature } from '../auth/cookies.ts'
 import { constantTimeEqualString } from '../auth/password.ts'
 import type { Env } from '../env.ts'
 import { recordAudit } from '../lib/audit.ts'
-import { html, page, readForm, redirect } from '../web/html.ts'
+import { renderPage } from '#app/render.tsx'
+import { appSessionOf, readForm, redirect } from '../web/http.ts'
 import { assertCsrf, readWebSession } from '../web/session.ts'
 import {
 	authorizationServerMetadata,
@@ -16,7 +17,6 @@ import {
 	readClientCredentials,
 	redirectWithParams,
 	verifyPkce,
-	type AuthorizeRequest,
 } from './protocol.ts'
 
 const corsHeaders = {
@@ -130,15 +130,11 @@ async function handleRegister(request: Request, env: Env) {
 /** Errors before the redirect URI is validated must not redirect (open-redirect guard). */
 function authorizeErrorPage(error: unknown) {
 	const { body, status } = oauthErrorBody(error)
-	return page({
+	return renderPage({
 		title: 'Cannot authorize this client',
+		pathname: oauthPaths.authorize,
 		status: status >= 400 && status < 600 ? status : 400,
-		body: html`<div class="card">
-			<p><strong>${body.error}</strong> — ${body.error_description}</p>
-			<p class="muted small">
-				The application that sent you here made an invalid authorization request. Nothing was granted.
-			</p>
-		</div>`,
+		data: { page: 'oauthAuthorizeError', error: body.error, description: body.error_description },
 	})
 }
 
@@ -186,17 +182,20 @@ async function handleAuthorize(request: Request, env: Env, url: URL) {
 
 	if (request.method === 'GET') {
 		const q = params.toString()
-		return page({
+		return renderPage({
 			title: `Connect ${client.clientName}`,
-			who: html`${session.user.email}`,
-			body: consentBody({
+			pathname: oauthPaths.authorize,
+			session: appSessionOf(session),
+			data: {
+				page: 'oauthAuthorize',
 				clientName: client.clientName,
 				clientUri: client.clientUri,
-				authorize,
+				redirectHost: new URL(authorize.redirectUri).host || authorize.redirectUri,
+				action: oauthPaths.authorize,
 				csrf: session.csrf,
 				q,
 				sig: await sessionSignature(env.KODY_MASTER_KEY, session.session.id, 'authorize', q),
-			}),
+			},
 		})
 	}
 
@@ -230,36 +229,6 @@ async function handleAuthorize(request: Request, env: Env, url: URL) {
 		details: { clientName: client.clientName, redirectHost: new URL(authorize.redirectUri).host },
 	})
 	return redirect(redirectWithParams(authorize.redirectUri, { code, state: authorize.state, iss: env.KODY_PUBLIC_URL }))
-}
-
-function consentBody(input: {
-	clientName: string
-	clientUri: string | null
-	authorize: AuthorizeRequest
-	csrf: string
-	q: string
-	sig: string
-}) {
-	const redirectHost = new URL(input.authorize.redirectUri).host || input.authorize.redirectUri
-	return html`<div class="card">
-		<p>
-			<strong>${input.clientName}</strong>
-			${input.clientUri ? html`<span class="muted small">(${input.clientUri})</span>` : ''} wants to use your Kody as an
-			MCP server. One approval grants the whole assistant: the client will be able to <code>search</code> and
-			<code>execute</code> as you — packages, secrets (by name), jobs, storage, everything your API token can do.
-		</p>
-		<p class="muted small">
-			After approval your browser returns to <code>${redirectHost}</code>. You can disconnect this client any time under
-			<a href="/account/clients">Account → MCP clients</a>.
-		</p>
-		<form method="post" action="${oauthPaths.authorize}" class="row">
-			<input type="hidden" name="csrf" value="${input.csrf}" />
-			<input type="hidden" name="q" value="${input.q}" />
-			<input type="hidden" name="sig" value="${input.sig}" />
-			<button class="primary" type="submit" name="decision" value="approve">Approve</button>
-			<button type="submit" name="decision" value="deny">Deny</button>
-		</form>
-	</div>`
 }
 
 // ------------------------------------------------------------------- token

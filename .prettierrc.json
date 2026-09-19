@@ -8,6 +8,10 @@
     {
       "files": ["*.json", "*.jsonc", "*.md", "*.yml", "*.yaml"],
       "options": { "useTabs": false, "tabWidth": 2 }
+    },
+    {
+      "files": ["client/**", "universal/**", "src/app/**", "public/styles.css"],
+      "options": { "printWidth": 80 }
     }
   ]
 }
