@@ -4,8 +4,12 @@ A self-hosted **Kody core** that runs on [Deno celld](https://celld.dev) — the
 Cloudflare Workers + Durable Objects programming model on your own machines,
 with an S3-compatible bucket for durability.
 
-It is deliberately the _core_, not full product parity with
-[kentcdodds/kody](https://github.com/kentcdodds/kody):
+It is a standalone reimplementation of
+[kentcdodds/kody](https://github.com/kentcdodds/kody) for your own hardware:
+the same MCP contract (`search` + `execute`, packages, secrets, jobs) plus every
+surface production Kody gets from Cloudflare, provided here as a self-hosted
+built-in, an adapter for a service you already run, or both — see the
+[provision matrix](./docs/known-gaps.md) for how each piece is provided.
 
 | Surface                                                            | Status                                                                                                                                                                                        |
 | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
