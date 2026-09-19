@@ -153,6 +153,9 @@ itself is reached.
 | Force a job dispatch   | `curl -X POST $BASE/admin/jobs -H "authorization: Bearer $ADMIN"`                                                                                                         |
 | Turn on local AI       | `echo 'COMPOSE_FILE=compose.yaml:compose.ai.yaml' >> .env && docker compose up -d && docker compose exec ollama ollama pull nomic-embed-text` ([ai.md](./ai.md))          |
 | Add a headless browser | `echo 'COMPOSE_FILE=compose.yaml:compose.browser.yaml' >> .env && docker compose up -d` (combine overlays with `:`; [browser.md](./browser.md))                           |
+| Self-host the npm CDN  | `echo 'COMPOSE_FILE=compose.yaml:compose.esm.yaml' >> .env && docker compose up -d` — bare `import ms from 'ms@2.1.3'` stops depending on esm.sh ([npm.md](./npm.md))     |
+| Install a package      | `packageInstall({ source: 'github:owner/repo/path' })` via MCP or the account Packages page; extra hosts via `KODY_PACKAGE_SOURCE_HOSTS` ([packages.md](./packages.md))   |
+| Share packages         | Users publish saved packages to the install's own catalog at `$BASE/community` ([community.md](./community.md))                                                           |
 | Verify end to end      | `KODY_URL=$BASE KODY_ADMIN_TOKEN=$ADMIN SMOKE_ECHO_HOST=host.docker.internal npm run smoke` from a checkout on the Docker host (needs Node 22)                            |
 
 The single-node mode uses celld's local object store, so there is no bucket to

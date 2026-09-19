@@ -13,12 +13,14 @@ operators use `/admin/*` with the admin token.
  admin ───────► │   /admin ─► users, tokens, secret hosts, jobs, runs, quotas, audit    │
                 │   cron * * * * * ─► jobs/dispatcher.ts                                 │
                 │                                                                       │
-                │   RegistryCell (DO, 1)     users + hashed API tokens, audit log       │
+                │   RegistryCell (DO, 1)     users + hashed API tokens, audit log,      │
+                │                            OAuth clients/sessions, community catalog  │
                 │   UserCell (DO, per user)  packages, secrets (encrypted), hosts,      │
                 │                            jobs, runs, gateway events, daily usage    │
                 │   PackageStorageCell (DO, per user×package)  KV + free-form SQLite    │
                 │   MemoryCell (DO, per user)  memories + FTS5, sqlite-vec vectors,     │
                 │                              embedding cache ──► AI adapter / Qdrant   │
+                │   NpmCacheCell (DO, 1)     npm modules by URL (LRU + TTL) ◄─ ESM CDN   │
                 │                                                                       │
                 │   execute ─► module graph ─► LOADER.get(hash) ──► isolate             │
                 │        env.KODY = RuntimeHost({props})      ◄─ kody.<capability>()    │
@@ -41,7 +43,9 @@ operators use `/admin/*` with the admin token.
      stamps `packageStorage()` with the declaring package name, rewrites every
      relative import to `./<full path>`, converts JSON to ES modules and drops
      docs;
-   - bare npm specifiers (experimental) are fetched from esm.sh and inlined.
+   - bare npm specifiers are fetched from an esm.sh-compatible CDN
+     (`KODY_ESM_CDN_URL`), cached in `NpmCacheCell` and inlined
+     ([npm.md](./npm.md)).
 4. `env.LOADER.get(hash(user, modules))` creates or reuses an isolate whose
    only bindings are `KODY` (a `RuntimeHost` Worker Entrypoint with
    `props = { userId, email, packageName }`) and `globalOutbound`

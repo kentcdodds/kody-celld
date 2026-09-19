@@ -3,7 +3,8 @@
 //
 //   node smoke/run.mjs                 # all scenarios, skips the ~1-2 minute real-cron wait
 //   node smoke/run.mjs --wait-cron     # also waits for celld's cron trigger to fire a job
-//   node smoke/run.mjs --only secrets  # one scenario (mcp | packages | secrets | jobs | limits | memory | blobs | browser | webhooks | email | mail-bridge | integrations | secret-providers | oauth-server | web)
+//   node smoke/run.mjs --only secrets  # one scenario (mcp | packages | secrets | jobs | limits | memory | blobs | browser | webhooks | email | mail-bridge | integrations | secret-providers | oauth-server | web | npm | install | community)
+//   SMOKE_OFFLINE=1 node smoke/run.mjs      # skip the parts that need esm.sh / GitHub
 //   SMOKE_AI_MOCK=1 node smoke/run.mjs --only memory  # with smoke/ai-mock-server.mjs + KODY_AI_* set
 //   SMOKE_MAIL_BRIDGE=1 node smoke/run.mjs --only mail-bridge  # real SMTP sidecar (needs `npm ci` in mail-bridge/)
 //
@@ -14,11 +15,14 @@ import { smokeBlobs } from './blobs.mjs'
 import { smokeEmail } from './email.mjs'
 import { smokeIntegrations } from './integrations.mjs'
 import { smokeBrowser } from './browser.mjs'
+import { smokeCommunity } from './community.mjs'
+import { smokeInstall } from './install.mjs'
 import { smokeJobs } from './jobs.mjs'
 import { smokeLimits } from './limits.mjs'
 import { smokeMailBridge } from './mail-bridge.mjs'
 import { smokeMcp } from './mcp.mjs'
 import { smokeMemory } from './memory.mjs'
+import { smokeNpm } from './npm.mjs'
 import { smokeOAuthServer } from './oauth-server.mjs'
 import { smokePackages } from './packages.mjs'
 import { smokeSecretProviders } from './secret-providers.mjs'
@@ -48,11 +52,14 @@ const scenarios = [
 	['secret-providers', smokeSecretProviders],
 	['oauth-server', smokeOAuthServer],
 	['web', smokeWeb],
+	['npm', smokeNpm],
+	['install', smokeInstall],
+	['community', smokeCommunity],
 ].filter(([name]) => !only || only === name)
 
 if (scenarios.length === 0) {
 	console.error(
-		`Unknown scenario "${only}". Choose one of: mcp, packages, secrets, jobs, limits, memory, blobs, browser, webhooks, email, mail-bridge, integrations, secret-providers, oauth-server, web`,
+		`Unknown scenario "${only}". Choose one of: mcp, packages, secrets, jobs, limits, memory, blobs, browser, webhooks, email, mail-bridge, integrations, secret-providers, oauth-server, web, npm, install, community`,
 	)
 	process.exit(2)
 }
@@ -64,7 +71,7 @@ async function main() {
 	console.log(`user ${session.user.email} (${session.user.id})`)
 	const ctx = { ...session, waitForCron }
 	if (only && only !== 'mcp') await session.mcp.initialize()
-	if (only === 'secrets' || only === 'jobs') {
+	if (only === 'secrets' || only === 'jobs' || only === 'install') {
 		// These scenarios depend on the example packages being saved.
 		console.log('\n[packages] (prerequisite)')
 		await smokePackages(ctx)

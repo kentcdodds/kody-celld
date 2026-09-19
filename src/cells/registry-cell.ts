@@ -6,6 +6,13 @@ import { KodyError } from '../lib/errors.ts'
 import { limitsFromEnv } from '../lib/limits.ts'
 import { type ClientRegistration, type TokenEndpointAuthMethod } from '../oauth/protocol.ts'
 import { OAuthServerStore, oauthServerSchema } from '../oauth/server-store.ts'
+import {
+	CommunityStore,
+	communitySchema,
+	type CommunityListing,
+	type CommunityPackage,
+} from '../packages/community-store.ts'
+import type { PackageFiles, PackageManifest } from '../packages/manifest.ts'
 
 export type UserRecord = { id: string; email: string; createdAt: string }
 
@@ -94,6 +101,8 @@ export class RegistryCell extends DurableObject<Env> {
 		`)
 		this.ctx.storage.sql.exec(accountSchema)
 		this.ctx.storage.sql.exec(oauthServerSchema)
+		this.ctx.storage.sql.exec(communitySchema)
+		this.community = new CommunityStore(this.ctx.storage.sql)
 		this.auditRetentionCount = limitsFromEnv(env).auditRetentionCount
 		this.accounts = new AccountStore(this.ctx.storage.sql)
 		this.oauth = new OAuthServerStore(this.ctx.storage.sql, () => this.keyring())
@@ -102,11 +111,56 @@ export class RegistryCell extends DurableObject<Env> {
 	private readonly auditRetentionCount: number
 	private readonly accounts: AccountStore
 	private readonly oauth: OAuthServerStore
+	private readonly community: CommunityStore
 
 	private keyringPromise: Promise<MasterKeyring> | undefined
 	private keyring() {
 		this.keyringPromise ??= buildMasterKeyring(this.env.KODY_MASTER_KEY, this.env.KODY_MASTER_KEY_PREVIOUS)
 		return this.keyringPromise
+	}
+
+	// -------------------------------------------------------------- community
+
+	async communityPublish(input: {
+		userId: string
+		publisher: string
+		name: string
+		version: string
+		manifest: PackageManifest
+		files: PackageFiles
+	}): Promise<CommunityListing> {
+		return this.community.publish(input)
+	}
+
+	async communityUnpublish(input: { userId: string; name: string }): Promise<boolean> {
+		return this.community.unpublish(input)
+	}
+
+	async communityGet(name: string): Promise<CommunityPackage | null> {
+		return this.community.get(name)
+	}
+
+	async communityOwnerOf(name: string): Promise<string | null> {
+		return this.community.ownerOf(name)
+	}
+
+	async communitySearch(input: {
+		query?: string | undefined
+		limit?: number | undefined
+	}): Promise<Array<CommunityListing>> {
+		return this.community.search(input)
+	}
+
+	async communityListByUser(userId: string): Promise<Array<CommunityListing>> {
+		return this.community.listByUser(userId)
+	}
+
+	async communityRecordInstall(name: string): Promise<void> {
+		this.community.recordInstall(name)
+	}
+
+	async communityStats(): Promise<{ packages: number; publishers: number; installs: number }> {
+		return this.community.stats()
 	}
 
 	// ------------------------------------------------------------------ audit

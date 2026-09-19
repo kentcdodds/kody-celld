@@ -1,18 +1,26 @@
+import type { NpmCacheCell } from '../cells/npm-cache-cell.ts'
 import { KodyError } from '../lib/errors.ts'
 import { relativeSpecifier } from './module-graph.ts'
+import { defaultEsmCdnOrigin, type NpmConfig } from './npm-config.ts'
 
-// Experimental: resolves bare npm specifiers through esm.sh and inlines the
+// Resolves bare npm specifiers through an esm.sh-compatible CDN and inlines the
 // resulting ES modules into the Worker Loader module map. There is no bundler
 // inside the runtime, so every module in the transitive graph is fetched and
 // stored under `npm/<host path>.js`, and absolute imports are rewritten to
 // root-anchored module specifiers. Limits keep a runaway graph from exhausting the isolate.
 
-const ESM_ORIGIN = 'https://esm.sh'
 const MAX_MODULES = 40
 const MAX_TOTAL_BYTES = 6 * 1024 * 1024
 const FETCH_TIMEOUT_MS = 15_000
 
+/** Per-isolate memo in front of the durable cache; reset once it grows past MEMO_MAX_ENTRIES. */
+const MEMO_MAX_ENTRIES = 500
 const moduleCache = new Map<string, string>()
+
+function memoize(href: string, source: string) {
+	if (moduleCache.size >= MEMO_MAX_ENTRIES) moduleCache.clear()
+	moduleCache.set(href, source)
+}
 
 const importRegex = /((?:\bimport|\bexport)\b[^'"`;]*?\bfrom\s*|\bimport\s*\(\s*|\bimport\s*)(['"])([^'"\n]+)\2/g
 
@@ -21,6 +29,19 @@ export type NpmResolution = {
 	/** bare specifier -> root-relative module path */
 	entryPaths: Map<string, string>
 	warnings: Array<string>
+	/** Modules served from the durable/in-memory cache vs downloaded from the CDN. */
+	cached: number
+	fetched: number
+}
+
+export type NpmResolverOptions = {
+	config: NpmConfig
+	cache: DurableObjectStub<NpmCacheCell> | null
+}
+
+export const defaultNpmResolverOptions: NpmResolverOptions = {
+	config: { enabled: true, cdnOrigin: defaultEsmCdnOrigin, cacheMaxBytes: 0, cacheTtlMs: 0 },
+	cache: null,
 }
 
 function pathForUrl(url: URL) {
@@ -28,34 +49,61 @@ function pathForUrl(url: URL) {
 	return `npm/${cleaned.replaceAll(/[^a-zA-Z0-9@._/-]/g, '_')}${/\.(?:m?js)$/.test(url.pathname) ? '' : '.js'}`
 }
 
-async function fetchModule(url: URL) {
-	const cached = moduleCache.get(url.href)
-	if (cached !== undefined) return cached
+async function fetchFromCdn(url: URL, cdnOrigin: string) {
 	const response = await fetch(url, {
 		headers: { 'user-agent': 'kody-celld/0.1 (workers)', accept: 'application/javascript,*/*' },
 		signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
 	})
 	if (!response.ok) {
-		throw new KodyError('npm_fetch_failed', `esm.sh returned ${response.status} for ${url.href}`, { status: 502 })
+		throw new KodyError('npm_fetch_failed', `${new URL(cdnOrigin).host} returned ${response.status} for ${url.href}`, {
+			status: 502,
+		})
 	}
-	const text = await response.text()
-	moduleCache.set(url.href, text)
-	return text
+	return response.text()
 }
 
-export async function resolveNpmModules(specifiers: Array<string>): Promise<NpmResolution> {
+export async function resolveNpmModules(
+	specifiers: Array<string>,
+	options: NpmResolverOptions = defaultNpmResolverOptions,
+): Promise<NpmResolution> {
+	const { config } = options
+	const durable = options.cache && config.cacheMaxBytes > 0 ? options.cache : null
 	const modules: Record<string, string> = {}
 	const entryPaths = new Map<string, string>()
 	const warnings: Array<string> = []
 	const queue: Array<URL> = []
 	const seen = new Map<string, string>()
+	const fetchedNow: Record<string, string> = {}
 	let totalBytes = 0
+	let cached = 0
+	let fetched = 0
 
 	for (const specifier of specifiers) {
-		const url = new URL(`/${specifier}`, ESM_ORIGIN)
+		const url = new URL(`/${specifier}`, config.cdnOrigin)
 		url.searchParams.set('target', 'es2022')
 		queue.push(url)
 		entryPaths.set(specifier, pathForUrl(url))
+	}
+
+	const loadModule = async (url: URL) => {
+		const memo = moduleCache.get(url.href)
+		if (memo !== undefined) {
+			cached += 1
+			return memo
+		}
+		if (durable) {
+			const hit = (await durable.getMany([url.href], config.cacheTtlMs))[url.href]
+			if (hit !== undefined) {
+				memoize(url.href, hit)
+				cached += 1
+				return hit
+			}
+		}
+		const text = await fetchFromCdn(url, config.cdnOrigin)
+		memoize(url.href, text)
+		fetchedNow[url.href] = text
+		fetched += 1
+		return text
 	}
 
 	while (queue.length > 0) {
@@ -66,7 +114,7 @@ export async function resolveNpmModules(specifiers: Array<string>): Promise<NpmR
 		}
 		const path = pathForUrl(url)
 		seen.set(url.href, path)
-		let source = await fetchModule(url)
+		let source = await loadModule(url)
 		totalBytes += source.length
 		if (totalBytes > MAX_TOTAL_BYTES) {
 			throw new KodyError('npm_graph_too_large', 'npm import graph exceeded the 6 MiB limit.')
@@ -76,7 +124,7 @@ export async function resolveNpmModules(specifiers: Array<string>): Promise<NpmR
 			const spec = match[3] ?? ''
 			if (spec.startsWith('node:') || spec.startsWith('cloudflare:')) continue
 			const depUrl = new URL(spec, url)
-			if (depUrl.origin !== ESM_ORIGIN) {
+			if (depUrl.origin !== config.cdnOrigin) {
 				warnings.push(`Skipped cross-origin npm import ${depUrl.href} from ${url.href}.`)
 				continue
 			}
@@ -91,10 +139,14 @@ export async function resolveNpmModules(specifiers: Array<string>): Promise<NpmR
 		modules[path] = source
 	}
 
+	if (durable && Object.keys(fetchedNow).length > 0) {
+		await durable.putMany(fetchedNow, config.cacheMaxBytes)
+	}
+
 	if (specifiers.length > 0) {
 		warnings.push(
-			`npm imports (${specifiers.join(', ')}) were resolved through esm.sh; this path is experimental in kody-celld.`,
+			`npm imports (${specifiers.join(', ')}) were resolved through ${new URL(config.cdnOrigin).host}: ${cached} module(s) from cache, ${fetched} downloaded.`,
 		)
 	}
-	return { modules, entryPaths, warnings }
+	return { modules, entryPaths, warnings, cached, fetched }
 }

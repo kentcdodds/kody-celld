@@ -3,7 +3,9 @@ import { getUserCell } from '../execute/engine.ts'
 import { recordAudit } from '../lib/audit.ts'
 import { KodyError } from '../lib/errors.ts'
 import { loadEmailConfig } from '../email/service.ts'
-import { formatWhen, html, page, readForm, redirect, type Html } from './html.ts'
+import { defaultPublisher } from '../capabilities/community.ts'
+import { fetchPackageSource, packageSourceHostsFromEnv, parsePackageSource } from '../packages/install.ts'
+import { formatWhen, html, page, raw, readForm, redirect, type Html } from './html.ts'
 import { assertCsrf, readWebSession, type WebSession } from './session.ts'
 import { passwordForm } from './signin.ts'
 
@@ -31,6 +33,9 @@ const flashes: Record<string, NonNullable<Flash>> = {
 	deleted: { kind: 'ok', text: 'Deleted.' },
 	password_set: { kind: 'ok', text: 'Password updated.' },
 	disconnected: { kind: 'ok', text: 'Disconnected.' },
+	installed: { kind: 'ok', text: 'Package installed.' },
+	published: { kind: 'ok', text: 'Published to the community catalog.' },
+	unpublished: { kind: 'ok', text: 'Removed from the community catalog.' },
 }
 
 function view(
@@ -411,60 +416,148 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 		}
 
 		case 'packages': {
+			let installError: string | null = null
 			if (post) {
 				if (form.action === 'delete' && form.name) {
 					await userCell.packageDelete(form.name)
 					await audit('package.delete', form.name, { via: 'web' })
+					return redirect('/account/packages?flash=deleted')
 				}
-				return redirect('/account/packages?flash=deleted')
+				if (form.action === 'publish' && form.name) {
+					const pkg = await userCell.packageGet(form.name)
+					if (!pkg) throw new KodyError('package_not_found', `Package "${form.name}" is not saved.`, { status: 404 })
+					try {
+						const listing = await registry(env).communityPublish({
+							userId: session.user.id,
+							publisher: defaultPublisher(session.user.email),
+							name: pkg.name,
+							version: pkg.version,
+							manifest: pkg.manifest,
+							files: pkg.files,
+						})
+						await audit('community.publish', listing.name, { version: listing.version, via: 'web' })
+						return redirect('/account/packages?flash=published')
+					} catch (error) {
+						installError = KodyError.fromUnknown(error)?.message ?? 'Publish failed.'
+					}
+				}
+				if (form.action === 'unpublish' && form.name) {
+					const removed = await registry(env).communityUnpublish({ userId: session.user.id, name: form.name })
+					if (removed) await audit('community.unpublish', form.name, { via: 'web' })
+					return redirect('/account/packages?flash=unpublished')
+				}
+				if (form.action === 'install' && form.source) {
+					try {
+						const source = parsePackageSource(form.source, form.subdir || null)
+						const fetched = await fetchPackageSource(source, { allowedHosts: packageSourceHostsFromEnv(env) })
+						const saved = await userCell.packageSave({ files: fetched.files, source: fetched.source })
+						await audit('package.install', saved.name, { version: saved.version, source: fetched.source, via: 'web' })
+						return redirect('/account/packages?flash=installed')
+					} catch (error) {
+						installError = KodyError.fromUnknown(error)?.message ?? 'Install failed.'
+					}
+				}
 			}
-			const packages = await userCell.packageList()
+			const [packages, published] = await Promise.all([
+				userCell.packageList(),
+				registry(env).communityListByUser(session.user.id),
+			])
+			const publishedByName = new Map(published.map((listing) => [listing.name, listing]))
 			return view(session, {
 				title: 'Packages',
 				current: '/account/packages',
 				flash,
 				body: html`<div class="card">
-					<table>
-						<tr>
-							<th>Name</th>
-							<th>Version</th>
-							<th>Files</th>
-							<th>Jobs</th>
-							<th>Updated</th>
-							<th></th>
-						</tr>
-						${
-							packages.length === 0
-								? html`<tr>
-										<td colspan="6" class="muted">
-											No packages saved. Use <code>packageSave</code> from an MCP client.
+						<h2>Install from GitHub or URL</h2>
+						${installError ? html`<p class="flash error">${installError}</p>` : ''}
+						<form method="post" action="/account/packages" class="row">
+							${csrfInput(session)}
+							<input type="hidden" name="action" value="install" />
+							<label
+								>Source
+								<input
+									name="source"
+									required
+									placeholder="github:owner/repo/sub/dir#ref or https://…/package.tgz"
+									value="${installError ? (form.source ?? '') : ''}"
+							/></label>
+							<label
+								>Subdirectory (optional)
+								<input name="subdir" placeholder="examples/hello" value="${installError ? (form.subdir ?? '') : ''}"
+							/></label>
+							<button type="submit">Install</button>
+						</form>
+						<p class="muted small">
+							Allowed source hosts:
+							<code>${packageSourceHostsFromEnv(env).join(', ')}</code> (<code>KODY_PACKAGE_SOURCE_HOSTS</code>).
+						</p>
+					</div>
+					<div class="card">
+						<table>
+							<tr>
+								<th>Name</th>
+								<th>Version</th>
+								<th>Files</th>
+								<th>Jobs</th>
+								<th>Updated</th>
+								<th></th>
+							</tr>
+							${
+								packages.length === 0
+									? html`<tr>
+											<td colspan="6" class="muted">
+												No packages saved. Use <code>packageSave</code> from an MCP client.
+											</td>
+										</tr>`
+									: ''
+							}
+							${packages.map(
+								(pkg) =>
+									html`<tr>
+										<td>
+											<strong>${pkg.name}</strong
+											>${pkg.manifest.description ? html`<br /><span class="muted small">${pkg.manifest.description}</span>` : ''}
 										</td>
-									</tr>`
-								: ''
-						}
-						${packages.map(
-							(pkg) =>
-								html`<tr>
-									<td>
-										<strong>${pkg.name}</strong
-										>${pkg.manifest.description ? html`<br /><span class="muted small">${pkg.manifest.description}</span>` : ''}
-									</td>
-									<td>${pkg.version}</td>
-									<td>${pkg.fileCount}</td>
-									<td>${Object.keys(pkg.manifest.jobs ?? {}).length}</td>
-									<td>${formatWhen(pkg.updatedAt)}</td>
-									<td>
-										<form method="post" action="/account/packages">
-											${csrfInput(session)}
-											<input type="hidden" name="action" value="delete" />
-											<input type="hidden" name="name" value="${pkg.name}" />
-											<button class="small danger" type="submit">Delete</button>
-										</form>
-									</td>
-								</tr>`,
-						)}
-					</table>
-				</div>`,
+										<td>${pkg.version}<br /><span class="muted small">${pkg.source}</span></td>
+										<td>${pkg.fileCount}</td>
+										<td>${Object.keys(pkg.manifest.jobs ?? {}).length}</td>
+										<td>${formatWhen(pkg.updatedAt)}</td>
+										<td class="row">
+											${(() => {
+												const listing = publishedByName.get(pkg.name)
+												return html`<form method="post" action="/account/packages">
+														${csrfInput(session)}
+														<input type="hidden" name="action" value="publish" />
+														<input type="hidden" name="name" value="${pkg.name}" />
+														<button class="small" type="submit" ${pkg.manifest.hidden ? raw('disabled') : ''}>
+															${listing ? (listing.version === pkg.version ? 'Republish' : `Publish v${pkg.version}`) : 'Publish'}
+														</button>
+													</form>
+													${
+														listing
+															? html`<a class="small" href="/community/${encodeURIComponent(pkg.name)}"
+																		>v${listing.version} public</a
+																	>
+																	<form method="post" action="/account/packages">
+																		${csrfInput(session)}
+																		<input type="hidden" name="action" value="unpublish" />
+																		<input type="hidden" name="name" value="${pkg.name}" />
+																		<button class="small" type="submit">Unpublish</button>
+																	</form>`
+															: ''
+													}`
+											})()}
+											<form method="post" action="/account/packages">
+												${csrfInput(session)}
+												<input type="hidden" name="action" value="delete" />
+												<input type="hidden" name="name" value="${pkg.name}" />
+												<button class="small danger" type="submit">Delete</button>
+											</form>
+										</td>
+									</tr>`,
+							)}
+						</table>
+					</div>`,
 			})
 		}
 

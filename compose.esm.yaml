@@ -1,0 +1,48 @@
+# Overlay: self-hosted esm.sh so npm imports inside execute/packages never leave
+# your network (and keep working when the public CDN is unreachable).
+#
+#   COMPOSE_FILE=compose.yaml:compose.esm.yaml         # in .env
+#   docker compose up -d
+#
+# Runs the official esm.sh server (npm -> ES modules, built on demand) beside
+# the single-node compose.yaml and points Kody at it. Built modules (and the
+# server's npm cache) live in the `esm-data` volume, mounted at the image's
+# ESMDIR so it stays writable by the unprivileged `esm` user; set
+# ESM_STORAGE_TYPE=s3 + the STORAGE_* variables to put built modules in the
+# same bucket MinIO serves for the fleet. For a fleet, run the
+# container wherever you like and set KODY_ESM_CDN_URL in .env before running
+# the deploy service. Kody still keeps its own durable module cache
+# (KODY_NPM_CACHE_MAX_MB), so the CDN is only asked once per module per fleet.
+services:
+  esm:
+    image: ghcr.io/esm-dev/esm.sh:${ESM_SH_VERSION:-v138}
+    restart: unless-stopped
+    environment:
+      # Kody rewrites module URLs to its own root-anchored paths, so the origin
+      # the CDN advertises must match the URL Kody calls it by.
+      CDN_ORIGIN: ${KODY_ESM_CDN_URL:-http://esm}
+      NPM_REGISTRY: ${ESM_NPM_REGISTRY:-https://registry.npmjs.org/}
+      NPM_TOKEN: ${ESM_NPM_TOKEN:-}
+      STORAGE_TYPE: ${ESM_STORAGE_TYPE:-fs}
+      STORAGE_ENDPOINT: ${ESM_STORAGE_ENDPOINT:-/esm/storage}
+      STORAGE_REGION: ${ESM_STORAGE_REGION:-}
+      STORAGE_ACCESS_KEY_ID: ${ESM_STORAGE_ACCESS_KEY_ID:-}
+      STORAGE_SECRET_ACCESS_KEY: ${ESM_STORAGE_SECRET_ACCESS_KEY:-}
+      LOG_LEVEL: ${ESM_LOG_LEVEL:-warn}
+    volumes:
+      - esm-data:/esm
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O /dev/null http://127.0.0.1:80/ || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  kody:
+    environment:
+      KODY_ESM_CDN_URL: ${KODY_ESM_CDN_URL:-http://esm}
+    depends_on:
+      esm:
+        condition: service_healthy
+
+volumes:
+  esm-data:

@@ -4,6 +4,7 @@ import { blobConfigFromEnv, describeBlobConfig } from './blobs/config.ts'
 import { verifyBlobUrlSignature } from './blobs/keys.ts'
 import { BlobService, normalizeMetadata } from './blobs/service.ts'
 import { browserConfigFromEnv, describeBrowserConfig } from './browser/config.ts'
+import { describeNpmConfig, npmConfigFromEnv } from './execute/npm-config.ts'
 import { describeEmailConfig } from './email/config.ts'
 import { handleEmailEvents, handleEmailInbound, loadEmailConfig } from './email/service.ts'
 import type { CapabilityContext } from './capabilities/define.ts'
@@ -19,6 +20,7 @@ import { limitsFromEnv, parseQuotaOverride, quotasFromEnv } from './lib/limits.t
 import { handleMcpRequest } from './mcp/server.ts'
 import { handleOAuth, isOAuthRoute } from './oauth/routes.ts'
 import { handleAccount, isAccountRoute } from './web/account.ts'
+import { handleCommunity, isCommunityRoute } from './web/community.ts'
 import { handleConsole, isConsoleRoute } from './web/console.ts'
 import { html, page, redirect } from './web/html.ts'
 import { readWebSession } from './web/session.ts'
@@ -28,6 +30,7 @@ import { handleWebhookIngress } from './webhooks/ingress.ts'
 import { webhookUrl } from './webhooks/urls.ts'
 
 export { MemoryCell } from './cells/memory-cell.ts'
+export { NpmCacheCell } from './cells/npm-cache-cell.ts'
 export { PackageStorageCell } from './cells/package-storage-cell.ts'
 export { RegistryCell } from './cells/registry-cell.ts'
 export { UserCell } from './cells/user-cell.ts'
@@ -76,6 +79,7 @@ function isWebRoute(pathname: string) {
 		isSigninRoute(pathname) ||
 		isAccountRoute(pathname) ||
 		isConsoleRoute(pathname) ||
+		isCommunityRoute(pathname) ||
 		pathname === '/oauth/authorize'
 	)
 }
@@ -188,6 +192,18 @@ async function handleAdmin(request: Request, env: Env, ctx: ExecutionContext, ur
 
 	if (segments.length === 2 && segments[1] === 'email' && request.method === 'GET') {
 		return json({ email: describeEmailConfig(loadEmailConfig(env)) })
+	}
+
+	if (segments.length === 2 && segments[1] === 'npm-cache') {
+		const cache = env.NPM_CACHE.get(env.NPM_CACHE.idFromName('npm-cache'))
+		if (request.method === 'GET') {
+			return json({ npm: describeNpmConfig(npmConfigFromEnv(env)), cache: await cache.stats() })
+		}
+		if (request.method === 'DELETE') {
+			const result = await cache.clear()
+			await audit('npm_cache.clear', null, { cleared: result.cleared, bytes: result.bytes })
+			return json({ cleared: result.cleared, bytes: result.bytes })
+		}
 	}
 
 	if (segments.length === 3 && segments[1] === 'secrets' && segments[2] === 'rekey' && request.method === 'POST') {
@@ -487,6 +503,7 @@ export default {
 			if (isSigninRoute(url.pathname)) return await handleSignin(request, env, url)
 			if (isAccountRoute(url.pathname)) return await handleAccount(request, env, url)
 			if (isConsoleRoute(url.pathname)) return await handleConsole(request, env, ctx, url)
+			if (isCommunityRoute(url.pathname)) return await handleCommunity(request, env, url)
 			if (url.pathname.startsWith('/blobs/')) return await handleSignedBlob(request, env, url)
 			if (url.pathname.startsWith('/webhooks/')) return await handleWebhookIngress(request, env, ctx, url)
 			if (url.pathname.startsWith('/email/inbound/')) return await handleEmailInbound(request, env, ctx, url)

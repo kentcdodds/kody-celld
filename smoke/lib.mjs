@@ -76,6 +76,8 @@ export const admin = {
 			token: adminToken,
 			body: { reset },
 		}),
+	npmCache: () => request('/admin/npm-cache', { token: adminToken }),
+	clearNpmCache: () => request('/admin/npm-cache', { method: 'DELETE', token: adminToken }),
 	audit: (filter = {}) => {
 		const params = new URLSearchParams(Object.entries(filter).map(([k, v]) => [k, String(v)]))
 		return request(`/admin/audit?${params}`, { token: adminToken })

@@ -148,6 +148,26 @@ Per-webhook rate limits come from the package manifest
 | `KODY_SECRET_PROVIDER_CACHE_SECONDS` | `300`   | In-memory TTL for resolved `{{secret/…}}` values in the user cell; `0` disables caching ([secret-providers.md](./secret-providers.md)).  |
 | `KODY_SECRET_PROVIDER_TIMEOUT_MS`    | `20000` | Wall-clock cap for one sealed provider run (minimum 1000).                                                                               |
 
+## npm imports, package sources, community catalog
+
+| Variable                    | Default          | Notes                                                                                                                                                                                               |
+| --------------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `KODY_NPM_IMPORTS`          | `on`             | `off` rejects bare npm specifiers in runs and packages ([npm.md](./npm.md)).                                                                                                                        |
+| `KODY_ESM_CDN_URL`          | `https://esm.sh` | esm.sh-compatible CDN origin; point at the `compose.esm.yaml` service to self-host.                                                                                                                 |
+| `KODY_NPM_CACHE_MAX_MB`     | `256`            | Durable module cache size (LRU); `0` disables the durable layer.                                                                                                                                    |
+| `KODY_NPM_CACHE_TTL_DAYS`   | `30`             | Re-fetch cached modules after this long.                                                                                                                                                            |
+| `KODY_PACKAGE_SOURCE_HOSTS` | GitHub hosts     | Comma-separated hosts `packageInstall` may download from; `*.example.com` wildcards allowed, `*` = any public host. Private/loopback hosts only when listed exactly ([packages.md](./packages.md)). |
+
+```sh
+curl -s $BASE/admin/npm-cache -H "authorization: Bearer $ADMIN"             # config + cache stats
+curl -s -X DELETE $BASE/admin/npm-cache -H "authorization: Bearer $ADMIN"   # flush (audited: npm_cache.clear)
+```
+
+Audit actions: `npm_cache.clear`, `package.install`, `package.update`,
+`community.publish`, `community.unpublish`, `community.install`. The community
+catalog has no operator switch; it is empty until a user publishes, and
+listings are public HTML at `/community` ([community.md](./community.md)).
+
 ## Sign-in, MCP OAuth, web UI
 
 | Variable           | Default | Notes                                                                                                                                                                                                                    |
@@ -189,4 +209,6 @@ second secret with the secrets quota, clearing the override, the audit log
 Start the node with `KODY_EXECUTE_TIMEOUT_MS=5000` and run
 `SMOKE_EXPECT_TIMEOUT_MS=5000 npm run smoke` to also prove a long run is cut off
 at the configured timeout. The `oauth-server` and `web` scenarios cover the
-authorization server and the HTML UI end to end (see the respective docs).
+authorization server and the HTML UI end to end (see the respective docs);
+`npm`, `install` and `community` cover the module cache, remote package
+sources (including the SSRF refusals) and the catalog.
