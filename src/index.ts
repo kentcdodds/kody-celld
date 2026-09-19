@@ -3,7 +3,9 @@ import { capabilities, domains, runCapability } from './capabilities/registry.ts
 import { KODY_CELLD_VERSION, type Env } from './env.ts'
 import { getUserCell } from './execute/engine.ts'
 import { dispatchDueJobs } from './jobs/dispatcher.ts'
+import { recordAudit } from './lib/audit.ts'
 import { errorStatus, errorToJson, KodyError } from './lib/errors.ts'
+import { limitsFromEnv, parseQuotaOverride, quotasFromEnv } from './lib/limits.ts'
 import { handleMcpRequest } from './mcp/server.ts'
 import { isLoopbackHost } from './secrets/host-policy.ts'
 
@@ -92,6 +94,8 @@ async function handleAdmin(request: Request, env: Env, ctx: ExecutionContext, ur
 	if (!token || !timingSafeEqual(token, env.KODY_ADMIN_TOKEN)) return unauthorized('Admin token required.')
 	const registry = env.REGISTRY.getByName('registry')
 	const segments = url.pathname.split('/').filter(Boolean) // ['admin', ...]
+	const audit = (action: string, target: string | null, details: Record<string, unknown> | null = null) =>
+		recordAudit(env, { actor: 'admin', action, target, details })
 
 	if (segments.length === 2 && segments[1] === 'users') {
 		if (request.method === 'GET') return json({ users: await registry.listUsers() })
@@ -103,13 +107,30 @@ async function handleAdmin(request: Request, env: Env, ctx: ExecutionContext, ur
 				...(typeof body.label === 'string' ? { label: body.label } : {}),
 			})
 			await getUserCell(env, created.user.id).init(created.user.id)
+			await audit(created.created ? 'user.create' : 'token.issue', created.user.id, { email: created.user.email })
 			return json(created, created.created ? 201 : 200)
 		}
 	}
 
 	if (segments.length === 2 && segments[1] === 'jobs' && request.method === 'POST') {
 		// Manual dispatcher tick, equivalent to the cron trigger firing now.
-		return json(await dispatchDueJobs(env, ctx.exports))
+		const summary = await dispatchDueJobs(env, ctx.exports)
+		await audit('jobs.dispatch', null, { ran: summary.ran.length })
+		return json(summary)
+	}
+
+	if (segments.length === 2 && segments[1] === 'audit' && request.method === 'GET') {
+		return json({
+			entries: await registry.auditList({
+				limit: Number(url.searchParams.get('limit') ?? 50),
+				actor: url.searchParams.get('actor') ?? undefined,
+				action: url.searchParams.get('action') ?? undefined,
+			}),
+		})
+	}
+
+	if (segments.length === 2 && segments[1] === 'limits' && request.method === 'GET') {
+		return json({ limits: limitsFromEnv(env), quotaDefaults: quotasFromEnv(env) })
 	}
 
 	if (segments.length === 3 && segments[1] === 'secrets' && segments[2] === 'rekey' && request.method === 'POST') {
@@ -125,9 +146,11 @@ async function handleAdmin(request: Request, env: Env, ctx: ExecutionContext, ur
 			perUser.push({ userId: user.id, resealed: result.resealed, remaining: result.remaining })
 		}
 		const remaining = perUser.reduce((sum, u) => sum + u.remaining, 0)
+		const resealed = perUser.reduce((sum, u) => sum + u.resealed, 0)
+		await audit('secret.rekey', null, { currentKeyId, resealed, remaining })
 		return json({
 			currentKeyId,
-			resealed: perUser.reduce((sum, u) => sum + u.resealed, 0),
+			resealed,
 			remaining,
 			users: perUser,
 			next:
@@ -147,25 +170,51 @@ async function handleAdmin(request: Request, env: Env, ctx: ExecutionContext, ur
 
 		if (resource === 'tokens' && request.method === 'POST') {
 			const body = await readJson(request)
-			return json(
-				{ token: await registry.issueToken(user.id, typeof body.label === 'string' ? body.label : 'admin-issued') },
-				201,
-			)
+			const label = typeof body.label === 'string' ? body.label : 'admin-issued'
+			const issued = await registry.issueToken(user.id, label)
+			await audit('token.issue', user.id, { label })
+			return json({ token: issued }, 201)
 		}
 		if (resource === 'secret-hosts') {
 			if (request.method === 'GET') return json({ hosts: await userCell.secretHostList() })
 			if (request.method === 'POST') {
 				const body = await readJson(request)
 				if (typeof body.host !== 'string') throw new KodyError('invalid_args', '"host" is required.')
-				return json(await userCell.secretHostApprove({ host: body.host, approvedBy: 'admin' }), 201)
+				const approved = await userCell.secretHostApprove({ host: body.host, approvedBy: 'admin' })
+				await audit('secret_host.approve', user.id, { host: approved.host })
+				return json(approved, 201)
 			}
 			if (request.method === 'DELETE' && segments[4]) {
-				return json(await userCell.secretHostRevoke({ host: decodeURIComponent(segments[4]) }))
+				const revoked = await userCell.secretHostRevoke({ host: decodeURIComponent(segments[4]) })
+				await audit('secret_host.revoke', user.id, { host: revoked.host, revoked: revoked.revoked })
+				return json(revoked)
 			}
 		}
 		if (resource === 'jobs' && request.method === 'GET') return json({ jobs: await userCell.jobList() })
 		if (resource === 'runs' && request.method === 'GET') {
 			return json({ runs: await userCell.runList({ limit: Number(url.searchParams.get('limit') ?? 20) }) })
+		}
+		if (resource === 'usage' && request.method === 'GET') {
+			return json(await userCell.usageGet({ days: Number(url.searchParams.get('days') ?? 7) }))
+		}
+		if (resource === 'quota') {
+			if (request.method === 'GET') return json(await userCell.quotaGet())
+			if (request.method === 'PUT') {
+				let override
+				try {
+					override = parseQuotaOverride(await readJson(request))
+				} catch (error) {
+					throw new KodyError('invalid_args', error instanceof Error ? error.message : String(error))
+				}
+				const result = await userCell.quotaSet(override)
+				await audit('quota.set', user.id, { override: result.override })
+				return json(result)
+			}
+			if (request.method === 'DELETE') {
+				const result = await userCell.quotaSet(null)
+				await audit('quota.clear', user.id)
+				return json(result)
+			}
 		}
 	}
 

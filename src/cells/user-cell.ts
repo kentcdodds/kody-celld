@@ -9,6 +9,15 @@ import {
 	type MasterKeyring,
 } from '../lib/crypto.ts'
 import { KodyError } from '../lib/errors.ts'
+import {
+	effectiveQuotas,
+	limitsFromEnv,
+	quotasFromEnv,
+	utcDay,
+	withinQuota,
+	type Limits,
+	type Quotas,
+} from '../lib/limits.ts'
 import { parsePackageManifest, type PackageFiles, type PackageManifest } from '../packages/manifest.ts'
 import { normalizeSecretHost } from '../secrets/host-policy.ts'
 import type { SecretScope } from '../secrets/placeholders.ts'
@@ -90,6 +99,18 @@ export type GatewayEvent = {
 	status: number | null
 	secrets: Array<string>
 	reason?: string
+}
+
+export type DailyUsage = { day: string; runs: number; errors: number; executeMs: number }
+
+export type UsageReport = {
+	day: string
+	today: DailyUsage
+	history: Array<DailyUsage>
+	counts: { packages: number; secrets: number; jobs: number; runsRetained: number }
+	quotas: Quotas
+	quotaOverride: Partial<Quotas> | null
+	limits: Limits
 }
 
 const secretNamePattern = /^[a-zA-Z0-9._-]+$/
@@ -178,7 +199,15 @@ export class UserCell extends DurableObject<Env> {
 			);
 			CREATE UNIQUE INDEX IF NOT EXISTS runs_idempotency ON runs(idempotency_key) WHERE idempotency_key IS NOT NULL;
 			CREATE INDEX IF NOT EXISTS runs_created ON runs(created_at DESC);
+			CREATE TABLE IF NOT EXISTS usage_daily (
+				day TEXT PRIMARY KEY,
+				runs INTEGER NOT NULL DEFAULT 0,
+				errors INTEGER NOT NULL DEFAULT 0,
+				execute_ms INTEGER NOT NULL DEFAULT 0
+			);
 		`)
+		this.limits = limitsFromEnv(env)
+		this.defaultQuotas = quotasFromEnv(env)
 		const secretColumns = this.ctx.storage.sql
 			.exec<{ name: string }>(`SELECT name FROM pragma_table_info('secrets')`)
 			.toArray()
@@ -187,6 +216,9 @@ export class UserCell extends DurableObject<Env> {
 			this.ctx.storage.sql.exec(`ALTER TABLE secrets ADD COLUMN key_id TEXT NOT NULL DEFAULT ''`)
 		}
 	}
+
+	private readonly limits: Limits
+	private readonly defaultQuotas: Quotas
 
 	private keyringPromise: Promise<MasterKeyring> | undefined
 	private keyring() {
@@ -204,6 +236,85 @@ export class UserCell extends DurableObject<Env> {
 
 	async init(userId: string) {
 		this.ctx.storage.sql.exec(`INSERT INTO meta (key, value) VALUES ('user_id', ?) ON CONFLICT(key) DO NOTHING`, userId)
+	}
+
+	// ---------------------------------------------------------- quotas & usage
+
+	private quotaOverride(): Partial<Quotas> | null {
+		const row = this.ctx.storage.sql
+			.exec<{ value: string }>(`SELECT value FROM meta WHERE key = 'quota_override'`)
+			.toArray()[0]
+		return row ? (JSON.parse(row.value) as Partial<Quotas>) : null
+	}
+
+	private quotas() {
+		return effectiveQuotas(this.defaultQuotas, this.quotaOverride())
+	}
+
+	private count(table: 'packages' | 'secrets' | 'jobs' | 'runs') {
+		return Number(this.ctx.storage.sql.exec<{ n: number }>(`SELECT COUNT(*) AS n FROM ${table}`).toArray()[0]?.n ?? 0)
+	}
+
+	private usageFor(day: string): DailyUsage {
+		const row = this.ctx.storage.sql
+			.exec<{ runs: number; errors: number; execute_ms: number }>(
+				'SELECT runs, errors, execute_ms FROM usage_daily WHERE day = ?',
+				day,
+			)
+			.toArray()[0]
+		return { day, runs: row?.runs ?? 0, errors: row?.errors ?? 0, executeMs: row?.execute_ms ?? 0 }
+	}
+
+	private assertQuota(quota: keyof Quotas, used: number, what: string) {
+		const limit = this.quotas()[quota]
+		if (withinQuota(limit, used)) return
+		throw new KodyError('quota_exceeded', `${what} quota reached (${used}/${limit}).`, {
+			status: 429,
+			details: { quota, limit, used },
+		})
+	}
+
+	async quotaGet(): Promise<{ quotas: Quotas; override: Partial<Quotas> | null; defaults: Quotas }> {
+		return { quotas: this.quotas(), override: this.quotaOverride(), defaults: this.defaultQuotas }
+	}
+
+	/** Admin-only: replace the per-user override (`null` clears it). */
+	async quotaSet(override: Partial<Quotas> | null) {
+		if (override === null || Object.keys(override).length === 0) {
+			this.ctx.storage.sql.exec(`DELETE FROM meta WHERE key = 'quota_override'`)
+		} else {
+			this.ctx.storage.sql.exec(
+				`INSERT INTO meta (key, value) VALUES ('quota_override', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+				JSON.stringify(override),
+			)
+		}
+		return this.quotaGet()
+	}
+
+	async usageGet(input: { days?: number | undefined } = {}): Promise<UsageReport> {
+		const days = Math.min(Math.max(input.days ?? 7, 1), 90)
+		const day = utcDay()
+		const history = this.ctx.storage.sql
+			.exec<{ day: string; runs: number; errors: number; execute_ms: number }>(
+				'SELECT day, runs, errors, execute_ms FROM usage_daily ORDER BY day DESC LIMIT ?',
+				days,
+			)
+			.toArray()
+			.map((row) => ({ day: row.day, runs: row.runs, errors: row.errors, executeMs: row.execute_ms }))
+		return {
+			day,
+			today: this.usageFor(day),
+			history,
+			counts: {
+				packages: this.count('packages'),
+				secrets: this.count('secrets'),
+				jobs: this.count('jobs'),
+				runsRetained: this.count('runs'),
+			},
+			quotas: this.quotas(),
+			quotaOverride: this.quotaOverride(),
+			limits: this.limits,
+		}
 	}
 
 	// ---------------------------------------------------------------- secrets
@@ -230,6 +341,11 @@ export class UserCell extends DurableObject<Env> {
 		if (scope === 'package' && !packageName) {
 			throw new KodyError('invalid_secret_scope', 'Package-scoped secrets need a package name.')
 		}
+		const exists =
+			this.ctx.storage.sql
+				.exec('SELECT 1 FROM secrets WHERE name = ? AND scope = ? AND package_name = ?', name, scope, packageName)
+				.toArray().length > 0
+		if (!exists) this.assertQuota('secrets', this.count('secrets'), 'Secret')
 		const { current } = await this.keyring()
 		const encrypted = await encryptSecretValue(current.key, this.userId, input.value)
 		const now = nowIso()
@@ -433,6 +549,16 @@ export class UserCell extends DurableObject<Env> {
 		const existing = this.ctx.storage.sql
 			.exec<{ created_at: string }>('SELECT created_at FROM packages WHERE name = ?', manifest.name)
 			.toArray()[0]
+		if (!existing) this.assertQuota('packages', this.count('packages'), 'Package')
+		const jobsElsewhere = Number(
+			this.ctx.storage.sql
+				.exec<{ n: number }>('SELECT COUNT(*) AS n FROM jobs WHERE package_name != ?', manifest.name)
+				.toArray()[0]?.n ?? 0,
+		)
+		const declaredJobs = Object.keys(manifest.jobs).length
+		if (declaredJobs > 0) {
+			this.assertQuota('jobs', jobsElsewhere + declaredJobs - 1, 'Job')
+		}
 		this.ctx.storage.sql.exec(
 			`INSERT INTO packages (name, version, manifest_json, files_json, source, created_at, updated_at)
 			 VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -751,6 +877,10 @@ export class UserCell extends DurableObject<Env> {
 			const existing = await this.runGet({ idempotencyKey: input.idempotencyKey })
 			if (existing) return { run: existing, replayed: true }
 		}
+		const day = utcDay()
+		const usage = this.usageFor(day)
+		this.assertQuota('runsPerDay', usage.runs, 'Daily run')
+		this.assertQuota('executeMsPerDay', usage.executeMs, 'Daily execute-time')
 		const id = randomId('run')
 		this.ctx.storage.sql.exec(
 			`INSERT INTO runs (id, kind, package_name, idempotency_key, status, created_at) VALUES (?, ?, ?, ?, 'running', ?)`,
@@ -760,6 +890,11 @@ export class UserCell extends DurableObject<Env> {
 			input.idempotencyKey ?? null,
 			nowIso(),
 		)
+		this.ctx.storage.sql.exec(
+			`INSERT INTO usage_daily (day, runs) VALUES (?, 1) ON CONFLICT(day) DO UPDATE SET runs = runs + 1`,
+			day,
+		)
+		this.pruneRuns()
 		const run = await this.runGet({ id })
 		if (!run) throw new KodyError('internal_error', 'Run insert failed.', { status: 500 })
 		return { run, replayed: false }
@@ -793,11 +928,28 @@ export class UserCell extends DurableObject<Env> {
 			input.id,
 		)
 		this.ctx.storage.sql.exec(
-			`DELETE FROM runs WHERE id NOT IN (SELECT id FROM runs ORDER BY created_at DESC LIMIT 500)`,
+			`INSERT INTO usage_daily (day, errors, execute_ms) VALUES (?, ?, ?)
+			 ON CONFLICT(day) DO UPDATE SET errors = errors + excluded.errors, execute_ms = execute_ms + excluded.execute_ms`,
+			utcDay(),
+			input.status === 'error' ? 1 : 0,
+			Math.max(0, Math.round(input.durationMs)),
 		)
+		this.pruneRuns()
 		const run = await this.runGet({ id: input.id })
 		if (!run) throw new KodyError('internal_error', 'Run update failed.', { status: 500 })
 		return run
+	}
+
+	private pruneRuns() {
+		this.ctx.storage.sql.exec(
+			`DELETE FROM runs WHERE status != 'running' AND id NOT IN (SELECT id FROM runs ORDER BY created_at DESC LIMIT ?)`,
+			this.limits.runRetentionCount,
+		)
+		if (this.limits.runRetentionDays > 0) {
+			const cutoff = new Date(Date.now() - this.limits.runRetentionDays * 86_400_000).toISOString()
+			this.ctx.storage.sql.exec(`DELETE FROM runs WHERE created_at < ? AND status != 'running'`, cutoff)
+			this.ctx.storage.sql.exec('DELETE FROM usage_daily WHERE day < ?', cutoff.slice(0, 10))
+		}
 	}
 
 	async runRecordGatewayEvent(input: { runId: string; event: GatewayEvent }) {

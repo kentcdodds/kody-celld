@@ -3,11 +3,12 @@
 //
 //   node smoke/run.mjs                 # all scenarios, skips the ~1-2 minute real-cron wait
 //   node smoke/run.mjs --wait-cron     # also waits for celld's cron trigger to fire a job
-//   node smoke/run.mjs --only secrets  # one scenario (mcp | packages | secrets | jobs)
+//   node smoke/run.mjs --only secrets  # one scenario (mcp | packages | secrets | jobs | limits)
 //
-// Env: KODY_URL, KODY_ADMIN_TOKEN, SMOKE_ECHO_PORT
+// Env: KODY_URL, KODY_ADMIN_TOKEN, SMOKE_ECHO_PORT, SMOKE_EXPECT_TIMEOUT_MS
 import { baseUrl, bootstrapUser, log, SmokeError } from './lib.mjs'
 import { smokeJobs } from './jobs.mjs'
+import { smokeLimits } from './limits.mjs'
 import { smokeMcp } from './mcp.mjs'
 import { smokePackages } from './packages.mjs'
 import { smokeSecrets } from './secrets.mjs'
@@ -23,10 +24,11 @@ const scenarios = [
 	['packages', smokePackages],
 	['secrets', smokeSecrets],
 	['jobs', smokeJobs],
+	['limits', smokeLimits],
 ].filter(([name]) => !only || only === name)
 
 if (scenarios.length === 0) {
-	console.error(`Unknown scenario "${only}". Choose one of: mcp, packages, secrets, jobs`)
+	console.error(`Unknown scenario "${only}". Choose one of: mcp, packages, secrets, jobs, limits`)
 	process.exit(2)
 }
 

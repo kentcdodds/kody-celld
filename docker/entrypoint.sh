@@ -14,9 +14,15 @@ port="${PORT:-8080}"
 
 # Compose passes unset optional variables through as empty strings; celld wants
 # them absent.
-for optional in S3_ENDPOINT KODY_ALLOW_INSECURE_SECRET_HOSTS KODY_ADMIN_TOKEN KODY_MASTER_KEY KODY_MASTER_KEY_PREVIOUS KODY_PUBLIC_URL; do
+for optional in S3_ENDPOINT $(compgen -v | grep '^KODY_' || true); do
 	if [[ -z "${!optional:-}" ]]; then unset "$optional"; fi
 done
+
+# Runtime limits / quota defaults (docs/operations.md) are plain KODY_* vars
+# that the Worker reads from its bindings; list the ones that are set.
+tunable_vars() {
+	compgen -v | grep -E '^KODY_(EXECUTE|RUN|RESPONSE|AUDIT|QUOTA)_' || true
+}
 
 random_hex() {
 	node -e 'process.stdout.write(require("node:crypto").randomBytes(Number(process.argv[1])).toString("hex"))' "$1"
@@ -78,6 +84,9 @@ run_single() {
 		echo "KODY_PUBLIC_URL=$KODY_PUBLIC_URL"
 		echo "KODY_ALLOW_INSECURE_SECRET_HOSTS=${KODY_ALLOW_INSECURE_SECRET_HOSTS:-}"
 		echo "KODY_MASTER_KEY_PREVIOUS=${KODY_MASTER_KEY_PREVIOUS:-}"
+		for tunable in $(tunable_vars); do
+			echo "$tunable=${!tunable}"
+		done
 	} >/app/.dev.vars
 	umask 022
 	echo "[kody-celld] single node: MCP at $KODY_PUBLIC_URL/mcp (listening on 0.0.0.0:$port)"

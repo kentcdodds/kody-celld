@@ -1,5 +1,6 @@
 import type { JobRunRecord } from '../cells/user-cell.ts'
 import { runJobNow } from '../jobs/dispatcher.ts'
+import { recordAudit } from '../lib/audit.ts'
 import { KodyError } from '../lib/errors.ts'
 import { defineCapability, defineDomain } from './define.ts'
 
@@ -58,7 +59,14 @@ export const jobUpdate = defineCapability<{ id: string; enabled: boolean }>({
 		required: ['id', 'enabled'],
 	},
 	async handler(args, ctx) {
-		return ctx.userCell.jobUpdate({ id: args.id, enabled: args.enabled })
+		const job = await ctx.userCell.jobUpdate({ id: args.id, enabled: args.enabled })
+		await recordAudit(ctx.env, {
+			actor: `user:${ctx.user.id}`,
+			action: args.enabled ? 'job.enable' : 'job.disable',
+			target: args.id,
+			details: null,
+		})
+		return job
 	},
 })
 

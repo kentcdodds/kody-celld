@@ -1,3 +1,4 @@
+import { recordAudit } from '../lib/audit.ts'
 import { buildSecretPlaceholder, type SecretScope } from '../secrets/placeholders.ts'
 import { defineCapability, defineDomain } from './define.ts'
 
@@ -49,6 +50,12 @@ export default async function main({ name, value }) {
 			scope: args.scope,
 			packageName: args.packageName ?? (args.scope === 'package' ? (ctx.packageName ?? undefined) : undefined),
 		})
+		await recordAudit(ctx.env, {
+			actor: `user:${ctx.user.id}`,
+			action: 'secret.save',
+			target: saved.name,
+			details: { scope: saved.scope, packageName: saved.packageName, viaPackage: ctx.packageName },
+		})
 		return { ...saved, placeholder: buildSecretPlaceholder(saved.name, saved.scope === 'user' ? null : saved.scope) }
 	},
 })
@@ -86,11 +93,18 @@ export const secretDelete = defineCapability<{ name: string; scope?: SecretScope
 		required: ['name'],
 	},
 	async handler(args, ctx) {
-		return ctx.userCell.secretDelete({
+		const result = await ctx.userCell.secretDelete({
 			name: args.name,
 			scope: args.scope,
 			packageName: args.packageName ?? ctx.packageName ?? undefined,
 		})
+		await recordAudit(ctx.env, {
+			actor: `user:${ctx.user.id}`,
+			action: 'secret.delete',
+			target: args.name,
+			details: { scope: args.scope ?? 'user', viaPackage: ctx.packageName },
+		})
+		return result
 	},
 })
 
