@@ -19,6 +19,15 @@ const islands: Record<string, Function> = {
 	Toaster,
 }
 
+// `run()` also intercepts same-origin links and forms through the Navigation
+// API and replays them as `fetch()` frame navigations. Every page here is a
+// full document and several POSTs end in cross-origin redirects (OAuth consent
+// back to the client's callback, connect flows to a provider), which fetch
+// cannot follow under `connect-src 'self'`. Registering first keeps them native.
+window.navigation?.addEventListener('navigate', (event) =>
+	event.stopImmediatePropagation(),
+)
+
 run({
 	loadModule(_moduleUrl, exportName) {
 		const island = islands[exportName]

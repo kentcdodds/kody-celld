@@ -188,7 +188,7 @@ export async function smokeOAuthServer({ user, mcp }) {
 
 	const browser = new Browser()
 	const signedIn = await browser.post('/signin', {
-		method: 'token',
+		intent: 'token',
 		token: mcp.token,
 		next: decodeURIComponent(gate.location.slice('/signin?next='.length)),
 	})

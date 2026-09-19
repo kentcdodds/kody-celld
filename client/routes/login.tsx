@@ -34,7 +34,7 @@ export function Login(handle: Handle<{ data: LoginData }>) {
 			>
 				<AuthSection title="Email and password" first>
 					<StackedForm action={routes.login.href()}>
-						<Hidden name="method" value="password" />
+						<Hidden name="intent" value="password" />
 						<Hidden name="next" value={next} />
 						<Field
 							label="Email"
@@ -59,7 +59,7 @@ export function Login(handle: Handle<{ data: LoginData }>) {
 				{magicLinks ? (
 					<AuthSection title="Email me a link">
 						<StackedForm action={routes.login.href()}>
-							<Hidden name="method" value="magic" />
+							<Hidden name="intent" value="magic" />
 							<Hidden name="next" value={next} />
 							<Field
 								label="Email"
@@ -82,7 +82,7 @@ export function Login(handle: Handle<{ data: LoginData }>) {
 						and set a password.
 					</Muted>
 					<StackedForm action={routes.login.href()}>
-						<Hidden name="method" value="token" />
+						<Hidden name="intent" value="token" />
 						<Hidden name="next" value={next} />
 						<Field
 							label="Token"

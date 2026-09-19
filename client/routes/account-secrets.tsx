@@ -89,7 +89,7 @@ export function AccountSecrets(
 						<Field
 							label="Name"
 							name="name"
-							pattern="[a-zA-Z0-9._-]+"
+							pattern="[a-zA-Z0-9._\-]+"
 							placeholder="GITHUB_TOKEN"
 							required
 						/>

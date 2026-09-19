@@ -29,7 +29,7 @@ export async function smokeWeb({ user, mcp }) {
 		signinPage.status,
 	)
 	assert(
-		!signinPage.text.includes('Email me a link') || signinPage.text.includes('name="method" value="magic"'),
+		!signinPage.text.includes('Email me a link') || signinPage.text.includes('name="intent" value="magic"'),
 		'magic form only when outbound email exists',
 	)
 	log('anonymous', 'sign-in page reachable, account pages gated')
@@ -202,7 +202,7 @@ export async function smokeWeb({ user, mcp }) {
 	// Password sign-in on a second browser, wrong password, lockout after 5 failures.
 	const second = new Browser()
 	const wrong = await second.post('/signin', {
-		method: 'password',
+		intent: 'password',
 		email: user.email,
 		password: 'definitely-not-it-12345',
 	})
@@ -212,21 +212,21 @@ export async function smokeWeb({ user, mcp }) {
 		wrong.status,
 	)
 	const right = await second.post('/signin', {
-		method: 'password',
+		intent: 'password',
 		email: user.email,
 		password,
 		next: '/account/sessions',
 	})
 	assert(right.status === 303 && right.location?.endsWith('/account/sessions'), 'password sign-in honours next', right)
 	const openRedirect = await new Browser().post('/signin', {
-		method: 'password',
+		intent: 'password',
 		email: user.email,
 		password,
 		next: 'https://evil.example/',
 	})
 	assert(openRedirect.location?.endsWith('/account'), 'external next is ignored', openRedirect.location)
 	const protoRelative = await new Browser().post('/signin', {
-		method: 'password',
+		intent: 'password',
 		email: user.email,
 		password,
 		next: '//evil.example/',
@@ -238,7 +238,7 @@ export async function smokeWeb({ user, mcp }) {
 	log('password', 'sign-in works, wrong password refused, next sanitised')
 
 	// Token sign-in (existing API token) also works.
-	const viaToken = await new Browser().post('/signin', { method: 'token', token: mcp.token })
+	const viaToken = await new Browser().post('/signin', { intent: 'token', token: mcp.token })
 	assert(viaToken.status === 303 && viaToken.location?.endsWith('/account'), 'API token sign-in works', viaToken)
 
 	// Revoke other sessions from the first browser: the second browser is signed out.
@@ -275,9 +275,9 @@ export async function smokeWeb({ user, mcp }) {
 	// Lockout: 5 wrong passwords lock the account even for the right password.
 	const locker = new Browser()
 	for (let i = 0; i < 5; i += 1) {
-		await locker.post('/signin', { method: 'password', email: user.email, password: `wrong-${i}-xxxxxxxxxxxx` })
+		await locker.post('/signin', { intent: 'password', email: user.email, password: `wrong-${i}-xxxxxxxxxxxx` })
 	}
-	const locked = await locker.post('/signin', { method: 'password', email: user.email, password })
+	const locked = await locker.post('/signin', { intent: 'password', email: user.email, password })
 	assert(locked.status === 429, 'account locked after 5 failures (right password refused with 429)', locked.status)
 	log('lockout', '5 failures lock password sign-in for 15 minutes')
 
@@ -341,7 +341,7 @@ export async function smokeWeb({ user, mcp }) {
 
 	// The user's own UI must not offer host approval (admin-only invariant).
 	const userSecrets = await new Browser()
-	await userSecrets.post('/signin', { method: 'token', token: mcp.token })
+	await userSecrets.post('/signin', { intent: 'token', token: mcp.token })
 	const secretsHtml = (await userSecrets.get('/account/secrets')).text
 	assert(!/name="action" value="approve_host"/.test(secretsHtml), 'account UI has no host-approval form')
 	const forgedApprove = await userSecrets.post('/account/secrets', {

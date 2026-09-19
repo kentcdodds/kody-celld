@@ -82,7 +82,7 @@ export async function handleSignin(request: Request, env: Env, url: URL): Promis
 	const form = await readForm(request)
 	const nextTarget = safeNext(form.next)
 
-	if (form.method === 'password') {
+	if (form.intent === 'password') {
 		const email = (form.email ?? '').trim().toLowerCase()
 		if (!email || !form.password)
 			return signinPage(env, { next: nextTarget, error: 'Email and password are required.', email })
@@ -99,7 +99,7 @@ export async function handleSignin(request: Request, env: Env, url: URL): Promis
 		return await finishSignin(request, env, user.id, 'password', nextTarget)
 	}
 
-	if (form.method === 'token') {
+	if (form.intent === 'token') {
 		const token = (form.token ?? '').trim()
 		const user = token ? await registry(env).resolveToken(token) : null
 		if (!user) {
@@ -114,7 +114,7 @@ export async function handleSignin(request: Request, env: Env, url: URL): Promis
 		return await finishSignin(request, env, user.id, 'token', nextTarget)
 	}
 
-	if (form.method === 'magic') {
+	if (form.intent === 'magic') {
 		if (!magicLinksAvailable(env)) {
 			return signinPage(env, { next: nextTarget, error: 'This server has no outbound email adapter configured.' })
 		}
