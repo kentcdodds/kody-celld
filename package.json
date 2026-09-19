@@ -17,6 +17,7 @@
     "test": "node --test 'src/**/*.test.ts'",
     "smoke": "node smoke/run.mjs",
     "smoke:cron": "node smoke/run.mjs --wait-cron",
+    "smoke:ai-mock": "node smoke/ai-mock-server.mjs",
     "validate": "npm run typecheck && npm run lint && npm run format:check && npm run test",
     "fleet:render": "node scripts/render-fleet-config.mjs",
     "fleet:deploy": "npm run fleet:render && celld deploy wrangler.fleet.jsonc"

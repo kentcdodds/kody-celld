@@ -23,6 +23,10 @@ users, and durable state you can back up.
   network boundary to hosts an admin approved.
 - **Jobs** — package-owned cron / interval / once schedules on celld's real
   cron trigger.
+- **Memories + AI** — durable per-user memories with full-text search out of
+  the box; point it at Ollama / LM Studio / OpenAI / Anthropic (or add the
+  bundled Ollama + Qdrant overlay) for embeddings, semantic recall and
+  `kody.aiChat()`. See [ai.md](./ai.md).
 
 Everything runs on [celld](https://celld.dev), Deno's self-hosted Cloudflare
 Workers + Durable Objects runtime. No Cloudflare account is involved.
@@ -129,6 +133,7 @@ itself is reached.
 | Logs                  | `docker compose logs -f kody`                                                                                                                                             |
 | Approve a secret host | `curl -X POST $BASE/admin/users/<id>/secret-hosts -H "authorization: Bearer $ADMIN" -d '{"host":"api.github.com"}'`                                                       |
 | Force a job dispatch  | `curl -X POST $BASE/admin/jobs -H "authorization: Bearer $ADMIN"`                                                                                                         |
+| Turn on local AI      | `echo 'COMPOSE_FILE=compose.yaml:compose.ai.yaml' >> .env && docker compose up -d && docker compose exec ollama ollama pull nomic-embed-text` ([ai.md](./ai.md))          |
 | Verify end to end     | `KODY_URL=$BASE KODY_ADMIN_TOKEN=$ADMIN SMOKE_ECHO_HOST=host.docker.internal npm run smoke` from a checkout on the Docker host (needs Node 22)                            |
 
 The single-node mode uses celld's local object store, so there is no bucket to

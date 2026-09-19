@@ -1,0 +1,68 @@
+# Overlay: fully local AI for memories + semantic search, no external account.
+#
+#   Ollama (embeddings, optional chat) + Qdrant (vector store) beside the
+#   single-node compose.yaml. For a fleet, run the same two services wherever
+#   you like and point KODY_AI_EMBED_BASE_URL / KODY_QDRANT_URL at them in .env
+#   (the deploy service bakes them into the Worker config).
+#
+#   COMPOSE_FILE=compose.yaml:compose.ai.yaml          # in .env
+#   docker compose up -d
+#   docker compose exec ollama ollama pull nomic-embed-text   # once (~275 MB)
+#
+# With this overlay in place kody-celld defaults to Ollama's OpenAI-compatible
+# endpoint for embeddings and to Qdrant for vectors. Every value can still be
+# overridden in .env (KODY_AI_*, KODY_VECTOR_PROVIDER, KODY_QDRANT_*), e.g. to
+# use the built-in sqlite-vec store instead of Qdrant set
+# KODY_VECTOR_PROVIDER=local. Chat (aiChat, KODY_SEARCH_RERANK=llm) stays off
+# unless you set KODY_AI_PROVIDER=openai and pull a chat model
+# (`ollama pull llama3.2`, KODY_AI_CHAT_MODEL=llama3.2). See docs/ai.md.
+services:
+  ollama:
+    image: ollama/ollama:${OLLAMA_VERSION:-0.12.3}
+    restart: unless-stopped
+    volumes:
+      - ollama-models:/root/.ollama
+    healthcheck:
+      test: ['CMD', 'ollama', 'list']
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  # Neither service publishes a host port: only Kody reaches them on the compose
+  # network. To require a Qdrant API key anyway, add a compose.override.yaml
+  # with `services.qdrant.environment.QDRANT__SERVICE__API_KEY: <key>` and set
+  # the same value as KODY_QDRANT_API_KEY in .env. (Qdrant treats an empty
+  # QDRANT__SERVICE__API_KEY as "auth required", so it is not forwarded here.)
+  qdrant:
+    image: qdrant/qdrant:${QDRANT_VERSION:-v1.15.4}
+    restart: unless-stopped
+    volumes:
+      - qdrant-data:/qdrant/storage
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'bash -c "exec 3<>/dev/tcp/127.0.0.1/6333 && echo -e \"GET /readyz HTTP/1.0\r\n\r\n\" >&3 && grep -q 200 <&3"',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  kody:
+    environment:
+      KODY_AI_EMBED_PROVIDER: ${KODY_AI_EMBED_PROVIDER:-openai}
+      KODY_AI_EMBED_BASE_URL: ${KODY_AI_EMBED_BASE_URL:-http://ollama:11434/v1}
+      KODY_AI_EMBED_MODEL: ${KODY_AI_EMBED_MODEL:-nomic-embed-text}
+      KODY_AI_EMBED_DIMENSIONS: ${KODY_AI_EMBED_DIMENSIONS:-768}
+      KODY_AI_BASE_URL: ${KODY_AI_BASE_URL:-http://ollama:11434/v1}
+      KODY_VECTOR_PROVIDER: ${KODY_VECTOR_PROVIDER:-qdrant}
+      KODY_QDRANT_URL: ${KODY_QDRANT_URL:-http://qdrant:6333}
+    depends_on:
+      ollama:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+
+volumes:
+  ollama-models:
+  qdrant-data:

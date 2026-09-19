@@ -1,6 +1,6 @@
 # Architecture
 
-kody-celld is one Worker plus three Durable Object classes and two Worker
+kody-celld is one Worker plus four Durable Object classes and two Worker
 Entrypoints, all in a single `celld` deployment. Everything a user does enters
 through MCP (`/mcp`) or the equivalent direct API (`/api/call/:capability`);
 operators use `/admin/*` with the admin token.
@@ -17,6 +17,8 @@ operators use `/admin/*` with the admin token.
                 │   UserCell (DO, per user)  packages, secrets (encrypted), hosts,      │
                 │                            jobs, runs, gateway events, daily usage    │
                 │   PackageStorageCell (DO, per user×package)  KV + free-form SQLite    │
+                │   MemoryCell (DO, per user)  memories + FTS5, sqlite-vec vectors,     │
+                │                              embedding cache ──► AI adapter / Qdrant   │
                 │                                                                       │
                 │   execute ─► module graph ─► LOADER.get(hash) ──► isolate             │
                 │        env.KODY = RuntimeHost({props})      ◄─ kody.<capability>()    │
@@ -89,9 +91,25 @@ before running so a crash cannot double-fire), then executes the entry via
 | `RegistryCell`       | `"registry"` (singleton) | users, SHA-256 token hashes → user id, admin audit log                                                                                     |
 | `UserCell`           | user id                  | packages (files + manifest), secrets (ciphertext), approved hosts, jobs, job runs, runs, gateway events, per-UTC-day usage, quota override |
 | `PackageStorageCell` | `${userId}:${package}`   | `__kody_kv` table + whatever tables package `sql()` creates                                                                                |
+| `MemoryCell`         | user id                  | memories, `memories_fts` (FTS5), suppressions, embedding cache, `memory_vectors` (sqlite-vec, local provider)                              |
 
 All state is SQLite inside the DO; celld replicates it to the bucket. There is
 no KV/D1/R2 usage yet, which keeps the fleet footprint to "DOs + bucket".
+
+## AI, memories, semantic search
+
+`src/ai/config.ts` parses `KODY_AI_*` / `KODY_VECTOR_*` once per cell;
+`src/ai/providers.ts` implements the OpenAI-compatible chat + embeddings and
+Anthropic chat adapters (plain `fetch`, host-side, keys only in request
+headers); `src/ai/vector-store.ts` implements the `VectorStore` interface for
+sqlite-vec (`vec0`, inside the cell) and Qdrant (REST). `MemoryCell` owns the
+per-user memories and embeds them on write; `memorySearch` fuses FTS5 and vector
+ranks with reciprocal-rank fusion. The MCP `search` tool reuses the same cell
+(`embedCached`) to rank capabilities, guides and packages semantically and can
+ask the chat adapter for a final re-rank. AI calls never go through the
+sandbox: `aiChat`/`aiEmbed` are ordinary capabilities dispatched by
+`RuntimeHost`, so sandbox code never sees a provider key. Details:
+[ai.md](./ai.md).
 
 ## Limits, quotas, audit
 

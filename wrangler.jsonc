@@ -5,13 +5,14 @@
   "name": "kody-celld",
   "main": "src/index.ts",
   "compatibility_date": "2026-01-01",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": ["nodejs_compat", "sqlite_vec"],
   "worker_loaders": [{ "binding": "LOADER" }],
   "triggers": { "crons": ["* * * * *"] },
   "durable_objects": {
     "bindings": [
       { "name": "REGISTRY", "class_name": "RegistryCell" },
       { "name": "USER", "class_name": "UserCell" },
+      { "name": "MEMORY", "class_name": "MemoryCell" },
       { "name": "PACKAGE_STORAGE", "class_name": "PackageStorageCell" },
     ],
   },
@@ -20,6 +21,7 @@
       "tag": "v1",
       "new_sqlite_classes": ["RegistryCell", "UserCell", "PackageStorageCell"],
     },
+    { "tag": "v2", "new_sqlite_classes": ["MemoryCell"] },
   ],
   "vars": {
     // Dev-only values. They are not secrets and only work against `celld dev`.

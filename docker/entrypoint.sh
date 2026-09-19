@@ -21,7 +21,7 @@ done
 # Runtime limits / quota defaults (docs/operations.md) are plain KODY_* vars
 # that the Worker reads from its bindings; list the ones that are set.
 tunable_vars() {
-	compgen -v | grep -E '^KODY_(EXECUTE|RUN|RESPONSE|AUDIT|QUOTA)_' || true
+	compgen -v | grep -E '^KODY_(EXECUTE|RUN|RESPONSE|AUDIT|QUOTA|AI|SEARCH|VECTOR|QDRANT)_' || true
 }
 
 random_hex() {

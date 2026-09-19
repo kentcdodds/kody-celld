@@ -7,17 +7,19 @@ with an S3-compatible bucket for durability.
 It is deliberately the _core_, not full product parity with
 [kentcdodds/kody](https://github.com/kentcdodds/kody):
 
-| Surface                                              | Status                                                                                                    |
-| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| MCP `search` + `execute` (streamable HTTP, JSON-RPC) | Working, smoke-tested                                                                                     |
-| Packages (save local / in-memory, run, import)       | Working, smoke-tested (`kody:@scope/pkg/export`, `packageStorage`)                                        |
-| Secrets (encrypted store + host-gated injection)     | Working, smoke-tested (`{{secret:name}}`, `{{secret-basic:...}}`)                                         |
-| Jobs (package-owned cron / interval / once)          | Working, smoke-tested against the real celld cron trigger                                                 |
-| Docker: single node (NAS / home server) and fleet    | Working, smoke-tested (`compose.yaml`, `compose.fleet.yaml` + MinIO + Caddy)                              |
-| Master-key rotation                                  | Working, smoke-tested (`KODY_MASTER_KEY_PREVIOUS` + `POST /admin/secrets/rekey`)                          |
-| Limits, quotas, `usageGet`, admin audit log          | Working, smoke-tested ([docs/operations.md](./docs/operations.md))                                        |
-| npm imports inside `execute`                         | Experimental via esm.sh (see [provision matrix](./docs/known-gaps.md))                                    |
-| AI, memories, email, webhooks, OAuth, web UI, …      | Planned as built-ins and/or adapters — status per feature in the [provision matrix](./docs/known-gaps.md) |
+| Surface                                                            | Status                                                                                                               |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| MCP `search` + `execute` (streamable HTTP, JSON-RPC)               | Working, smoke-tested                                                                                                |
+| Packages (save local / in-memory, run, import)                     | Working, smoke-tested (`kody:@scope/pkg/export`, `packageStorage`)                                                   |
+| Secrets (encrypted store + host-gated injection)                   | Working, smoke-tested (`{{secret:name}}`, `{{secret-basic:...}}`)                                                    |
+| Jobs (package-owned cron / interval / once)                        | Working, smoke-tested against the real celld cron trigger                                                            |
+| Docker: single node (NAS / home server) and fleet                  | Working, smoke-tested (`compose.yaml`, `compose.fleet.yaml` + MinIO + Caddy)                                         |
+| Master-key rotation                                                | Working, smoke-tested (`KODY_MASTER_KEY_PREVIOUS` + `POST /admin/secrets/rekey`)                                     |
+| Limits, quotas, `usageGet`, admin audit log                        | Working, smoke-tested ([docs/operations.md](./docs/operations.md))                                                   |
+| AI chat/embeddings (Ollama, LM Studio, vLLM, OpenAI, Anthropic, …) | Working, smoke-tested adapters ([docs/ai.md](./docs/ai.md))                                                          |
+| Memories (`metaMemory*`) + semantic search                         | Working, smoke-tested: FTS5 + sqlite-vec built in, Qdrant adapter, optional LLM re-rank ([docs/ai.md](./docs/ai.md)) |
+| npm imports inside `execute`                                       | Experimental via esm.sh (see [provision matrix](./docs/known-gaps.md))                                               |
+| Email, webhooks, OAuth, web UI, …                                  | Planned as built-ins and/or adapters — status per feature in the [provision matrix](./docs/known-gaps.md)            |
 
 **New here? Start with [docs/getting-started.md](./docs/getting-started.md)** —
 it goes from zero to a running Kody in one Docker container (or a two-node
@@ -171,6 +173,27 @@ quotas default to unlimited). Admins override quotas per user with
 and every admin or state-changing user action lands in `GET /admin/audit`
 (names and ids only — never secret values or tokens). See
 [docs/operations.md](./docs/operations.md).
+
+## AI, memories and semantic search
+
+Memories (`metaMemoryVerify` → `metaMemoryUpsert` / `metaMemoryDelete`,
+`metaMemorySearch`, `metaMemoryGet`) are built in: a per-user SQLite cell with
+FTS5, so they work with no AI configured. Point `KODY_AI_*` at any
+OpenAI-compatible server (Ollama, LM Studio, vLLM, OpenRouter, OpenAI) or
+Anthropic and you get `kody.aiChat()`, `kody.aiEmbed()`, embedding-based memory
+recall and hybrid ranking in `search` — vectors live in sqlite-vec inside the
+cell by default, or in Qdrant (`KODY_VECTOR_PROVIDER=qdrant`);
+`KODY_SEARCH_RERANK=llm` adds a chat-model re-rank. Provider keys stay
+operator-side and never reach sandboxed code.
+
+```sh
+# fully local: Ollama + Qdrant containers next to the single node
+echo 'COMPOSE_FILE=compose.yaml:compose.ai.yaml' >> .env
+docker compose up -d && docker compose exec ollama ollama pull nomic-embed-text
+```
+
+Variables, recipes (Ollama on the host, hosted models, fleet) and how ranking
+works: [docs/ai.md](./docs/ai.md).
 
 ## Run a fleet
 
