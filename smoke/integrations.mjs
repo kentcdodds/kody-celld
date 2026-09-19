@@ -139,6 +139,8 @@ async function startMockProvider(port) {
 		state,
 		host,
 		url: `http://${host}:${port}`,
+		// Where *this* process reaches the provider (Kody may use a Docker-only host name).
+		localUrl: `http://${bind === '0.0.0.0' ? '127.0.0.1' : bind}:${port}`,
 		close: () => new Promise((resolve) => server.close(resolve)),
 	}
 }
@@ -162,7 +164,7 @@ async function completeConnect(link, provider, { expectFailure = false } = {}) {
 	assert(start.status === 303, 'POST connect should redirect to the provider', { status: start.status })
 	const authorizeUrl = new URL(start.headers.get('location'))
 	assert(authorizeUrl.origin === provider.url, 'redirect should target the mock provider', authorizeUrl.origin)
-	const providerHop = await fetchNoRedirect(authorizeUrl)
+	const providerHop = await fetchNoRedirect(`${provider.localUrl}${authorizeUrl.pathname}${authorizeUrl.search}`)
 	assert(providerHop.status === 302, 'provider should redirect back with a code', providerHop.status)
 	const callback = new URL(providerHop.headers.get('location'))
 	// KODY_PUBLIC_URL may differ from the URL this process reaches Kody on (Docker).
