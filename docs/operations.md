@@ -148,6 +148,38 @@ Per-webhook rate limits come from the package manifest
 | `KODY_SECRET_PROVIDER_CACHE_SECONDS` | `300`   | In-memory TTL for resolved `{{secret/…}}` values in the user cell; `0` disables caching ([secret-providers.md](./secret-providers.md)).  |
 | `KODY_SECRET_PROVIDER_TIMEOUT_MS`    | `20000` | Wall-clock cap for one sealed provider run (minimum 1000).                                                                               |
 
+## Sign-in, MCP OAuth, web UI
+
+| Variable           | Default | Notes                                                                                                                                                                                                                    |
+| ------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `KODY_PUBLIC_URL`  | —       | The OAuth **issuer** and the origin every browser form must come from. Cookies are `Secure` only when it is `https:`; discovery metadata, redirect handling and CORS derive from it ([mcp-oauth.md](./mcp-oauth.md)).    |
+| `KODY_ADMIN_TOKEN` | —       | Also unlocks `/setup` (first account) and the operator console at `/console` ([web-ui.md](./web-ui.md)).                                                                                                                 |
+| `KODY_MASTER_KEY`  | —       | Additionally signs CSRF / consent state and seals the refresh-replay snapshot; rotate with `KODY_MASTER_KEY_PREVIOUS` as for secrets ([secrets.md](./secrets.md)). Rotating it invalidates in-flight consent forms only. |
+
+Fixed protocol constants (change in `src/oauth/protocol.ts` / `src/auth/*` if
+you must): authorization codes 10 min, access tokens 1 h, refresh tokens 30 d
+with rotation and a 60 s replay grace, unused OAuth clients purged after 30 d,
+browser sessions 30 d, console sessions 12 h, invites 7 d, magic links 15 min,
+5 failed passwords → 15 min lockout per email.
+
+Admin JSON endpoints added for the UI:
+
+```sh
+# one-time invite link (sets a password); {"reset":true} for an existing account
+curl -s -X POST $BASE/admin/users/$USER/invite -H "authorization: Bearer $ADMIN" \
+  -H 'content-type: application/json' -d '{}'
+# sign a user out everywhere: browser sessions + every OAuth grant
+curl -s -X POST $BASE/admin/users/$USER/signout -H "authorization: Bearer $ADMIN"
+```
+
+Audit actions: `signin`, `signin.failed`, `signin.magic_link`,
+`signin.invite_accepted`, `password.set`, `password.reset`, `session.revoke`,
+`token.issue`, `token.revoke`, `user.invite`, `user.signout_everywhere`,
+`mcp_client.register`, `mcp_client.authorize`, `mcp_client.deny`,
+`mcp_client.revoke`, `mcp_client.revoke_all`, `console.signin`,
+`console.signin_failed`. Details never include submitted passwords, tokens or
+codes.
+
 ## Smoke coverage
 
 `npm run smoke` runs the `limits` scenario: `GET /admin/limits`, `usageGet`,
@@ -156,4 +188,5 @@ second secret with the secrets quota, clearing the override, the audit log
 (presence, filters, and the no-leak assertions above) and the retention bound.
 Start the node with `KODY_EXECUTE_TIMEOUT_MS=5000` and run
 `SMOKE_EXPECT_TIMEOUT_MS=5000 npm run smoke` to also prove a long run is cut off
-at the configured timeout.
+at the configured timeout. The `oauth-server` and `web` scenarios cover the
+authorization server and the HTML UI end to end (see the respective docs).

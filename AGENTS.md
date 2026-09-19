@@ -19,6 +19,13 @@ too and paste the smoke summary line in the PR.
   `src/secrets/fetch-gateway.ts`. Nothing else may decrypt secret values, and
   nothing may log or return them (run history stores secret _names_). Host
   approval is admin-only; sandbox code must never gain a path to approve hosts.
+  The same applies to credentials: API tokens, OAuth client secrets / codes /
+  tokens, session ids and sign-in links are stored **hashed** and returned
+  exactly once at issuance; `fromRuntime` calls may not mint or revoke them.
+- **Browser mutations are same-origin `POST`s with a CSRF token** (`src/web`,
+  `src/oauth/routes.ts`). Keep `assertSameOrigin` + `assertCsrf` on every form
+  handler, keep the consent form's signed state, and render through the
+  auto-escaping `html` tag (`raw()` only for constants).
 - **No real secret values in code, docs, fixtures, or smoke output.** Smoke
   tests generate random values at runtime and assert with SHA-256 digests.
   `wrangler.jsonc` vars are loopback-only placeholders; fleet values are

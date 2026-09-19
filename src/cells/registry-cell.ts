@@ -1,8 +1,11 @@
 import { DurableObject } from 'cloudflare:workers'
+import { AccountStore, accountSchema, type SigninTokenKind } from '../auth/account-store.ts'
 import type { Env } from '../env.ts'
-import { randomId, randomToken, sha256Hex } from '../lib/crypto.ts'
+import { buildMasterKeyring, randomId, randomToken, sha256Hex, type MasterKeyring } from '../lib/crypto.ts'
 import { KodyError } from '../lib/errors.ts'
 import { limitsFromEnv } from '../lib/limits.ts'
+import { type ClientRegistration, type TokenEndpointAuthMethod } from '../oauth/protocol.ts'
+import { OAuthServerStore, oauthServerSchema } from '../oauth/server-store.ts'
 
 export type UserRecord = { id: string; email: string; createdAt: string }
 
@@ -89,10 +92,22 @@ export class RegistryCell extends DurableObject<Env> {
 			);
 			CREATE INDEX IF NOT EXISTS outbound_email_index_created ON outbound_email_index(created_at);
 		`)
+		this.ctx.storage.sql.exec(accountSchema)
+		this.ctx.storage.sql.exec(oauthServerSchema)
 		this.auditRetentionCount = limitsFromEnv(env).auditRetentionCount
+		this.accounts = new AccountStore(this.ctx.storage.sql)
+		this.oauth = new OAuthServerStore(this.ctx.storage.sql, () => this.keyring())
 	}
 
 	private readonly auditRetentionCount: number
+	private readonly accounts: AccountStore
+	private readonly oauth: OAuthServerStore
+
+	private keyringPromise: Promise<MasterKeyring> | undefined
+	private keyring() {
+		this.keyringPromise ??= buildMasterKeyring(this.env.KODY_MASTER_KEY, this.env.KODY_MASTER_KEY_PREVIOUS)
+		return this.keyringPromise
+	}
 
 	// ------------------------------------------------------------------ audit
 
@@ -325,5 +340,175 @@ export class RegistryCell extends DurableObject<Env> {
 			)
 			.toArray()[0]
 		return row ? { id: row.id, email: row.email, createdAt: row.created_at } : null
+	}
+
+	async getUserByEmail(email: string): Promise<UserRecord | null> {
+		const row = this.ctx.storage.sql
+			.exec<{ id: string; email: string; created_at: string }>(
+				'SELECT id, email, created_at FROM users WHERE email = ?',
+				email.trim().toLowerCase(),
+			)
+			.toArray()[0]
+		return row ? { id: row.id, email: row.email, createdAt: row.created_at } : null
+	}
+
+	/** Creates the account row without minting an API token (web invite path). */
+	async ensureUser(email: string): Promise<{ user: UserRecord; created: boolean }> {
+		const normalized = email.trim().toLowerCase()
+		if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(normalized)) {
+			throw new KodyError('invalid_email', 'A valid email address is required.')
+		}
+		const existing = await this.getUserByEmail(normalized)
+		if (existing) return { user: existing, created: false }
+		const user: UserRecord = { id: randomId('user'), email: normalized, createdAt: new Date().toISOString() }
+		this.ctx.storage.sql.exec(
+			'INSERT INTO users (id, email, created_at) VALUES (?, ?, ?)',
+			user.id,
+			user.email,
+			user.createdAt,
+		)
+		return { user, created: true }
+	}
+
+	async userCount(): Promise<number> {
+		return Number(this.ctx.storage.sql.exec<{ c: number }>('SELECT count(*) AS c FROM users').toArray()[0]?.c ?? 0)
+	}
+
+	// -------------------------------------------------------- sign-in / sessions
+
+	async passwordSet(userId: string, password: string) {
+		await this.accounts.passwordSet(userId, password)
+	}
+
+	async passwordIsSet(userId: string) {
+		return this.accounts.passwordIsSet(userId)
+	}
+
+	/** Email + password → user, or null. Lockout and dummy-hash timing live in the store. */
+	async passwordSignin(input: { email: string; password: string }): Promise<UserRecord | null> {
+		const user = await this.getUserByEmail(input.email)
+		const ok = await this.accounts.passwordVerify({
+			email: input.email,
+			userId: user?.id ?? null,
+			password: input.password,
+		})
+		return ok ? user : null
+	}
+
+	async signinTokenIssue(input: { userId: string; kind: SigninTokenKind; ttlMs?: number }) {
+		return this.accounts.signinTokenIssue(input)
+	}
+
+	async signinTokenPeek(token: string) {
+		const record = await this.accounts.signinTokenPeek(token)
+		if (!record) return null
+		const user = await this.getUser(record.userId)
+		return user ? { ...record, user } : null
+	}
+
+	async signinTokenConsume(token: string) {
+		const record = await this.accounts.signinTokenConsume(token)
+		if (!record) return null
+		const user = await this.getUser(record.userId)
+		return user ? { ...record, user } : null
+	}
+
+	async sessionCreate(input: { userId: string; ttlMs: number; userAgent: string | null }) {
+		return this.accounts.sessionCreate(input)
+	}
+
+	async sessionResolve(id: string, ttlMs: number) {
+		const session = await this.accounts.sessionResolve(id, ttlMs)
+		if (!session) return null
+		const user = await this.getUser(session.userId)
+		return user ? { session, user } : null
+	}
+
+	async sessionDelete(id: string) {
+		return this.accounts.sessionDelete(id)
+	}
+
+	async sessionList(userId: string) {
+		return this.accounts.sessionList(userId)
+	}
+
+	async sessionRevoke(userId: string, sessionId: string | null) {
+		return this.accounts.sessionRevoke(userId, sessionId)
+	}
+
+	async tokenList(userId: string) {
+		return this.accounts.tokenList(userId)
+	}
+
+	async tokenRevoke(userId: string, tokenId: string) {
+		return this.accounts.tokenRevoke(userId, tokenId)
+	}
+
+	// -------------------------------------------------- MCP OAuth (authorization server)
+
+	async oauthClientRegister(registration: ClientRegistration) {
+		return this.oauth.clientRegister(registration)
+	}
+
+	async oauthClientGet(clientId: string) {
+		return this.oauth.clientGet(clientId)
+	}
+
+	async oauthClientAuthenticate(input: {
+		clientId: string | null
+		clientSecret: string | null
+		method: TokenEndpointAuthMethod
+	}) {
+		return this.oauth.clientAuthenticate(input)
+	}
+
+	async oauthCodeIssue(input: {
+		clientId: string
+		userId: string
+		redirectUri: string
+		codeChallenge: string
+		scope: string
+		resource: string
+	}) {
+		return this.oauth.codeIssue(input)
+	}
+
+	async oauthCodeConsume(code: string) {
+		return this.oauth.codeConsume(code)
+	}
+
+	async oauthGrantEnsure(input: { userId: string; clientId: string; scope: string }) {
+		return this.oauth.grantEnsure(input)
+	}
+
+	async oauthGrantList(userId: string) {
+		return this.oauth.grantList(userId)
+	}
+
+	async oauthGrantRevoke(userId: string, grantId: string) {
+		this.oauth.grantRevoke(userId, grantId)
+	}
+
+	async oauthGrantRevokeAll(userId: string) {
+		this.oauth.grantRevokeAll(userId)
+	}
+
+	async oauthTokensIssue(input: { grantId: string; clientId: string; scope: string }) {
+		return this.oauth.tokensIssue(input)
+	}
+
+	async oauthTokensRefresh(input: { refreshToken: string; clientId: string }) {
+		return this.oauth.tokensRefresh(input)
+	}
+
+	async oauthAccessTokenResolve(token: string) {
+		const resolved = await this.oauth.accessTokenResolve(token)
+		if (!resolved) return null
+		const user = await this.getUser(resolved.userId)
+		return user ? { ...resolved, user } : null
+	}
+
+	async oauthTokenRevoke(input: { token: string; clientId: string }) {
+		return this.oauth.tokenRevoke(input)
 	}
 }

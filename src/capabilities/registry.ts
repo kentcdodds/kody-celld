@@ -14,6 +14,7 @@ import { emailCapabilities, emailDomain } from './email.ts'
 import { webhookCapabilities, webhooksDomain } from './webhooks.ts'
 import { integrationCapabilities, integrationsDomain } from './integrations.ts'
 import { secretProviderCapabilities, secretProvidersDomain } from './secret-providers.ts'
+import { accountCapabilities, accountDomain } from './account.ts'
 
 export const domains: Array<DomainDefinition> = [
 	systemDomain,
@@ -30,6 +31,7 @@ export const domains: Array<DomainDefinition> = [
 	emailDomain,
 	integrationsDomain,
 	secretProvidersDomain,
+	accountDomain,
 ]
 
 export const capabilities: Array<CapabilityDefinition> = [
@@ -47,6 +49,7 @@ export const capabilities: Array<CapabilityDefinition> = [
 	...emailCapabilities,
 	...integrationCapabilities,
 	...secretProviderCapabilities,
+	...accountCapabilities,
 ]
 
 const byName = new Map(capabilities.map((c) => [c.name, c]))

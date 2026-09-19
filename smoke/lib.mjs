@@ -1,6 +1,6 @@
 // Shared helpers for the smoke workloads. Plain Node (>= 20), no dependencies.
 import { readdir, readFile } from 'node:fs/promises'
-import { createServer } from 'node:http'
+import { createServer, request as httpRequest } from 'node:http'
 import { createHash, randomBytes } from 'node:crypto'
 import path from 'node:path'
 
@@ -70,6 +70,12 @@ export const admin = {
 		request(`/admin/users/${encodeURIComponent(userId)}/quota`, { method: 'PUT', token: adminToken, body: override }),
 	clearQuota: (userId) =>
 		request(`/admin/users/${encodeURIComponent(userId)}/quota`, { method: 'DELETE', token: adminToken }),
+	invite: (userId, reset = false) =>
+		request(`/admin/users/${encodeURIComponent(userId)}/invite`, {
+			method: 'POST',
+			token: adminToken,
+			body: { reset },
+		}),
 	audit: (filter = {}) => {
 		const params = new URLSearchParams(Object.entries(filter).map(([k, v]) => [k, String(v)]))
 		return request(`/admin/audit?${params}`, { token: adminToken })
@@ -156,6 +162,103 @@ export class McpClient {
 			args,
 		)
 	}
+}
+
+/**
+ * A cookie-jar HTTP client that behaves like a browser for the web UI smoke:
+ * stores Set-Cookie, sends Origin on POSTs, never follows redirects (callers
+ * assert on Location), and parses HTML forms just enough to pull hidden inputs.
+ */
+export class Browser {
+	#jar = new Map()
+
+	cookie(name) {
+		return this.#jar.get(name) ?? null
+	}
+
+	#store(setCookies) {
+		for (const header of setCookies) {
+			const [pair, ...attrs] = header.split(';')
+			const eq = pair.indexOf('=')
+			const name = pair.slice(0, eq).trim()
+			const value = pair.slice(eq + 1).trim()
+			const expired = attrs.some((a) => /^\s*max-age=0$/i.test(a))
+			if (expired || value === '') this.#jar.delete(name)
+			else this.#jar.set(name, value)
+		}
+	}
+
+	async fetch(pathnameOrUrl, { method = 'GET', form, headers = {}, accept = 'text/html' } = {}) {
+		const url = new URL(pathnameOrUrl.startsWith('http') ? pathnameOrUrl : `${baseUrl}${pathnameOrUrl}`)
+		const cookie = [...this.#jar].map(([k, v]) => `${k}=${v}`).join('; ')
+		const body = form ? new URLSearchParams(form).toString() : null
+		// node:http rather than fetch(): undici pins `sec-fetch-mode: cors`, and the
+		// server treats that as an API call, not a browser navigation.
+		const response = await new Promise((resolve, reject) => {
+			const req = httpRequest(
+				url,
+				{
+					method,
+					headers: {
+						accept,
+						'sec-fetch-mode': 'navigate',
+						...(cookie ? { cookie } : {}),
+						...(body !== null
+							? {
+									'content-type': 'application/x-www-form-urlencoded',
+									'content-length': String(Buffer.byteLength(body)),
+									origin: baseUrl,
+								}
+							: {}),
+						...headers,
+					},
+				},
+				(res) => {
+					const chunks = []
+					res.on('data', (chunk) => chunks.push(chunk))
+					res.on('end', () =>
+						resolve({
+							status: res.statusCode,
+							location: res.headers.location ?? null,
+							headers: new Headers(
+								Object.entries(res.headers).flatMap(([k, v]) =>
+									k === 'set-cookie' ? [] : [[k, Array.isArray(v) ? v.join(', ') : String(v)]],
+								),
+							),
+							setCookies: res.headers['set-cookie'] ?? [],
+							text: Buffer.concat(chunks).toString('utf8'),
+						}),
+					)
+					res.on('error', reject)
+				},
+			)
+			req.on('error', reject)
+			if (body !== null) req.write(body)
+			req.end()
+		})
+		this.#store(response.setCookies)
+		return response
+	}
+
+	get(pathname, options) {
+		return this.fetch(pathname, options)
+	}
+
+	post(pathname, form, options = {}) {
+		return this.fetch(pathname, { ...options, method: 'POST', form })
+	}
+}
+
+/** Pulls `<input type="hidden" name="…" value="…">` pairs out of a page (attribute order as rendered by src/web). */
+export function hiddenInputs(htmlText) {
+	const values = {}
+	for (const [tag] of htmlText.matchAll(/<input\b[^>]*>/g)) {
+		if (!/type="hidden"/.test(tag)) continue
+		const name = /\bname="([^"]+)"/.exec(tag)?.[1]
+		const value = /\bvalue="([^"]*)"/.exec(tag)?.[1] ?? ''
+		if (name) values[name] = value.replaceAll('&quot;', '"').replaceAll('&#39;', "'").replaceAll('&amp;', '&')
+	}
+	return values
 }
 
 export async function readPackageDir(dir) {
