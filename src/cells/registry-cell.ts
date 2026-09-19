@@ -6,6 +6,31 @@ import { limitsFromEnv } from '../lib/limits.ts'
 
 export type UserRecord = { id: string; email: string; createdAt: string }
 
+export type InboxLocal = { local: string; userId: string; createdAt: string }
+
+/** Local parts nobody may claim: role addresses and platform names. */
+export const reservedInboxLocals = new Set([
+	'abuse',
+	'admin',
+	'administrator',
+	'hostmaster',
+	'kody',
+	'mailer-daemon',
+	'no-reply',
+	'noreply',
+	'postmaster',
+	'root',
+	'security',
+	'support',
+	'webmaster',
+])
+
+export const inboxLocalPattern = /^[a-z0-9][a-z0-9._-]{1,62}$/
+
+export const maxInboxLocalsPerUser = 10
+/** Delivery events (bounces, complaints) arrive within days; the routing index does not need to outlive that. */
+export const outboundEmailIndexTtlMs = 30 * 24 * 60 * 60 * 1000
+
 export type AuditEntry = {
 	id: string
 	at: string
@@ -48,6 +73,21 @@ export class RegistryCell extends DurableObject<Env> {
 				details_json TEXT
 			);
 			CREATE INDEX IF NOT EXISTS audit_at ON audit(at DESC);
+			CREATE TABLE IF NOT EXISTS inbox_locals (
+				local TEXT PRIMARY KEY,
+				user_id TEXT NOT NULL,
+				created_at TEXT NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS inbox_locals_user ON inbox_locals(user_id);
+			CREATE TABLE IF NOT EXISTS outbound_email_index (
+				provider TEXT NOT NULL,
+				provider_message_id TEXT NOT NULL,
+				user_id TEXT NOT NULL,
+				message_id TEXT NOT NULL,
+				created_at TEXT NOT NULL,
+				PRIMARY KEY (provider, provider_message_id)
+			);
+			CREATE INDEX IF NOT EXISTS outbound_email_index_created ON outbound_email_index(created_at);
 		`)
 		this.auditRetentionCount = limitsFromEnv(env).auditRetentionCount
 	}
@@ -167,6 +207,114 @@ export class RegistryCell extends DurableObject<Env> {
 			)
 			.toArray()
 			.map((row) => ({ id: row.id, email: row.email, createdAt: row.created_at }))
+	}
+
+	// ----------------------------------------------------------- inbox locals
+
+	/** Claims `local@<inbox domain>` for a user. Plus-suffixes are never stored; ingress strips them. */
+	async inboxClaim(input: { userId: string; local: string }): Promise<InboxLocal> {
+		const local = input.local.trim().toLowerCase()
+		if (!inboxLocalPattern.test(local) || local.includes('+') || local.includes('..')) {
+			throw new KodyError(
+				'invalid_inbox_local',
+				'Inbox names are 2-63 chars of a-z, 0-9, ".", "_", "-" and start with a letter or digit.',
+			)
+		}
+		if (reservedInboxLocals.has(local)) {
+			throw new KodyError('inbox_local_reserved', `"${local}" is reserved.`, { status: 409 })
+		}
+		const existing = this.ctx.storage.sql
+			.exec<{ user_id: string; created_at: string }>(
+				'SELECT user_id, created_at FROM inbox_locals WHERE local = ?',
+				local,
+			)
+			.toArray()[0]
+		if (existing && existing.user_id !== input.userId) {
+			throw new KodyError('inbox_local_taken', `"${local}" is already claimed.`, { status: 409 })
+		}
+		if (existing) return { local, userId: input.userId, createdAt: existing.created_at }
+		const owned = (await this.inboxListForUser(input.userId)).length
+		if (owned >= maxInboxLocalsPerUser) {
+			throw new KodyError('inbox_local_limit', `At most ${maxInboxLocalsPerUser} inbox names per user.`, {
+				status: 429,
+			})
+		}
+		const now = new Date().toISOString()
+		this.ctx.storage.sql.exec(
+			'INSERT INTO inbox_locals (local, user_id, created_at) VALUES (?, ?, ?)',
+			local,
+			input.userId,
+			now,
+		)
+		return { local, userId: input.userId, createdAt: now }
+	}
+
+	async inboxRelease(input: { userId: string; local: string }) {
+		const cursor = this.ctx.storage.sql.exec(
+			'DELETE FROM inbox_locals WHERE local = ? AND user_id = ?',
+			input.local.trim().toLowerCase(),
+			input.userId,
+		)
+		return { deleted: cursor.rowsWritten > 0 }
+	}
+
+	async inboxListForUser(userId: string): Promise<Array<InboxLocal>> {
+		return this.ctx.storage.sql
+			.exec<{ local: string; user_id: string; created_at: string }>(
+				'SELECT local, user_id, created_at FROM inbox_locals WHERE user_id = ? ORDER BY created_at',
+				userId,
+			)
+			.toArray()
+			.map((row) => ({ local: row.local, userId: row.user_id, createdAt: row.created_at }))
+	}
+
+	/** Resolves the base local part (plus-suffix already stripped) to its owner. */
+	async inboxResolve(local: string): Promise<UserRecord | null> {
+		const row = this.ctx.storage.sql
+			.exec<{ id: string; email: string; created_at: string }>(
+				`SELECT u.id, u.email, u.created_at FROM inbox_locals l JOIN users u ON u.id = l.user_id WHERE l.local = ?`,
+				local.trim().toLowerCase(),
+			)
+			.toArray()[0]
+		return row ? { id: row.id, email: row.email, createdAt: row.created_at } : null
+	}
+
+	// ------------------------------------------------- outbound email routing
+
+	/** Remembers which user's cell owns an outbound message so provider delivery events can find it. */
+	async outboundEmailIndexSet(input: {
+		provider: string
+		providerMessageId: string
+		userId: string
+		messageId: string
+	}) {
+		this.ctx.storage.sql.exec(
+			`INSERT INTO outbound_email_index (provider, provider_message_id, user_id, message_id, created_at) VALUES (?, ?, ?, ?, ?)
+			 ON CONFLICT(provider, provider_message_id) DO UPDATE SET user_id = excluded.user_id, message_id = excluded.message_id`,
+			input.provider,
+			input.providerMessageId,
+			input.userId,
+			input.messageId,
+			new Date().toISOString(),
+		)
+		this.ctx.storage.sql.exec(
+			`DELETE FROM outbound_email_index WHERE created_at < ?`,
+			new Date(Date.now() - outboundEmailIndexTtlMs).toISOString(),
+		)
+	}
+
+	async outboundEmailIndexResolve(input: {
+		provider: string
+		providerMessageId: string
+	}): Promise<{ userId: string; messageId: string } | null> {
+		const row = this.ctx.storage.sql
+			.exec<{ user_id: string; message_id: string }>(
+				'SELECT user_id, message_id FROM outbound_email_index WHERE provider = ? AND provider_message_id = ?',
+				input.provider,
+				input.providerMessageId,
+			)
+			.toArray()[0]
+		return row ? { userId: row.user_id, messageId: row.message_id } : null
 	}
 
 	async getUser(userId: string): Promise<UserRecord | null> {

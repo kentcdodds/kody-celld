@@ -1,0 +1,20 @@
+{
+  "name": "kody-mail-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "license": "FSL-1.1-ALv2",
+  "description": "SMTP sidecar for kody-celld: receives mail for the Kody email domain and forwards it to POST /email/inbound/bridge; exposes POST /send so Kody can deliver through any SMTP relay.",
+  "type": "module",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "nodemailer": "10.0.8",
+    "smtp-server": "3.19.11"
+  }
+}

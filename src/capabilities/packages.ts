@@ -65,6 +65,8 @@ export const packageList = defineCapability<Record<string, never>>({
 				description: p.manifest.description,
 				exports: Object.keys(p.manifest.exports),
 				jobs: Object.keys(p.manifest.jobs),
+				webhooks: p.manifest.webhooks.map((w) => w.name),
+				subscriptions: p.manifest.subscriptions.map((s) => s.topic),
 				hidden: p.manifest.hidden,
 				source: p.source,
 				updatedAt: p.updatedAt,

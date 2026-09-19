@@ -11,10 +11,10 @@
   "scripts": {
     "dev": "celld dev . --port 8787",
     "typecheck": "tsc -p tsconfig.json",
-    "lint": "oxlint src smoke examples scripts",
+    "lint": "oxlint src smoke examples scripts mail-bridge",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "node --test 'src/**/*.test.ts'",
+    "test": "node --test 'src/**/*.test.ts' 'mail-bridge/*.test.mjs'",
     "smoke": "node smoke/run.mjs",
     "smoke:cron": "node smoke/run.mjs --wait-cron",
     "smoke:ai-mock": "node smoke/ai-mock-server.mjs",
@@ -32,5 +32,8 @@
   },
   "allowScripts": {
     "esbuild@0.25.12": true
+  },
+  "dependencies": {
+    "postal-mime": "3.0.0"
   }
 }

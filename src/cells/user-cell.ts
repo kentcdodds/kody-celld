@@ -1,4 +1,5 @@
 import { DurableObject } from 'cloudflare:workers'
+import { normalizeEmailAddress, snippetOf } from '../email/message.ts'
 import type { Env } from '../env.ts'
 import { computeNextRun, validateSchedule } from '../jobs/schedule.ts'
 import {
@@ -6,6 +7,8 @@ import {
 	decryptWithKeyring,
 	encryptSecretValue,
 	randomId,
+	randomToken,
+	sha256Hex,
 	type MasterKeyring,
 } from '../lib/crypto.ts'
 import { KodyError } from '../lib/errors.ts'
@@ -18,9 +21,17 @@ import {
 	type Limits,
 	type Quotas,
 } from '../lib/limits.ts'
-import { parsePackageManifest, type PackageFiles, type PackageManifest } from '../packages/manifest.ts'
+import {
+	parsePackageManifest,
+	type PackageFiles,
+	type PackageManifest,
+	type SubscriptionDefinition,
+	type WebhookDefinition,
+	type WebhookVerification,
+} from '../packages/manifest.ts'
 import { normalizeSecretHost } from '../secrets/host-policy.ts'
 import type { SecretScope } from '../secrets/placeholders.ts'
+import { signatureMatches } from '../webhooks/verify.ts'
 
 export type SecretMetadata = {
 	name: string
@@ -76,7 +87,7 @@ export type JobRunRecord = {
 
 export type RunRecord = {
 	id: string
-	kind: 'execute' | 'package' | 'job'
+	kind: 'execute' | 'package' | 'job' | 'webhook' | 'subscription'
 	packageName: string | null
 	idempotencyKey: string | null
 	status: 'running' | 'success' | 'error'
@@ -101,7 +112,14 @@ export type GatewayEvent = {
 	reason?: string
 }
 
-export type DailyUsage = { day: string; runs: number; errors: number; executeMs: number }
+export type DailyUsage = {
+	day: string
+	runs: number
+	errors: number
+	executeMs: number
+	emailSends: number
+	emailReceives: number
+}
 
 type BlobRow = {
 	key: string
@@ -127,20 +145,164 @@ export type BlobRecord = {
 	updatedAt: string
 }
 
+export type WebhookRecord = {
+	handle: string
+	packageName: string
+	webhookName: string
+	enabled: boolean
+	createdAt: string
+	updatedAt: string
+	rotatedAt: string | null
+	/** Previous URL secret still accepted until this time (after a rotate). */
+	previousExpiresAt: string | null
+	lastDeliveryAt: string | null
+	deliveries: number
+}
+
+export type WebhookListing = {
+	packageName: string
+	definition: WebhookDefinition
+	mint: WebhookRecord | null
+}
+
+export type WebhookDeliveryRecord = {
+	id: string
+	handle: string
+	receivedAt: string
+	finishedAt: string | null
+	status: 'accepted' | 'rejected' | 'rate_limited' | 'replayed' | 'success' | 'error' | 'conflict'
+	httpStatus: number
+	reason: string | null
+	runId: string | null
+	idempotencyKey: string | null
+	bodyBytes: number
+	contentType: string | null
+}
+
+export type WebhookAdmission =
+	| { ok: true; webhook: WebhookRecord; definition: WebhookDefinition; usedPrevious: boolean }
+	| { ok: false; status: 404 | 429; reason: string }
+
+export type EmailAddress = { address: string; name: string | null }
+
+export type EmailAttachmentMeta = {
+	id: string
+	filename: string
+	contentType: string
+	size: number
+	contentId: string | null
+	disposition: 'attachment' | 'inline'
+}
+
+export type EmailMessageRecord = {
+	id: string
+	direction: 'inbound' | 'outbound'
+	inboxAddress: string | null
+	from: EmailAddress
+	to: Array<EmailAddress>
+	cc: Array<EmailAddress>
+	replyTo: Array<EmailAddress>
+	subject: string
+	messageId: string | null
+	inReplyTo: string | null
+	references: Array<string>
+	text: string | null
+	html: string | null
+	headers: Record<string, string>
+	attachments: Array<EmailAttachmentMeta>
+	classification: 'inbox' | 'quarantine' | null
+	classificationReason: string | null
+	provider: string
+	providerMessageId: string | null
+	deliveryStatus: string | null
+	sizeBytes: number
+	packageName: string | null
+	inReplyToMessageId: string | null
+	receivedAt: string
+	createdAt: string
+}
+
+export type EmailMessageSummary = Omit<EmailMessageRecord, 'text' | 'html' | 'headers'> & {
+	snippet: string
+}
+
+export type EmailDestinationRecord = {
+	address: string
+	verified: boolean
+	isDefault: boolean
+	createdAt: string
+	verifiedAt: string | null
+	codeExpiresAt: string | null
+}
+
+export type EmailSenderRule = {
+	id: string
+	kind: 'address' | 'domain'
+	value: string
+	effect: 'allow' | 'block' | 'quarantine'
+	note: string | null
+	createdAt: string
+}
+
+export type EmailDeliveryEvent = {
+	id: string
+	messageId: string
+	provider: string
+	event: string
+	status: string
+	detail: string | null
+	at: string
+}
+
 export type UsageReport = {
 	day: string
 	today: DailyUsage
 	history: Array<DailyUsage>
-	counts: { packages: number; secrets: number; jobs: number; runsRetained: number; blobs: number; blobBytes: number }
+	counts: {
+		packages: number
+		secrets: number
+		jobs: number
+		runsRetained: number
+		blobs: number
+		blobBytes: number
+		emailMessages: number
+		webhooks: number
+	}
 	quotas: Quotas
 	quotaOverride: Partial<Quotas> | null
 	limits: Limits
 }
 
 const secretNamePattern = /^[a-zA-Z0-9._-]+$/
+const webhookPreviousSecretGraceMs = 24 * 60 * 60 * 1000
+const emailDestinationCodeTtlMs = 30 * 60 * 1000
 
 function nowIso() {
 	return new Date().toISOString()
+}
+
+/** Manifests saved before a field existed come back without it. */
+function storedManifest(json: string): PackageManifest {
+	const manifest = JSON.parse(json) as Partial<PackageManifest> & Pick<PackageManifest, 'name' | 'version'>
+	return {
+		name: manifest.name,
+		version: manifest.version,
+		description: manifest.description ?? '',
+		exports: manifest.exports ?? {},
+		jobs: manifest.jobs ?? {},
+		webhooks: manifest.webhooks ?? [],
+		subscriptions: manifest.subscriptions ?? [],
+		dependencies: manifest.dependencies ?? {},
+		hidden: manifest.hidden === true,
+		keywords: manifest.keywords ?? [],
+	}
+}
+
+function constantTimeEqual(a: string, b: string) {
+	if (a.length !== b.length) return false
+	let diff = 0
+	for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
+	return diff === 0
 }
 
 /**
@@ -240,6 +402,117 @@ export class UserCell extends DurableObject<Env> {
 				created_at TEXT NOT NULL,
 				updated_at TEXT NOT NULL
 			);
+			CREATE TABLE IF NOT EXISTS webhooks (
+				handle TEXT PRIMARY KEY,
+				package_name TEXT NOT NULL,
+				webhook_name TEXT NOT NULL,
+				secret_hash TEXT NOT NULL,
+				secret_iv TEXT NOT NULL,
+				secret_ciphertext TEXT NOT NULL,
+				secret_key_id TEXT NOT NULL,
+				previous_secret_hash TEXT,
+				previous_expires_at TEXT,
+				enabled INTEGER NOT NULL DEFAULT 1,
+				created_at TEXT NOT NULL,
+				updated_at TEXT NOT NULL,
+				rotated_at TEXT,
+				last_delivery_at TEXT,
+				deliveries INTEGER NOT NULL DEFAULT 0,
+				UNIQUE (package_name, webhook_name)
+			);
+			CREATE TABLE IF NOT EXISTS webhook_deliveries (
+				id TEXT PRIMARY KEY,
+				handle TEXT NOT NULL,
+				received_at TEXT NOT NULL,
+				finished_at TEXT,
+				status TEXT NOT NULL,
+				http_status INTEGER NOT NULL,
+				reason TEXT,
+				run_id TEXT,
+				idempotency_key TEXT,
+				body_bytes INTEGER NOT NULL DEFAULT 0,
+				content_type TEXT
+			);
+			CREATE INDEX IF NOT EXISTS webhook_deliveries_handle ON webhook_deliveries(handle, received_at DESC);
+			CREATE TABLE IF NOT EXISTS webhook_rate (
+				handle TEXT NOT NULL,
+				minute TEXT NOT NULL,
+				n INTEGER NOT NULL DEFAULT 0,
+				PRIMARY KEY (handle, minute)
+			);
+			CREATE TABLE IF NOT EXISTS webhook_idempotency (
+				handle TEXT NOT NULL,
+				key TEXT NOT NULL,
+				payload_hash TEXT,
+				run_id TEXT,
+				status TEXT NOT NULL,
+				result_json TEXT,
+				created_at TEXT NOT NULL,
+				PRIMARY KEY (handle, key)
+			);
+			CREATE TABLE IF NOT EXISTS email_messages (
+				id TEXT PRIMARY KEY,
+				direction TEXT NOT NULL,
+				inbox_address TEXT,
+				from_json TEXT NOT NULL,
+				to_json TEXT NOT NULL,
+				cc_json TEXT NOT NULL DEFAULT '[]',
+				reply_to_json TEXT NOT NULL DEFAULT '[]',
+				subject TEXT NOT NULL DEFAULT '',
+				message_id TEXT,
+				in_reply_to TEXT,
+				references_json TEXT NOT NULL DEFAULT '[]',
+				text TEXT,
+				html TEXT,
+				headers_json TEXT NOT NULL DEFAULT '{}',
+				attachments_json TEXT NOT NULL DEFAULT '[]',
+				classification TEXT,
+				classification_reason TEXT,
+				provider TEXT NOT NULL,
+				provider_message_id TEXT,
+				delivery_status TEXT,
+				size_bytes INTEGER NOT NULL DEFAULT 0,
+				package_name TEXT,
+				in_reply_to_message_id TEXT,
+				received_at TEXT NOT NULL,
+				created_at TEXT NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS email_messages_received ON email_messages(direction, received_at DESC);
+			CREATE INDEX IF NOT EXISTS email_messages_provider ON email_messages(provider_message_id);
+			CREATE TABLE IF NOT EXISTS email_attachments (
+				id TEXT PRIMARY KEY,
+				message_id TEXT NOT NULL,
+				content_base64 TEXT NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS email_attachments_message ON email_attachments(message_id);
+			CREATE TABLE IF NOT EXISTS email_destinations (
+				address TEXT PRIMARY KEY,
+				verified INTEGER NOT NULL DEFAULT 0,
+				code_hash TEXT,
+				code_expires_at TEXT,
+				is_default INTEGER NOT NULL DEFAULT 0,
+				created_at TEXT NOT NULL,
+				verified_at TEXT
+			);
+			CREATE TABLE IF NOT EXISTS email_sender_rules (
+				id TEXT PRIMARY KEY,
+				kind TEXT NOT NULL,
+				value TEXT NOT NULL,
+				effect TEXT NOT NULL,
+				note TEXT,
+				created_at TEXT NOT NULL,
+				UNIQUE (kind, value)
+			);
+			CREATE TABLE IF NOT EXISTS email_delivery_events (
+				id TEXT PRIMARY KEY,
+				message_id TEXT NOT NULL,
+				provider TEXT NOT NULL,
+				event TEXT NOT NULL,
+				status TEXT NOT NULL,
+				detail TEXT,
+				at TEXT NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS email_delivery_events_message ON email_delivery_events(message_id, at DESC);
 		`)
 		this.limits = limitsFromEnv(env)
 		this.defaultQuotas = quotasFromEnv(env)
@@ -249,6 +522,16 @@ export class UserCell extends DurableObject<Env> {
 			.map((row) => row.name)
 		if (!secretColumns.includes('key_id')) {
 			this.ctx.storage.sql.exec(`ALTER TABLE secrets ADD COLUMN key_id TEXT NOT NULL DEFAULT ''`)
+		}
+		const usageColumns = this.ctx.storage.sql
+			.exec<{ name: string }>(`SELECT name FROM pragma_table_info('usage_daily')`)
+			.toArray()
+			.map((row) => row.name)
+		if (!usageColumns.includes('email_sends')) {
+			this.ctx.storage.sql.exec(`ALTER TABLE usage_daily ADD COLUMN email_sends INTEGER NOT NULL DEFAULT 0`)
+		}
+		if (!usageColumns.includes('email_receives')) {
+			this.ctx.storage.sql.exec(`ALTER TABLE usage_daily ADD COLUMN email_receives INTEGER NOT NULL DEFAULT 0`)
 		}
 	}
 
@@ -286,7 +569,7 @@ export class UserCell extends DurableObject<Env> {
 		return effectiveQuotas(this.defaultQuotas, this.quotaOverride())
 	}
 
-	private count(table: 'packages' | 'secrets' | 'jobs' | 'runs' | 'blobs') {
+	private count(table: 'packages' | 'secrets' | 'jobs' | 'runs' | 'blobs' | 'email_messages' | 'webhooks') {
 		return Number(this.ctx.storage.sql.exec<{ n: number }>(`SELECT COUNT(*) AS n FROM ${table}`).toArray()[0]?.n ?? 0)
 	}
 
@@ -298,12 +581,19 @@ export class UserCell extends DurableObject<Env> {
 
 	private usageFor(day: string): DailyUsage {
 		const row = this.ctx.storage.sql
-			.exec<{ runs: number; errors: number; execute_ms: number }>(
-				'SELECT runs, errors, execute_ms FROM usage_daily WHERE day = ?',
+			.exec<{ runs: number; errors: number; execute_ms: number; email_sends: number; email_receives: number }>(
+				'SELECT runs, errors, execute_ms, email_sends, email_receives FROM usage_daily WHERE day = ?',
 				day,
 			)
 			.toArray()[0]
-		return { day, runs: row?.runs ?? 0, errors: row?.errors ?? 0, executeMs: row?.execute_ms ?? 0 }
+		return {
+			day,
+			runs: row?.runs ?? 0,
+			errors: row?.errors ?? 0,
+			executeMs: row?.execute_ms ?? 0,
+			emailSends: row?.email_sends ?? 0,
+			emailReceives: row?.email_receives ?? 0,
+		}
 	}
 
 	private assertQuota(quota: keyof Quotas, used: number, what: string) {
@@ -336,12 +626,9 @@ export class UserCell extends DurableObject<Env> {
 		const days = Math.min(Math.max(input.days ?? 7, 1), 90)
 		const day = utcDay()
 		const history = this.ctx.storage.sql
-			.exec<{ day: string; runs: number; errors: number; execute_ms: number }>(
-				'SELECT day, runs, errors, execute_ms FROM usage_daily ORDER BY day DESC LIMIT ?',
-				days,
-			)
+			.exec<{ day: string }>('SELECT day FROM usage_daily ORDER BY day DESC LIMIT ?', days)
 			.toArray()
-			.map((row) => ({ day: row.day, runs: row.runs, errors: row.errors, executeMs: row.execute_ms }))
+			.map((row) => this.usageFor(row.day))
 		return {
 			day,
 			today: this.usageFor(day),
@@ -353,6 +640,8 @@ export class UserCell extends DurableObject<Env> {
 				runsRetained: this.count('runs'),
 				blobs: this.count('blobs'),
 				blobBytes: this.blobBytes(),
+				emailMessages: this.count('email_messages'),
+				webhooks: this.count('webhooks'),
 			},
 			quotas: this.quotas(),
 			quotaOverride: this.quotaOverride(),
@@ -616,6 +905,7 @@ export class UserCell extends DurableObject<Env> {
 			now,
 		)
 		this.reconcileJobs(manifest, now)
+		this.reconcileWebhooks(manifest, now)
 		return {
 			name: manifest.name,
 			version: manifest.version,
@@ -678,6 +968,23 @@ export class UserCell extends DurableObject<Env> {
 		}
 	}
 
+	private reconcileWebhooks(manifest: PackageManifest, now: string) {
+		const declared = new Set(manifest.webhooks.map((hook) => hook.name))
+		const rows = this.ctx.storage.sql
+			.exec<{ handle: string; webhook_name: string }>(
+				'SELECT handle, webhook_name FROM webhooks WHERE package_name = ?',
+				manifest.name,
+			)
+			.toArray()
+		// Mints outlive republishes so provider-side URLs stay valid; a removed
+		// declaration deactivates ingress (404) without deleting the mint.
+		for (const row of rows) {
+			if (!declared.has(row.webhook_name)) {
+				this.ctx.storage.sql.exec('UPDATE webhooks SET updated_at = ? WHERE handle = ?', now, row.handle)
+			}
+		}
+	}
+
 	async packageList(): Promise<Array<PackageSummary>> {
 		return this.ctx.storage.sql
 			.exec<{
@@ -693,7 +1000,7 @@ export class UserCell extends DurableObject<Env> {
 			.map((row) => ({
 				name: row.name,
 				version: row.version,
-				manifest: JSON.parse(row.manifest_json) as PackageManifest,
+				manifest: storedManifest(row.manifest_json),
 				source: row.source,
 				createdAt: row.created_at,
 				updatedAt: row.updated_at,
@@ -717,7 +1024,7 @@ export class UserCell extends DurableObject<Env> {
 		return {
 			name: row.name,
 			version: row.version,
-			manifest: JSON.parse(row.manifest_json) as PackageManifest,
+			manifest: storedManifest(row.manifest_json),
 			files: JSON.parse(row.files_json) as PackageFiles,
 			source: row.source,
 			createdAt: row.created_at,
@@ -729,6 +1036,14 @@ export class UserCell extends DurableObject<Env> {
 		const cursor = this.ctx.storage.sql.exec('DELETE FROM packages WHERE name = ?', name)
 		this.ctx.storage.sql.exec('DELETE FROM jobs WHERE package_name = ?', name)
 		this.ctx.storage.sql.exec('DELETE FROM secrets WHERE scope = ? AND package_name = ?', 'package', name)
+		for (const row of this.ctx.storage.sql
+			.exec<{ handle: string }>('SELECT handle FROM webhooks WHERE package_name = ?', name)
+			.toArray()) {
+			this.ctx.storage.sql.exec('DELETE FROM webhook_deliveries WHERE handle = ?', row.handle)
+			this.ctx.storage.sql.exec('DELETE FROM webhook_rate WHERE handle = ?', row.handle)
+			this.ctx.storage.sql.exec('DELETE FROM webhook_idempotency WHERE handle = ?', row.handle)
+		}
+		this.ctx.storage.sql.exec('DELETE FROM webhooks WHERE package_name = ?', name)
 		return { deleted: cursor.rowsWritten > 0 }
 	}
 
@@ -1202,5 +1517,947 @@ export class UserCell extends DurableObject<Env> {
 			error: row.error_json ? (JSON.parse(row.error_json) as RunRecord['error']) : null,
 			warnings: JSON.parse(row.warnings_json) as Array<string>,
 		}))
+	}
+
+	// --------------------------------------------------------------- webhooks
+
+	private rowToWebhook(row: {
+		handle: string
+		package_name: string
+		webhook_name: string
+		enabled: number
+		created_at: string
+		updated_at: string
+		rotated_at: string | null
+		previous_secret_hash: string | null
+		previous_expires_at: string | null
+		last_delivery_at: string | null
+		deliveries: number
+	}): WebhookRecord {
+		const previousLive =
+			row.previous_secret_hash !== null &&
+			row.previous_expires_at !== null &&
+			new Date(row.previous_expires_at).getTime() > Date.now()
+		return {
+			handle: row.handle,
+			packageName: row.package_name,
+			webhookName: row.webhook_name,
+			enabled: row.enabled === 1,
+			createdAt: row.created_at,
+			updatedAt: row.updated_at,
+			rotatedAt: row.rotated_at,
+			previousExpiresAt: previousLive ? row.previous_expires_at : null,
+			lastDeliveryAt: row.last_delivery_at,
+			deliveries: row.deliveries,
+		}
+	}
+
+	private webhookRow(handle: string) {
+		return this.ctx.storage.sql.exec('SELECT * FROM webhooks WHERE handle = ?', handle).toArray()[0] as
+			| (Parameters<UserCell['rowToWebhook']>[0] & {
+					secret_hash: string
+					secret_iv: string
+					secret_ciphertext: string
+					secret_key_id: string
+			  })
+			| undefined
+	}
+
+	private webhookDefinition(packageName: string, webhookName: string): WebhookDefinition | null {
+		const row = this.ctx.storage.sql
+			.exec<{ manifest_json: string }>('SELECT manifest_json FROM packages WHERE name = ?', packageName)
+			.toArray()[0]
+		if (!row) return null
+		return storedManifest(row.manifest_json).webhooks.find((hook) => hook.name === webhookName) ?? null
+	}
+
+	/** Declared webhooks (from saved manifests) joined with their mint state. */
+	async webhookList(filter: { packageName?: string | undefined } = {}): Promise<Array<WebhookListing>> {
+		const packages = (await this.packageList()).filter(
+			(pkg) => filter.packageName === undefined || pkg.name === filter.packageName,
+		)
+		const mints = this.ctx.storage.sql
+			.exec('SELECT * FROM webhooks ORDER BY package_name, webhook_name')
+			.toArray() as Array<Parameters<UserCell['rowToWebhook']>[0]>
+		const listing: Array<WebhookListing> = []
+		for (const pkg of packages) {
+			for (const definition of pkg.manifest.webhooks) {
+				const mint = mints.find((row) => row.package_name === pkg.name && row.webhook_name === definition.name)
+				listing.push({ packageName: pkg.name, definition, mint: mint ? this.rowToWebhook(mint) : null })
+			}
+		}
+		return listing
+	}
+
+	async webhookGet(handle: string): Promise<(WebhookRecord & { definition: WebhookDefinition | null }) | null> {
+		const row = this.webhookRow(handle)
+		if (!row) return null
+		return { ...this.rowToWebhook(row), definition: this.webhookDefinition(row.package_name, row.webhook_name) }
+	}
+
+	/**
+	 * Mints (or returns the existing mint for) a declared webhook. The URL
+	 * secret is generated here, stored hashed for lookup and sealed with the
+	 * master keyring so `webhookReveal` can show the URL to the owner. The
+	 * secret is never returned from this method.
+	 */
+	async webhookMint(input: { packageName: string; webhookName: string }): Promise<WebhookRecord> {
+		const definition = this.webhookDefinition(input.packageName, input.webhookName)
+		if (!definition) {
+			throw new KodyError(
+				'webhook_not_declared',
+				`Package "${input.packageName}" does not declare webhook "${input.webhookName}".`,
+				{ status: 404 },
+			)
+		}
+		const existing = this.ctx.storage.sql
+			.exec<{ handle: string }>(
+				'SELECT handle FROM webhooks WHERE package_name = ? AND webhook_name = ?',
+				input.packageName,
+				input.webhookName,
+			)
+			.toArray()[0]
+		if (existing) return (await this.webhookGet(existing.handle))!
+		this.assertQuota('webhooks', this.count('webhooks'), 'Webhook')
+		const handle = randomId('whk')
+		const sealed = await this.sealWebhookSecret()
+		const now = nowIso()
+		this.ctx.storage.sql.exec(
+			`INSERT INTO webhooks (handle, package_name, webhook_name, secret_hash, secret_iv, secret_ciphertext, secret_key_id, enabled, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+			handle,
+			input.packageName,
+			input.webhookName,
+			sealed.hash,
+			sealed.iv,
+			sealed.ciphertext,
+			sealed.keyId,
+			now,
+			now,
+		)
+		return (await this.webhookGet(handle))!
+	}
+
+	private async sealWebhookSecret() {
+		const secret = randomToken('whs', 32).slice('whs_'.length)
+		const { current } = await this.keyring()
+		const encrypted = await encryptSecretValue(current.key, this.userId, secret)
+		return { hash: await sha256Hex(secret), iv: encrypted.iv, ciphertext: encrypted.ciphertext, keyId: current.id }
+	}
+
+	/** Issues a new URL secret; the previous one stays valid for 24h or until the first accepted delivery on the new one. */
+	async webhookRotate(handle: string): Promise<WebhookRecord> {
+		const row = this.webhookRow(handle)
+		if (!row) throw new KodyError('webhook_not_found', `Webhook "${handle}" was not found.`, { status: 404 })
+		const sealed = await this.sealWebhookSecret()
+		const now = new Date()
+		this.ctx.storage.sql.exec(
+			`UPDATE webhooks SET previous_secret_hash = secret_hash, previous_expires_at = ?, secret_hash = ?, secret_iv = ?,
+			   secret_ciphertext = ?, secret_key_id = ?, rotated_at = ?, updated_at = ? WHERE handle = ?`,
+			new Date(now.getTime() + webhookPreviousSecretGraceMs).toISOString(),
+			sealed.hash,
+			sealed.iv,
+			sealed.ciphertext,
+			sealed.keyId,
+			now.toISOString(),
+			now.toISOString(),
+			handle,
+		)
+		return (await this.webhookGet(handle))!
+	}
+
+	async webhookSetEnabled(input: { handle: string; enabled: boolean }): Promise<WebhookRecord> {
+		const row = this.webhookRow(input.handle)
+		if (!row) throw new KodyError('webhook_not_found', `Webhook "${input.handle}" was not found.`, { status: 404 })
+		this.ctx.storage.sql.exec(
+			'UPDATE webhooks SET enabled = ?, updated_at = ? WHERE handle = ?',
+			input.enabled ? 1 : 0,
+			nowIso(),
+			input.handle,
+		)
+		return (await this.webhookGet(input.handle))!
+	}
+
+	async webhookDelete(handle: string) {
+		const cursor = this.ctx.storage.sql.exec('DELETE FROM webhooks WHERE handle = ?', handle)
+		this.ctx.storage.sql.exec('DELETE FROM webhook_deliveries WHERE handle = ?', handle)
+		this.ctx.storage.sql.exec('DELETE FROM webhook_rate WHERE handle = ?', handle)
+		this.ctx.storage.sql.exec('DELETE FROM webhook_idempotency WHERE handle = ?', handle)
+		return { deleted: cursor.rowsWritten > 0 }
+	}
+
+	/**
+	 * Decrypts the current URL secret. Only the authenticated HTTP reveal route
+	 * and the admin API call this — never a capability, so the URL cannot end
+	 * up in an MCP result or run history.
+	 */
+	async webhookReveal(handle: string): Promise<{ handle: string; secret: string; previousExpiresAt: string | null }> {
+		const row = this.webhookRow(handle)
+		if (!row) throw new KodyError('webhook_not_found', `Webhook "${handle}" was not found.`, { status: 404 })
+		const secret = await decryptWithKeyring(await this.keyring(), this.userId, {
+			iv: row.secret_iv,
+			ciphertext: row.secret_ciphertext,
+			keyId: row.secret_key_id || undefined,
+		})
+		return { handle, secret, previousExpiresAt: this.rowToWebhook(row).previousExpiresAt }
+	}
+
+	/**
+	 * Ingress gate: matches the URL secret (current or unexpired previous),
+	 * checks enabled + declaration, and counts the delivery against the
+	 * per-minute rate limit. Every failure is reported so the route can log a
+	 * delivery row and answer with the same generic status.
+	 */
+	async webhookAdmit(input: { handle: string; secret: string; now: string }): Promise<WebhookAdmission> {
+		const row = this.webhookRow(input.handle)
+		if (!row) return { ok: false, status: 404, reason: 'unknown_handle' }
+		const provided = await sha256Hex(input.secret)
+		const matchesCurrent = constantTimeEqual(provided, row.secret_hash)
+		const previousLive =
+			row.previous_secret_hash !== null &&
+			row.previous_expires_at !== null &&
+			new Date(row.previous_expires_at).getTime() > new Date(input.now).getTime()
+		const matchesPrevious = previousLive && constantTimeEqual(provided, row.previous_secret_hash ?? '')
+		if (!matchesCurrent && !matchesPrevious) return { ok: false, status: 404, reason: 'secret_mismatch' }
+		if (row.enabled !== 1) return { ok: false, status: 404, reason: 'disabled' }
+		const definition = this.webhookDefinition(row.package_name, row.webhook_name)
+		if (!definition) return { ok: false, status: 404, reason: 'not_declared' }
+		const minute = input.now.slice(0, 16)
+		this.ctx.storage.sql.exec('DELETE FROM webhook_rate WHERE handle = ? AND minute != ?', input.handle, minute)
+		const count = Number(
+			this.ctx.storage.sql
+				.exec<{ n: number }>('SELECT n FROM webhook_rate WHERE handle = ? AND minute = ?', input.handle, minute)
+				.toArray()[0]?.n ?? 0,
+		)
+		if (count >= definition.rateLimitPerMinute) return { ok: false, status: 429, reason: 'rate_limited' }
+		this.ctx.storage.sql.exec(
+			'INSERT INTO webhook_rate (handle, minute, n) VALUES (?, ?, 1) ON CONFLICT(handle, minute) DO UPDATE SET n = n + 1',
+			input.handle,
+			minute,
+		)
+		if (matchesCurrent && row.previous_secret_hash !== null) {
+			this.ctx.storage.sql.exec(
+				'UPDATE webhooks SET previous_secret_hash = NULL, previous_expires_at = NULL WHERE handle = ?',
+				input.handle,
+			)
+		}
+		this.ctx.storage.sql.exec(
+			'UPDATE webhooks SET last_delivery_at = ?, deliveries = deliveries + 1 WHERE handle = ?',
+			input.now,
+			input.handle,
+		)
+		return { ok: true, webhook: this.rowToWebhook(row), definition, usedPrevious: !matchesCurrent }
+	}
+
+	/**
+	 * Verifies a provider signature against HMAC-SHA256 of `message` under a
+	 * stored secret. Both the plaintext key and the digest stay inside the cell;
+	 * only the verdict crosses RPC.
+	 */
+	async webhookSignatureCheck(input: {
+		packageName: string
+		secretName: string
+		message: string
+		candidates: Array<string>
+		encoding: WebhookVerification['encoding']
+	}): Promise<{ ok: true; matches: boolean } | { ok: false; reason: 'secret_missing' }> {
+		const resolved = await this.secretResolveValues({
+			names: [{ name: input.secretName, scope: null }],
+			packageName: input.packageName,
+		})
+		const value = resolved.values[input.secretName]
+		if (value === undefined) return { ok: false, reason: 'secret_missing' }
+		const key = await crypto.subtle.importKey(
+			'raw',
+			new TextEncoder().encode(value),
+			{ name: 'HMAC', hash: 'SHA-256' },
+			false,
+			['sign'],
+		)
+		const digest = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(input.message)))
+		let binary = ''
+		for (const byte of digest) binary += String.fromCharCode(byte)
+		const encoded = {
+			hex: Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join(''),
+			base64: btoa(binary),
+		}
+		return { ok: true, matches: signatureMatches(input.candidates, encoded, input.encoding) }
+	}
+
+	async webhookDeliveryRecord(input: {
+		handle: string
+		status: WebhookDeliveryRecord['status']
+		httpStatus: number
+		reason?: string | null | undefined
+		runId?: string | null | undefined
+		idempotencyKey?: string | null | undefined
+		bodyBytes: number
+		contentType?: string | null | undefined
+	}): Promise<string> {
+		const id = randomId('whd')
+		this.ctx.storage.sql.exec(
+			`INSERT INTO webhook_deliveries (id, handle, received_at, finished_at, status, http_status, reason, run_id, idempotency_key, body_bytes, content_type)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			id,
+			input.handle,
+			nowIso(),
+			input.status === 'accepted' ? null : nowIso(),
+			input.status,
+			input.httpStatus,
+			input.reason ?? null,
+			input.runId ?? null,
+			input.idempotencyKey ?? null,
+			input.bodyBytes,
+			input.contentType ?? null,
+		)
+		this.ctx.storage.sql.exec(
+			`DELETE FROM webhook_deliveries WHERE handle = ? AND id NOT IN
+			   (SELECT id FROM webhook_deliveries WHERE handle = ? ORDER BY received_at DESC LIMIT 200)`,
+			input.handle,
+			input.handle,
+		)
+		return id
+	}
+
+	async webhookDeliveryFinish(input: {
+		id: string
+		status: 'success' | 'error'
+		runId: string | null
+		reason?: string | null | undefined
+	}) {
+		this.ctx.storage.sql.exec(
+			'UPDATE webhook_deliveries SET status = ?, finished_at = ?, run_id = ?, reason = ? WHERE id = ?',
+			input.status,
+			nowIso(),
+			input.runId,
+			input.reason ?? null,
+			input.id,
+		)
+	}
+
+	async webhookDeliveryList(input: {
+		handle?: string | undefined
+		limit?: number | undefined
+	}): Promise<Array<WebhookDeliveryRecord>> {
+		const limit = Math.min(Math.max(input.limit ?? 20, 1), 200)
+		const rows = (
+			input.handle
+				? this.ctx.storage.sql.exec(
+						'SELECT * FROM webhook_deliveries WHERE handle = ? ORDER BY received_at DESC LIMIT ?',
+						input.handle,
+						limit,
+					)
+				: this.ctx.storage.sql.exec('SELECT * FROM webhook_deliveries ORDER BY received_at DESC LIMIT ?', limit)
+		).toArray() as Array<{
+			id: string
+			handle: string
+			received_at: string
+			finished_at: string | null
+			status: WebhookDeliveryRecord['status']
+			http_status: number
+			reason: string | null
+			run_id: string | null
+			idempotency_key: string | null
+			body_bytes: number
+			content_type: string | null
+		}>
+		return rows.map((row) => ({
+			id: row.id,
+			handle: row.handle,
+			receivedAt: row.received_at,
+			finishedAt: row.finished_at,
+			status: row.status,
+			httpStatus: row.http_status,
+			reason: row.reason,
+			runId: row.run_id,
+			idempotencyKey: row.idempotency_key,
+			bodyBytes: row.body_bytes,
+			contentType: row.content_type,
+		}))
+	}
+
+	/**
+	 * Idempotency ledger for deliveries. `payloadHash === null` means "match by
+	 * key alone" (vendor delivery ids); otherwise a different payload under the
+	 * same key is a conflict.
+	 */
+	async webhookIdempotencyClaim(input: {
+		handle: string
+		key: string
+		payloadHash: string | null
+	}): Promise<
+		| { state: 'new' }
+		| { state: 'in_progress' }
+		| { state: 'conflict' }
+		| { state: 'replay'; runId: string | null; resultJson: string | null; status: string }
+	> {
+		const existing = this.ctx.storage.sql
+			.exec<{ payload_hash: string | null; run_id: string | null; status: string; result_json: string | null }>(
+				'SELECT payload_hash, run_id, status, result_json FROM webhook_idempotency WHERE handle = ? AND key = ?',
+				input.handle,
+				input.key,
+			)
+			.toArray()[0]
+		if (existing) {
+			if (input.payloadHash !== null && existing.payload_hash !== null && existing.payload_hash !== input.payloadHash) {
+				return { state: 'conflict' }
+			}
+			if (existing.status === 'running') return { state: 'in_progress' }
+			return { state: 'replay', runId: existing.run_id, resultJson: existing.result_json, status: existing.status }
+		}
+		this.ctx.storage.sql.exec(
+			`INSERT INTO webhook_idempotency (handle, key, payload_hash, status, created_at) VALUES (?, ?, ?, 'running', ?)`,
+			input.handle,
+			input.key,
+			input.payloadHash,
+			nowIso(),
+		)
+		this.ctx.storage.sql.exec(
+			`DELETE FROM webhook_idempotency WHERE handle = ? AND key NOT IN
+			   (SELECT key FROM webhook_idempotency WHERE handle = ? ORDER BY created_at DESC LIMIT 1000)`,
+			input.handle,
+			input.handle,
+		)
+		return { state: 'new' }
+	}
+
+	async webhookIdempotencyFinish(input: {
+		handle: string
+		key: string
+		status: 'success' | 'error'
+		runId: string | null
+		resultJson: string | null
+	}) {
+		this.ctx.storage.sql.exec(
+			'UPDATE webhook_idempotency SET status = ?, run_id = ?, result_json = ? WHERE handle = ? AND key = ?',
+			input.status,
+			input.runId,
+			input.resultJson !== null && input.resultJson.length > 64 * 1024 ? null : input.resultJson,
+			input.handle,
+			input.key,
+		)
+	}
+
+	// ---------------------------------------------------------- subscriptions
+
+	/** Packages subscribed to a topic, with the handler module to run. */
+	async subscriptionList(
+		filter: { topic?: string | undefined } = {},
+	): Promise<Array<SubscriptionDefinition & { packageName: string }>> {
+		const out: Array<SubscriptionDefinition & { packageName: string }> = []
+		for (const pkg of await this.packageList()) {
+			for (const subscription of pkg.manifest.subscriptions) {
+				if (filter.topic !== undefined && subscription.topic !== filter.topic) continue
+				out.push({ ...subscription, packageName: pkg.name })
+			}
+		}
+		return out
+	}
+
+	// ------------------------------------------------------------------ email
+
+	private rowToEmail(row: {
+		id: string
+		direction: 'inbound' | 'outbound'
+		inbox_address: string | null
+		from_json: string
+		to_json: string
+		cc_json: string
+		reply_to_json: string
+		subject: string
+		message_id: string | null
+		in_reply_to: string | null
+		references_json: string
+		text: string | null
+		html: string | null
+		headers_json: string
+		attachments_json: string
+		classification: 'inbox' | 'quarantine' | null
+		classification_reason: string | null
+		provider: string
+		provider_message_id: string | null
+		delivery_status: string | null
+		size_bytes: number
+		package_name: string | null
+		in_reply_to_message_id: string | null
+		received_at: string
+		created_at: string
+	}): EmailMessageRecord {
+		return {
+			id: row.id,
+			direction: row.direction,
+			inboxAddress: row.inbox_address,
+			from: JSON.parse(row.from_json) as EmailAddress,
+			to: JSON.parse(row.to_json) as Array<EmailAddress>,
+			cc: JSON.parse(row.cc_json) as Array<EmailAddress>,
+			replyTo: JSON.parse(row.reply_to_json) as Array<EmailAddress>,
+			subject: row.subject,
+			messageId: row.message_id,
+			inReplyTo: row.in_reply_to,
+			references: JSON.parse(row.references_json) as Array<string>,
+			text: row.text,
+			html: row.html,
+			headers: JSON.parse(row.headers_json) as Record<string, string>,
+			attachments: JSON.parse(row.attachments_json) as Array<EmailAttachmentMeta>,
+			classification: row.classification,
+			classificationReason: row.classification_reason,
+			provider: row.provider,
+			providerMessageId: row.provider_message_id,
+			deliveryStatus: row.delivery_status,
+			sizeBytes: row.size_bytes,
+			packageName: row.package_name,
+			inReplyToMessageId: row.in_reply_to_message_id,
+			receivedAt: row.received_at,
+			createdAt: row.created_at,
+		}
+	}
+
+	private emailSummary(record: EmailMessageRecord): EmailMessageSummary {
+		const { text, html, headers: _headers, ...rest } = record
+		return { ...rest, snippet: snippetOf(text, html) }
+	}
+
+	/** Sender rules decide inbox vs quarantine; first match wins (address before domain). */
+	async emailClassify(from: string): Promise<{ classification: 'inbox' | 'quarantine'; reason: string }> {
+		const address = normalizeEmailAddress(from)
+		const domain = address.split('@')[1] ?? ''
+		const rules = await this.emailSenderRuleList()
+		const byAddress = rules.find((rule) => rule.kind === 'address' && rule.value === address)
+		const byDomain = rules.find(
+			(rule) => rule.kind === 'domain' && (rule.value === domain || domain.endsWith(`.${rule.value}`)),
+		)
+		const match = byAddress ?? byDomain
+		if (!match) return { classification: 'inbox', reason: 'no_rule' }
+		if (match.effect === 'allow') return { classification: 'inbox', reason: `rule:${match.id}` }
+		if (match.effect === 'block') return { classification: 'quarantine', reason: `blocked:${match.id}` }
+		return { classification: 'quarantine', reason: `rule:${match.id}` }
+	}
+
+	async emailMessageStore(input: {
+		direction: 'inbound' | 'outbound'
+		inboxAddress?: string | null | undefined
+		from: EmailAddress
+		to: Array<EmailAddress>
+		cc?: Array<EmailAddress> | undefined
+		replyTo?: Array<EmailAddress> | undefined
+		subject: string
+		messageId?: string | null | undefined
+		inReplyTo?: string | null | undefined
+		references?: Array<string> | undefined
+		text?: string | null | undefined
+		html?: string | null | undefined
+		headers?: Record<string, string> | undefined
+		attachments: Array<EmailAttachmentMeta & { contentBase64: string }>
+		classification?: 'inbox' | 'quarantine' | null | undefined
+		classificationReason?: string | null | undefined
+		provider: string
+		providerMessageId?: string | null | undefined
+		deliveryStatus?: string | null | undefined
+		packageName?: string | null | undefined
+		inReplyToMessageId?: string | null | undefined
+		receivedAt?: string | undefined
+		maxBytes: number
+	}): Promise<EmailMessageRecord> {
+		if (input.providerMessageId) {
+			const existing = this.ctx.storage.sql
+				.exec<{ id: string }>(
+					'SELECT id FROM email_messages WHERE provider = ? AND provider_message_id = ? AND direction = ?',
+					input.provider,
+					input.providerMessageId,
+					input.direction,
+				)
+				.toArray()[0]
+			if (existing) {
+				throw new KodyError('email_duplicate', `Message ${input.providerMessageId} was already stored.`, {
+					status: 409,
+					details: { id: existing.id },
+				})
+			}
+		}
+		const day = utcDay()
+		const usage = this.usageFor(day)
+		if (input.direction === 'inbound')
+			this.assertQuota('emailReceivesPerDay', usage.emailReceives, 'Daily inbound email')
+		else this.assertQuota('emailSendsPerDay', usage.emailSends, 'Daily outbound email')
+		this.assertQuota('emailMessages', this.count('email_messages'), 'Stored email')
+		const text = input.text ?? null
+		const html = input.html ?? null
+		const attachmentBytes = input.attachments.reduce((sum, item) => sum + item.size, 0)
+		const sizeBytes = (text?.length ?? 0) + (html?.length ?? 0) + attachmentBytes
+		if (sizeBytes > input.maxBytes) {
+			throw new KodyError(
+				'email_too_large',
+				`Message is ${sizeBytes} bytes; the stored-message limit is ${input.maxBytes} bytes.`,
+				{ status: 413 },
+			)
+		}
+		const id = randomId('eml')
+		const now = nowIso()
+		this.ctx.storage.sql.exec(
+			`INSERT INTO email_messages (id, direction, inbox_address, from_json, to_json, cc_json, reply_to_json, subject, message_id,
+			   in_reply_to, references_json, text, html, headers_json, attachments_json, classification, classification_reason,
+			   provider, provider_message_id, delivery_status, size_bytes, package_name, in_reply_to_message_id, received_at, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			id,
+			input.direction,
+			input.inboxAddress ?? null,
+			JSON.stringify(input.from),
+			JSON.stringify(input.to),
+			JSON.stringify(input.cc ?? []),
+			JSON.stringify(input.replyTo ?? []),
+			input.subject,
+			input.messageId ?? null,
+			input.inReplyTo ?? null,
+			JSON.stringify(input.references ?? []),
+			text,
+			html,
+			JSON.stringify(input.headers ?? {}),
+			JSON.stringify(input.attachments.map(({ contentBase64: _content, ...meta }) => meta)),
+			input.classification ?? null,
+			input.classificationReason ?? null,
+			input.provider,
+			input.providerMessageId ?? null,
+			input.deliveryStatus ?? null,
+			sizeBytes,
+			input.packageName ?? null,
+			input.inReplyToMessageId ?? null,
+			input.receivedAt ?? now,
+			now,
+		)
+		for (const attachment of input.attachments) {
+			this.ctx.storage.sql.exec(
+				'INSERT INTO email_attachments (id, message_id, content_base64) VALUES (?, ?, ?)',
+				attachment.id,
+				id,
+				attachment.contentBase64,
+			)
+		}
+		this.ctx.storage.sql.exec(
+			`INSERT INTO usage_daily (day, email_sends, email_receives) VALUES (?, ?, ?)
+			 ON CONFLICT(day) DO UPDATE SET email_sends = email_sends + excluded.email_sends, email_receives = email_receives + excluded.email_receives`,
+			day,
+			input.direction === 'outbound' ? 1 : 0,
+			input.direction === 'inbound' ? 1 : 0,
+		)
+		return (await this.emailMessageGet(id))!
+	}
+
+	async emailMessageGet(id: string): Promise<EmailMessageRecord | null> {
+		const row = this.ctx.storage.sql.exec('SELECT * FROM email_messages WHERE id = ?', id).toArray()[0]
+		return row ? this.rowToEmail(row as Parameters<UserCell['rowToEmail']>[0]) : null
+	}
+
+	async emailMessageList(input: {
+		direction?: 'inbound' | 'outbound' | undefined
+		classification?: 'inbox' | 'quarantine' | undefined
+		inboxAddress?: string | undefined
+		/** Case-insensitive substring match over subject, sender, and text body. */
+		query?: string | undefined
+		limit?: number | undefined
+	}): Promise<Array<EmailMessageSummary>> {
+		const limit = Math.min(Math.max(input.limit ?? 20, 1), 200)
+		const where: Array<string> = []
+		const params: Array<string> = []
+		if (input.direction) {
+			where.push('direction = ?')
+			params.push(input.direction)
+		}
+		if (input.classification) {
+			where.push('classification = ?')
+			params.push(input.classification)
+		}
+		if (input.inboxAddress) {
+			where.push('inbox_address = ?')
+			params.push(normalizeEmailAddress(input.inboxAddress))
+		}
+		if (input.query?.trim()) {
+			const like = `%${input.query.trim().replace(/[%_\\]/g, (c) => `\\${c}`)}%`
+			where.push("(subject LIKE ? ESCAPE '\\' OR from_json LIKE ? ESCAPE '\\' OR text LIKE ? ESCAPE '\\')")
+			params.push(like, like, like)
+		}
+		const sql = `SELECT * FROM email_messages ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY received_at DESC LIMIT ?`
+		return (
+			this.ctx.storage.sql.exec(sql, ...params, limit).toArray() as Array<Parameters<UserCell['rowToEmail']>[0]>
+		).map((row) => this.emailSummary(this.rowToEmail(row)))
+	}
+
+	async emailMessageDelete(id: string) {
+		const cursor = this.ctx.storage.sql.exec('DELETE FROM email_messages WHERE id = ?', id)
+		this.ctx.storage.sql.exec('DELETE FROM email_attachments WHERE message_id = ?', id)
+		this.ctx.storage.sql.exec('DELETE FROM email_delivery_events WHERE message_id = ?', id)
+		return { deleted: cursor.rowsWritten > 0 }
+	}
+
+	async emailMessageRelease(id: string): Promise<EmailMessageRecord> {
+		const message = await this.emailMessageGet(id)
+		if (!message) throw new KodyError('email_not_found', `Message "${id}" was not found.`, { status: 404 })
+		this.ctx.storage.sql.exec(
+			`UPDATE email_messages SET classification = 'inbox', classification_reason = 'released' WHERE id = ?`,
+			id,
+		)
+		return (await this.emailMessageGet(id))!
+	}
+
+	async emailAttachmentGet(input: {
+		messageId: string
+		attachmentId: string
+	}): Promise<(EmailAttachmentMeta & { contentBase64: string }) | null> {
+		const message = await this.emailMessageGet(input.messageId)
+		const meta = message?.attachments.find((item) => item.id === input.attachmentId)
+		if (!meta) return null
+		const row = this.ctx.storage.sql
+			.exec<{ content_base64: string }>(
+				'SELECT content_base64 FROM email_attachments WHERE id = ? AND message_id = ?',
+				input.attachmentId,
+				input.messageId,
+			)
+			.toArray()[0]
+		if (!row) return null
+		return { ...meta, contentBase64: row.content_base64 }
+	}
+
+	async emailMessageSetDelivery(input: {
+		id?: string | undefined
+		providerMessageId?: string | undefined
+		provider: string
+		status: string
+		event: string
+		detail?: string | null | undefined
+		at?: string | undefined
+	}): Promise<EmailMessageRecord | null> {
+		const row = (
+			input.id
+				? this.ctx.storage.sql.exec('SELECT id FROM email_messages WHERE id = ?', input.id)
+				: this.ctx.storage.sql.exec(
+						`SELECT id FROM email_messages WHERE provider = ? AND provider_message_id = ? AND direction = 'outbound'`,
+						input.provider,
+						input.providerMessageId ?? '',
+					)
+		).toArray()[0] as { id: string } | undefined
+		if (!row) return null
+		if (input.id === undefined && input.providerMessageId === undefined) return null
+		this.ctx.storage.sql.exec('UPDATE email_messages SET delivery_status = ? WHERE id = ?', input.status, row.id)
+		if (input.providerMessageId !== undefined) {
+			this.ctx.storage.sql.exec(
+				'UPDATE email_messages SET provider_message_id = COALESCE(provider_message_id, ?) WHERE id = ?',
+				input.providerMessageId,
+				row.id,
+			)
+		}
+		this.ctx.storage.sql.exec(
+			'INSERT INTO email_delivery_events (id, message_id, provider, event, status, detail, at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+			randomId('evt'),
+			row.id,
+			input.provider,
+			input.event,
+			input.status,
+			input.detail ?? null,
+			input.at ?? nowIso(),
+		)
+		return this.emailMessageGet(row.id)
+	}
+
+	async emailDeliveryEventList(messageId: string): Promise<Array<EmailDeliveryEvent>> {
+		return this.ctx.storage.sql
+			.exec<{
+				id: string
+				message_id: string
+				provider: string
+				event: string
+				status: string
+				detail: string | null
+				at: string
+			}>('SELECT * FROM email_delivery_events WHERE message_id = ? ORDER BY at DESC LIMIT 50', messageId)
+			.toArray()
+			.map((row) => ({
+				id: row.id,
+				messageId: row.message_id,
+				provider: row.provider,
+				event: row.event,
+				status: row.status,
+				detail: row.detail,
+				at: row.at,
+			}))
+	}
+
+	// destinations: addresses this user may send to. The account email is
+	// always allowed; others need a verification code delivered to them.
+
+	private rowToDestination(row: {
+		address: string
+		verified: number
+		is_default: number
+		created_at: string
+		verified_at: string | null
+		code_expires_at: string | null
+	}): EmailDestinationRecord {
+		return {
+			address: row.address,
+			verified: row.verified === 1,
+			isDefault: row.is_default === 1,
+			createdAt: row.created_at,
+			verifiedAt: row.verified_at,
+			codeExpiresAt: row.verified === 1 ? null : row.code_expires_at,
+		}
+	}
+
+	async emailDestinationList(): Promise<Array<EmailDestinationRecord>> {
+		return (
+			this.ctx.storage.sql
+				.exec('SELECT * FROM email_destinations ORDER BY is_default DESC, address')
+				.toArray() as Array<Parameters<UserCell['rowToDestination']>[0]>
+		).map((row) => this.rowToDestination(row))
+	}
+
+	/** Adds a destination and returns the one-time code to email to it (the caller sends it; it is never stored in plaintext). */
+	async emailDestinationBegin(input: {
+		address: string
+		preVerified?: boolean | undefined
+	}): Promise<{ destination: EmailDestinationRecord; code: string | null }> {
+		const address = normalizeEmailAddress(input.address)
+		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address) || address.length > 254) {
+			throw new KodyError('invalid_email_address', `"${input.address}" is not a valid email address.`)
+		}
+		const now = nowIso()
+		const existing = this.ctx.storage.sql
+			.exec<{ verified: number }>('SELECT verified FROM email_destinations WHERE address = ?', address)
+			.toArray()[0]
+		if (existing?.verified === 1 || input.preVerified) {
+			this.ctx.storage.sql.exec(
+				`INSERT INTO email_destinations (address, verified, created_at, verified_at, is_default) VALUES (?, 1, ?, ?, ?)
+				 ON CONFLICT(address) DO UPDATE SET verified = 1, verified_at = COALESCE(email_destinations.verified_at, excluded.verified_at), code_hash = NULL, code_expires_at = NULL`,
+				address,
+				now,
+				now,
+				this.count_destinations() === 0 ? 1 : 0,
+			)
+			return { destination: (await this.emailDestinationList()).find((d) => d.address === address)!, code: null }
+		}
+		const digits = new Uint32Array(1)
+		crypto.getRandomValues(digits)
+		const code = String((digits[0] ?? 0) % 1_000_000).padStart(6, '0')
+		this.ctx.storage.sql.exec(
+			`INSERT INTO email_destinations (address, verified, code_hash, code_expires_at, created_at) VALUES (?, 0, ?, ?, ?)
+			 ON CONFLICT(address) DO UPDATE SET code_hash = excluded.code_hash, code_expires_at = excluded.code_expires_at`,
+			address,
+			await sha256Hex(`${address}:${code}`),
+			new Date(Date.now() + emailDestinationCodeTtlMs).toISOString(),
+			now,
+		)
+		return { destination: (await this.emailDestinationList()).find((d) => d.address === address)!, code }
+	}
+
+	private count_destinations() {
+		return Number(
+			this.ctx.storage.sql.exec<{ n: number }>('SELECT COUNT(*) AS n FROM email_destinations').toArray()[0]?.n ?? 0,
+		)
+	}
+
+	async emailDestinationVerify(input: { address: string; code: string }): Promise<EmailDestinationRecord> {
+		const address = normalizeEmailAddress(input.address)
+		const row = this.ctx.storage.sql
+			.exec<{ code_hash: string | null; code_expires_at: string | null; verified: number }>(
+				'SELECT code_hash, code_expires_at, verified FROM email_destinations WHERE address = ?',
+				address,
+			)
+			.toArray()[0]
+		if (!row)
+			throw new KodyError('email_destination_not_found', `No pending destination "${address}".`, { status: 404 })
+		if (row.verified === 1) return (await this.emailDestinationList()).find((d) => d.address === address)!
+		const expired = !row.code_expires_at || new Date(row.code_expires_at).getTime() < Date.now()
+		const provided = await sha256Hex(`${address}:${String(input.code ?? '').trim()}`)
+		if (expired || !row.code_hash || !constantTimeEqual(provided, row.code_hash)) {
+			throw new KodyError('email_verification_failed', 'The verification code is wrong or expired.', { status: 400 })
+		}
+		const now = nowIso()
+		this.ctx.storage.sql.exec(
+			'UPDATE email_destinations SET verified = 1, verified_at = ?, code_hash = NULL, code_expires_at = NULL, is_default = ? WHERE address = ?',
+			now,
+			this.ctx.storage.sql.exec('SELECT 1 FROM email_destinations WHERE is_default = 1').toArray().length ? 0 : 1,
+			address,
+		)
+		return (await this.emailDestinationList()).find((d) => d.address === address)!
+	}
+
+	async emailDestinationSetDefault(address: string): Promise<EmailDestinationRecord> {
+		const normalized = normalizeEmailAddress(address)
+		if (!(await this.emailDestinationIsVerified(normalized))) {
+			throw new KodyError('email_destination_unverified', `"${normalized}" is not a verified destination.`, {
+				status: 404,
+			})
+		}
+		this.ctx.storage.sql.exec(
+			'UPDATE email_destinations SET is_default = CASE WHEN address = ? THEN 1 ELSE 0 END',
+			normalized,
+		)
+		return (await this.emailDestinationList()).find((d) => d.address === normalized)!
+	}
+
+	async emailDestinationRemove(address: string) {
+		const cursor = this.ctx.storage.sql.exec(
+			'DELETE FROM email_destinations WHERE address = ?',
+			normalizeEmailAddress(address),
+		)
+		return { deleted: cursor.rowsWritten > 0 }
+	}
+
+	async emailDestinationIsVerified(address: string): Promise<boolean> {
+		return (
+			this.ctx.storage.sql
+				.exec('SELECT 1 FROM email_destinations WHERE address = ? AND verified = 1', normalizeEmailAddress(address))
+				.toArray().length > 0
+		)
+	}
+
+	async emailSenderRuleList(): Promise<Array<EmailSenderRule>> {
+		return this.ctx.storage.sql
+			.exec<{
+				id: string
+				kind: 'address' | 'domain'
+				value: string
+				effect: 'allow' | 'block' | 'quarantine'
+				note: string | null
+				created_at: string
+			}>('SELECT * FROM email_sender_rules ORDER BY kind, value')
+			.toArray()
+			.map((row) => ({
+				id: row.id,
+				kind: row.kind,
+				value: row.value,
+				effect: row.effect,
+				note: row.note,
+				createdAt: row.created_at,
+			}))
+	}
+
+	async emailSenderRuleSet(input: {
+		kind: 'address' | 'domain'
+		value: string
+		effect: 'allow' | 'block' | 'quarantine'
+		note?: string | null | undefined
+	}): Promise<EmailSenderRule> {
+		const value = normalizeEmailAddress(input.value)
+		if (input.kind === 'address' && !value.includes('@')) {
+			throw new KodyError('invalid_args', 'Address rules need a full email address.')
+		}
+		if (input.kind === 'domain' && (value.includes('@') || !value.includes('.'))) {
+			throw new KodyError('invalid_args', 'Domain rules need a bare domain like "example.com".')
+		}
+		this.ctx.storage.sql.exec(
+			`INSERT INTO email_sender_rules (id, kind, value, effect, note, created_at) VALUES (?, ?, ?, ?, ?, ?)
+			 ON CONFLICT(kind, value) DO UPDATE SET effect = excluded.effect, note = excluded.note`,
+			randomId('rule'),
+			input.kind,
+			value,
+			input.effect,
+			input.note ?? null,
+			nowIso(),
+		)
+		return (await this.emailSenderRuleList()).find((rule) => rule.kind === input.kind && rule.value === value)!
+	}
+
+	async emailSenderRuleDelete(id: string) {
+		const cursor = this.ctx.storage.sql.exec('DELETE FROM email_sender_rules WHERE id = ?', id)
+		return { deleted: cursor.rowsWritten > 0 }
 	}
 }

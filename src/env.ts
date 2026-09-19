@@ -5,12 +5,14 @@ import type { MemoryCell } from './cells/memory-cell.ts'
 import type { PackageStorageCell } from './cells/package-storage-cell.ts'
 import type { RegistryCell } from './cells/registry-cell.ts'
 import type { UserCell } from './cells/user-cell.ts'
+import type { EmailEnv } from './email/config.ts'
 import type { LimitEnv } from './lib/limits.ts'
 
 export type Env = LimitEnv &
 	AiEnv &
 	BlobEnv &
-	BrowserEnv & {
+	BrowserEnv &
+	EmailEnv & {
 		LOADER: WorkerLoader
 		REGISTRY: DurableObjectNamespace<RegistryCell>
 		USER: DurableObjectNamespace<UserCell>

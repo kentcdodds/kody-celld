@@ -67,7 +67,9 @@ const rendered = {
 		...Object.fromEntries(
 			Object.entries(process.env).filter(
 				([name, value]) =>
-					/^KODY_(EXECUTE|RUN|RESPONSE|AUDIT|MCP|QUOTA|AI|SEARCH|VECTOR|QDRANT|BLOB|BROWSER)_/.test(name) &&
+					/^KODY_(EXECUTE|RUN|RESPONSE|AUDIT|MCP|QUOTA|AI|SEARCH|VECTOR|QDRANT|BLOB|BROWSER|WEBHOOK|EMAIL)_/.test(
+						name,
+					) &&
 					value !== undefined &&
 					value !== '',
 			),

@@ -1,0 +1,10 @@
+{
+  "$schema": "https://unpkg.com/wrangler/config-schema.json",
+  "name": "kody-email-forwarder",
+  "main": "worker.js",
+  "compatibility_date": "2025-09-01",
+  "vars": {
+    "KODY_URL": "https://kody.example.com",
+  },
+  // KODY_EMAIL_INBOUND_TOKEN: `wrangler secret put KODY_EMAIL_INBOUND_TOKEN`
+}

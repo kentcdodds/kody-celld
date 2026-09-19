@@ -36,5 +36,11 @@
     "KODY_ALLOW_INSECURE_SECRET_HOSTS": "127.0.0.1,localhost",
     // Lets local smoke render the loopback fixture server; production leaves this unset.
     "KODY_BROWSER_ALLOW_PRIVATE_HOSTS": "127.0.0.1,localhost,host.docker.internal",
+    // Dev-only email: inboxes on kody.local.test, smoke/email.mjs runs a loopback mail bridge.
+    "KODY_EMAIL_DOMAIN": "kody.local.test",
+    "KODY_EMAIL_INBOUND_TOKEN": "dev-email-inbound-token-only-for-celld-dev",
+    "KODY_EMAIL_OUTBOUND_PROVIDER": "bridge",
+    "KODY_EMAIL_OUTBOUND_URL": "http://127.0.0.1:9796",
+    "KODY_EMAIL_OUTBOUND_TOKEN": "dev-email-bridge-token-only-for-celld-dev",
   },
 }

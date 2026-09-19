@@ -3,6 +3,8 @@ import { blobConfigFromEnv, describeBlobConfig } from './blobs/config.ts'
 import { verifyBlobUrlSignature } from './blobs/keys.ts'
 import { BlobService, normalizeMetadata } from './blobs/service.ts'
 import { browserConfigFromEnv, describeBrowserConfig } from './browser/config.ts'
+import { describeEmailConfig } from './email/config.ts'
+import { handleEmailEvents, handleEmailInbound, loadEmailConfig } from './email/service.ts'
 import type { CapabilityContext } from './capabilities/define.ts'
 import { getMemoryCell } from './capabilities/memory.ts'
 import { capabilities, domains, runCapability } from './capabilities/registry.ts'
@@ -14,6 +16,8 @@ import { errorStatus, errorToJson, KodyError } from './lib/errors.ts'
 import { limitsFromEnv, parseQuotaOverride, quotasFromEnv } from './lib/limits.ts'
 import { handleMcpRequest } from './mcp/server.ts'
 import { isLoopbackHost } from './secrets/host-policy.ts'
+import { handleWebhookIngress } from './webhooks/ingress.ts'
+import { webhookUrl } from './webhooks/urls.ts'
 
 export { MemoryCell } from './cells/memory-cell.ts'
 export { PackageStorageCell } from './cells/package-storage-cell.ts'
@@ -152,6 +156,10 @@ async function handleAdmin(request: Request, env: Env, ctx: ExecutionContext, ur
 		return json({ browser: describeBrowserConfig(browserConfigFromEnv(env)) })
 	}
 
+	if (segments.length === 2 && segments[1] === 'email' && request.method === 'GET') {
+		return json({ email: describeEmailConfig(loadEmailConfig(env)) })
+	}
+
 	if (segments.length === 3 && segments[1] === 'secrets' && segments[2] === 'rekey' && request.method === 'POST') {
 		// Master-key rotation step 2: re-seal every user's secrets with KODY_MASTER_KEY.
 		const users = await registry.listUsers()
@@ -210,6 +218,12 @@ async function handleAdmin(request: Request, env: Env, ctx: ExecutionContext, ur
 			}
 		}
 		if (resource === 'jobs' && request.method === 'GET') return json({ jobs: await userCell.jobList() })
+		if (resource === 'webhooks' && request.method === 'GET') {
+			return json({
+				webhooks: await userCell.webhookList(),
+				deliveries: await userCell.webhookDeliveryList({ limit: Number(url.searchParams.get('limit') ?? 20) }),
+			})
+		}
 		if (resource === 'runs' && request.method === 'GET') {
 			return json({ runs: await userCell.runList({ limit: Number(url.searchParams.get('limit') ?? 20) }) })
 		}
@@ -274,6 +288,21 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext, url:
 	}
 	if (segments[1] === 'blobs' && segments.length > 2) {
 		return handleBlobApi(request, context, segments.slice(2).map(decodeURIComponent).join('/'))
+	}
+	if (segments[1] === 'webhooks' && segments[2] && segments[3] === 'url' && request.method === 'GET') {
+		// The only place the credential URL is ever shown; each reveal is audited.
+		const handle = decodeURIComponent(segments[2])
+		const revealed = await auth.userCell.webhookReveal(handle)
+		await recordAudit(env, { actor: `user:${auth.user.id}`, action: 'webhook.reveal', target: handle, details: null })
+		return json(
+			{
+				handle,
+				url: webhookUrl(env.KODY_PUBLIC_URL, auth.user.id, handle, revealed.secret),
+				previousExpiresAt: revealed.previousExpiresAt,
+			},
+			200,
+			{ 'cache-control': 'no-store' },
+		)
 	}
 	if (segments[1] === 'capabilities' && request.method === 'GET') {
 		return json({
@@ -399,6 +428,9 @@ export default {
 				return await handleMcpRequest(request, capabilityContext(env, ctx, auth), env)
 			}
 			if (url.pathname.startsWith('/blobs/')) return await handleSignedBlob(request, env, url)
+			if (url.pathname.startsWith('/webhooks/')) return await handleWebhookIngress(request, env, ctx, url)
+			if (url.pathname.startsWith('/email/inbound/')) return await handleEmailInbound(request, env, ctx, url)
+			if (url.pathname.startsWith('/email/events/')) return await handleEmailEvents(request, env, ctx, url)
 			if (url.pathname === '/admin' || url.pathname.startsWith('/admin/')) {
 				return await handleAdmin(request, env, ctx, url)
 			}

@@ -17,6 +17,9 @@ const MAX_INSPECTED_BODY_BYTES = 2 * 1024 * 1024
 const textLikeContentType =
 	/^(?:text\/|application\/(?:json|x-www-form-urlencoded|xml|graphql|javascript|x-ndjson)|multipart\/form-data)/i
 
+export type GatewaySend = { url: string; method?: string; headers?: Record<string, string>; body?: string | null }
+export type GatewayReply = { status: number; ok: boolean; headers: Record<string, string>; body: string }
+
 /**
  * `globalOutbound` for every sandbox isolate. Every `fetch()` from user or
  * package code passes through here:
@@ -30,6 +33,19 @@ const textLikeContentType =
  *    code can never reach the approval boundary
  */
 export class FetchGateway extends WorkerEntrypoint<Env, RuntimeProps> {
+	/**
+	 * Same pipeline as `fetch()` for host-side callers (capabilities) over RPC,
+	 * where `fetch` is a reserved name and Request/Response do not serialize.
+	 */
+	async send(input: GatewaySend): Promise<GatewayReply> {
+		const init: RequestInit = { method: input.method ?? 'GET', headers: input.headers ?? {} }
+		if (input.body != null && init.method !== 'GET' && init.method !== 'HEAD') init.body = input.body
+		const response = await this.fetch(new Request(input.url, init))
+		const headers: Record<string, string> = {}
+		for (const [name, value] of response.headers) headers[name] = value
+		return { status: response.status, ok: response.ok, headers, body: await response.text() }
+	}
+
 	override async fetch(request: Request): Promise<Response> {
 		const runId = request.headers.get(RUN_HEADER)
 		const headers = new Headers(request.headers)
