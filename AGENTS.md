@@ -5,8 +5,9 @@ is the contributor contract.
 
 ## Gates
 
-`npm run validate` (typecheck, oxlint, prettier check, `node --test` unit tests)
-must pass before a PR. `npm run smoke` (with `npm run dev` running) is the
+`npm run validate` (typecheck, oxlint, prettier check, `node --test` unit tests
+— run `npm ci --prefix mail-bridge` once first; the sidecar's tests import its
+own dependencies) must pass before a PR. `npm run smoke` (with `npm run dev` running) is the
 integration gate; run `npm run smoke:cron` when touching jobs or the dispatcher.
 GitHub Actions (`.github/workflows/ci.yml`) runs `validate` and the full
 `smoke:cron` against the single-node Docker image on every PR; run both locally
