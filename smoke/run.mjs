@@ -3,7 +3,7 @@
 //
 //   node smoke/run.mjs                 # all scenarios, skips the ~1-2 minute real-cron wait
 //   node smoke/run.mjs --wait-cron     # also waits for celld's cron trigger to fire a job
-//   node smoke/run.mjs --only secrets  # one scenario (mcp | packages | secrets | jobs | limits | memory | blobs | browser | webhooks | email | mail-bridge | integrations | secret-providers)
+//   node smoke/run.mjs --only secrets  # one scenario (mcp | packages | secrets | jobs | limits | memory | blobs | browser | webhooks | email | mail-bridge | integrations | secret-providers | oauth-server | web)
 //   SMOKE_AI_MOCK=1 node smoke/run.mjs --only memory  # with smoke/ai-mock-server.mjs + KODY_AI_* set
 //   SMOKE_MAIL_BRIDGE=1 node smoke/run.mjs --only mail-bridge  # real SMTP sidecar (needs `npm ci` in mail-bridge/)
 //
@@ -19,9 +19,11 @@ import { smokeLimits } from './limits.mjs'
 import { smokeMailBridge } from './mail-bridge.mjs'
 import { smokeMcp } from './mcp.mjs'
 import { smokeMemory } from './memory.mjs'
+import { smokeOAuthServer } from './oauth-server.mjs'
 import { smokePackages } from './packages.mjs'
 import { smokeSecretProviders } from './secret-providers.mjs'
 import { smokeSecrets } from './secrets.mjs'
+import { smokeWeb } from './web.mjs'
 import { smokeWebhooks } from './webhooks.mjs'
 
 const args = new Set(process.argv.slice(2))
@@ -44,11 +46,13 @@ const scenarios = [
 	['mail-bridge', smokeMailBridge],
 	['integrations', smokeIntegrations],
 	['secret-providers', smokeSecretProviders],
+	['oauth-server', smokeOAuthServer],
+	['web', smokeWeb],
 ].filter(([name]) => !only || only === name)
 
 if (scenarios.length === 0) {
 	console.error(
-		`Unknown scenario "${only}". Choose one of: mcp, packages, secrets, jobs, limits, memory, blobs, browser, webhooks, email, mail-bridge, integrations, secret-providers`,
+		`Unknown scenario "${only}". Choose one of: mcp, packages, secrets, jobs, limits, memory, blobs, browser, webhooks, email, mail-bridge, integrations, secret-providers, oauth-server, web`,
 	)
 	process.exit(2)
 }

@@ -69,7 +69,8 @@ export async function smokeJobs({ mcp, user, waitForCron }) {
 			const current = (await mcp.call('jobRuns', { jobId: tick.id, limit: 50 })).runs.filter(
 				(run) => run.trigger === 'cron',
 			)
-			return current.length > before ? current[0] : null
+			// The dispatcher marks the row `running` first; wait until it has finished.
+			return current.length > before && current[0].finishedAt ? current[0] : null
 		},
 		{ timeoutMs: 150_000, intervalMs: 5_000 },
 	)

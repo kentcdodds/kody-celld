@@ -107,7 +107,7 @@ before running so a crash cannot double-fire), then executes the entry via
 
 | Class                | Key                      | Holds                                                                                                                                                                                                                                  |
 | -------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `RegistryCell`       | `"registry"` (singleton) | users, SHA-256 token hashes → user id, admin audit log                                                                                                                                                                                 |
+| `RegistryCell`       | `"registry"` (singleton) | users, SHA-256 token hashes → user id, admin audit log, password hashes + lockout, browser sessions (hashed), one-time sign-in tokens (hashed), OAuth clients / codes / grants / tokens (hashed, refresh families)                     |
 | `UserCell`           | user id                  | packages (files + manifest), secrets (ciphertext), approved hosts, jobs, job runs, runs, gateway events, per-UTC-day usage, quota override, blob index, integrations + connect tickets (ciphertext), secret provider bindings + grants |
 | `PackageStorageCell` | `${userId}:${package}`   | `__kody_kv` table + whatever tables package `sql()` creates                                                                                                                                                                            |
 | `MemoryCell`         | user id                  | memories, `memories_fts` (FTS5), suppressions, embedding cache, `memory_vectors` (sqlite-vec, local provider)                                                                                                                          |
@@ -192,12 +192,43 @@ result cap. Audit entries are appended to the registry cell through
 `src/lib/audit.ts` with names and ids only. Operator guide:
 [operations.md](./operations.md).
 
+## Authentication, MCP OAuth, web UI
+
+`authenticateBearer()` (`src/auth/authenticate.ts`) is the one entry point for
+`/mcp` and `/api`: a `mcpat_…` bearer is resolved as an OAuth access token, a
+`kody_…` bearer as a legacy API token; both yield the same `Principal`
+(`user`, `userCell`, `via`, `clientName`). Unauthenticated `/mcp` requests get
+a `WWW-Authenticate: Bearer … resource_metadata="…"` challenge so spec-compliant
+MCP hosts discover the built-in authorization server
+([mcp-oauth.md](./mcp-oauth.md)). `src/oauth/protocol.ts` holds the pure
+protocol rules (metadata, DCR parsing, redirect matching, PKCE, scope
+normalization, client auth), `src/oauth/server-store.ts` the registry-cell
+persistence (hashed clients/codes/tokens, refresh-token families with replay
+detection), `src/oauth/routes.ts` the HTTP surface incl. the signed consent
+form.
+
+Browser sign-in (`src/web/*`, `src/auth/*`) is server-rendered HTML with a
+hashed session cookie, PBKDF2 passwords with lockout, one-time invite / reset /
+magic tokens, session-bound CSRF + same-origin checks, and a separate
+admin-token console cookie. The account pages and the operator console call
+exactly the same cell methods and `/admin` helpers the JSON API uses; there is
+no second code path for mutations ([web-ui.md](./web-ui.md)). Account-side
+credential management is also reachable from `execute` via the `account`
+capability domain (`mcpClientList/Revoke`, `apiTokenList/Create/Revoke`,
+`sessionList/Revoke`); minting or revoking credentials is refused when the
+call originates from package/runtime code rather than a direct MCP request.
+
 ## Trust boundaries
 
-- **Admin token** (`KODY_ADMIN_TOKEN`): creates users/tokens, approves secret
-  hosts, sets quotas, forces job dispatch, reads the audit log. Never accepted from the isolate (sandbox `fetch`
+- **Admin token** (`KODY_ADMIN_TOKEN`): creates users/tokens/invites, approves secret
+  hosts, sets quotas, forces job dispatch, reads the audit log, signs in to the
+  operator console. Never accepted from the isolate (sandbox `fetch`
   to `/admin` is denied by the gateway).
-- **User token** (`kody_...`): full access to that user's cell, nothing else.
+- **User token** (`kody_...`) and **OAuth access token** (`mcpat_...`): full
+  access to that user's cell, nothing else. OAuth tokens expire hourly and are
+  refreshed by the client; either kind can be revoked from the account UI.
+- **Browser session cookie**: same authority as a user token but only over the
+  HTML routes, and only with a same-origin `POST` + CSRF token for mutations.
 - **Isolate**: talks only to `RuntimeHost` and `FetchGateway`, both scoped by
   `props.userId`. Reused isolates are keyed by user, so code never shares an
   isolate across users.

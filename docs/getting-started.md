@@ -89,6 +89,25 @@ the generated file.
 
 ### 5. Create your user and connect an MCP client
 
+Open `http://<nas-ip>:8080/` in a browser. With no accounts yet it shows
+**Set up Kody**: paste the admin token, enter your email and a password
+(12+ characters) — that creates your account and signs you in to `/account`
+([web-ui.md](./web-ui.md)). Then point an OAuth-capable MCP client at the URL
+only:
+
+```sh
+claude mcp add --transport http kody http://<nas-ip>:8080/mcp
+# first use opens the browser: sign in, click Allow
+```
+
+Cursor, VS Code and Claude Desktop work the same way (add an HTTP MCP server
+with just the URL; see [mcp-oauth.md](./mcp-oauth.md)). Invite other people
+from **/console → Users** (one-time invite links) — there is no open
+registration.
+
+Prefer the command line, or have a client that only takes a URL + header?
+Create a user and a static API token instead:
+
 ```sh
 ADMIN=<KODY_ADMIN_TOKEN from kody.env>
 BASE=http://<nas-ip>:8080
@@ -99,22 +118,21 @@ curl -s -X POST $BASE/admin/users \
 # -> {"user":{"id":"user_…"},"token":"kody_…"}
 ```
 
-Give your MCP client the URL `$BASE/mcp` and the header
-`Authorization: Bearer kody_…`. For clients that only take a URL + token,
-that is all. For example, in Claude Code:
-
-```sh
-claude mcp add --transport http kody http://<nas-ip>:8080/mcp \
-  --header "Authorization: Bearer kody_…"
-```
+Give the client the URL `$BASE/mcp` and the header
+`Authorization: Bearer kody_…` (in Claude Code: add
+`--header "Authorization: Bearer kody_…"` to the command above). You can also
+create and revoke tokens later from `/account/tokens`.
 
 Ask it to "search Kody for secrets" — you should see the capability catalog.
 
 ### 6. Make it reachable (optional but recommended)
 
 - **On your LAN / Tailscale only:** you are done. Set
-  `KODY_PUBLIC_URL=http://<hostname>:8080` in `.env` so `/health` and MCP
-  metadata advertise the right address, then `docker compose up -d`.
+  `KODY_PUBLIC_URL=http://<hostname>:8080` in `.env` so `/health`, the OAuth
+  discovery metadata and the sign-in forms use the address your browser and
+  MCP clients actually see, then `docker compose up -d`. (OAuth issuer and
+  cookie origin are derived from this value — a mismatch shows up as
+  "invalid redirect" or a rejected sign-in form.)
 - **From the internet:** put your NAS reverse proxy (Synology "Reverse Proxy",
   Nginx Proxy Manager, Caddy, Traefik) in front of port 8080 with a TLS
   certificate, set `KODY_PUBLIC_URL=https://kody.your-domain.example` in `.env`,

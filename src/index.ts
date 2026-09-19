@@ -1,4 +1,5 @@
 import { aiConfigFromEnv, describeAiConfig } from './ai/config.ts'
+import { authenticateBearer, bearer, mcpUnauthorized, type Principal } from './auth/authenticate.ts'
 import { blobConfigFromEnv, describeBlobConfig } from './blobs/config.ts'
 import { verifyBlobUrlSignature } from './blobs/keys.ts'
 import { BlobService, normalizeMetadata } from './blobs/service.ts'
@@ -16,6 +17,12 @@ import { recordAudit } from './lib/audit.ts'
 import { errorStatus, errorToJson, KodyError } from './lib/errors.ts'
 import { limitsFromEnv, parseQuotaOverride, quotasFromEnv } from './lib/limits.ts'
 import { handleMcpRequest } from './mcp/server.ts'
+import { handleOAuth, isOAuthRoute } from './oauth/routes.ts'
+import { handleAccount, isAccountRoute } from './web/account.ts'
+import { handleConsole, isConsoleRoute } from './web/console.ts'
+import { html, page, redirect } from './web/html.ts'
+import { readWebSession } from './web/session.ts'
+import { handleSignin, isSigninRoute, issueSigninLink } from './web/signin.ts'
 import { isLoopbackHost } from './secrets/host-policy.ts'
 import { handleWebhookIngress } from './webhooks/ingress.ts'
 import { webhookUrl } from './webhooks/urls.ts'
@@ -29,12 +36,6 @@ export { FetchGateway } from './secrets/fetch-gateway.ts'
 
 const DEV_ADMIN_TOKEN = 'dev-admin-token'
 const DEV_MASTER_KEY = 'dev-master-key-only-for-celld-dev'
-
-function bearer(request: Request) {
-	const header = request.headers.get('authorization') ?? ''
-	const match = /^Bearer\s+(.+)$/i.exec(header)
-	return match?.[1]?.trim() ?? null
-}
 
 function json(payload: unknown, status = 200, headers: HeadersInit = {}) {
 	return Response.json(payload, { status, headers })
@@ -64,21 +65,49 @@ function insecureConfigError(env: Env, url: URL) {
 	return problems.length > 0 ? problems : null
 }
 
-async function authenticateUser(request: Request, env: Env) {
-	const token = bearer(request)
-	if (!token) return null
-	const user = await env.REGISTRY.getByName('registry').resolveToken(token)
-	if (!user) return null
-	const userCell = getUserCell(env, user.id)
-	await userCell.init(user.id)
-	return { user, userCell }
+function wantsHtml(request: Request) {
+	const accept = request.headers.get('accept') ?? ''
+	return accept.includes('text/html') && request.headers.get('sec-fetch-mode') !== 'cors'
 }
 
-function capabilityContext(
-	env: Env,
-	ctx: ExecutionContext,
-	auth: NonNullable<Awaited<ReturnType<typeof authenticateUser>>>,
-): CapabilityContext {
+function isWebRoute(pathname: string) {
+	return (
+		pathname === '/' ||
+		isSigninRoute(pathname) ||
+		isAccountRoute(pathname) ||
+		isConsoleRoute(pathname) ||
+		pathname === '/oauth/authorize'
+	)
+}
+
+function errorPage(error: unknown) {
+	const body = errorToJson(error)
+	const status = errorStatus(error)
+	return page({
+		title: status === 404 ? 'Not found' : 'Something went wrong',
+		status,
+		body: html`<div class="card">
+			<p><strong>${body.error}</strong> — ${body.message}</p>
+			<p><a href="/">Back</a></p>
+		</div>`,
+	})
+}
+
+/** Browser-based MCP clients preflight; the 401 challenge must be readable cross-origin too. */
+function mcpPreflight() {
+	return new Response(null, {
+		status: 204,
+		headers: {
+			'access-control-allow-origin': '*',
+			'access-control-allow-methods': 'GET, POST, DELETE, OPTIONS',
+			'access-control-allow-headers': 'authorization, content-type, mcp-session-id, mcp-protocol-version, accept',
+			'access-control-expose-headers': 'www-authenticate, mcp-session-id',
+			'access-control-max-age': '86400',
+		},
+	})
+}
+
+function capabilityContext(env: Env, ctx: ExecutionContext, auth: Principal): CapabilityContext {
 	return {
 		env,
 		exports: ctx.exports,
@@ -203,6 +232,20 @@ async function handleAdmin(request: Request, env: Env, ctx: ExecutionContext, ur
 			await audit('token.issue', user.id, { label })
 			return json({ token: issued }, 201)
 		}
+		if (resource === 'invite' && request.method === 'POST') {
+			// One-time sign-in link for the web UI (sets a password); `reset: true` for an existing account.
+			const body = await readJson(request)
+			const kind = body.reset === true ? 'reset' : 'invite'
+			const link = await issueSigninLink(env, { userId: user.id, kind })
+			await audit('user.invite', user.id, { kind })
+			return json({ ...link, kind }, 201)
+		}
+		if (resource === 'signout' && request.method === 'POST') {
+			await registry.sessionRevoke(user.id, null)
+			await registry.oauthGrantRevokeAll(user.id)
+			await audit('user.signout_everywhere', user.id)
+			return json({ ok: true })
+		}
 		if (resource === 'secret-hosts') {
 			if (request.method === 'GET') return json({ hosts: await userCell.secretHostList() })
 			if (request.method === 'POST') {
@@ -232,12 +275,12 @@ async function handleAdmin(request: Request, env: Env, ctx: ExecutionContext, ur
 			return json(await userCell.usageGet({ days: Number(url.searchParams.get('days') ?? 7) }))
 		}
 		if (resource === 'blobs' && request.method === 'GET') {
-			const page = await userCell.blobIndexList({
+			const listing = await userCell.blobIndexList({
 				prefix: url.searchParams.get('prefix') ?? undefined,
 				cursor: url.searchParams.get('cursor') ?? undefined,
 				limit: Number(url.searchParams.get('limit') ?? 100),
 			})
-			return json({ ...page, usage: await userCell.blobUsage() })
+			return json({ ...listing, usage: await userCell.blobUsage() })
 		}
 		if (resource === 'memories') {
 			const memoryCell = getMemoryCell(env, user.id)
@@ -279,8 +322,8 @@ async function handleAdmin(request: Request, env: Env, ctx: ExecutionContext, ur
 }
 
 async function handleApi(request: Request, env: Env, ctx: ExecutionContext, url: URL): Promise<Response> {
-	const auth = await authenticateUser(request, env)
-	if (!auth) return unauthorized('A user API token is required (Authorization: Bearer <token>).')
+	const auth = await authenticateBearer(request, env)
+	if (!auth) return unauthorized('A user API token or OAuth access token is required (Authorization: Bearer <token>).')
 	const context = capabilityContext(env, ctx, auth)
 	const segments = url.pathname.split('/').filter(Boolean) // ['api', ...]
 	if (segments[1] === 'call' && segments[2] && request.method === 'POST') {
@@ -414,6 +457,9 @@ export default {
 			const insecure = insecureConfigError(env, url)
 			if (insecure) return json({ error: 'insecure_configuration', problems: insecure }, 500)
 
+			if (url.pathname === '/' && wantsHtml(request)) {
+				return redirect((await readWebSession(request, env)) ? '/account' : '/signin')
+			}
 			if (url.pathname === '/' || url.pathname === '/health') {
 				return json({
 					name: 'kody-celld',
@@ -424,10 +470,23 @@ export default {
 				})
 			}
 			if (url.pathname === '/mcp') {
-				const auth = await authenticateUser(request, env)
-				if (!auth) return unauthorized('A Kody API token is required (Authorization: Bearer <token>).')
+				if (request.method === 'OPTIONS') return mcpPreflight()
+				const auth = await authenticateBearer(request, env)
+				if (!auth) {
+					return mcpUnauthorized(
+						env,
+						request,
+						bearer(request)
+							? 'The bearer token is unknown, expired, or revoked.'
+							: 'Authenticate with OAuth (see resource_metadata) or a Kody API token (Authorization: Bearer <token>).',
+					)
+				}
 				return await handleMcpRequest(request, capabilityContext(env, ctx, auth), env)
 			}
+			if (isOAuthRoute(url.pathname)) return await handleOAuth(request, env, url)
+			if (isSigninRoute(url.pathname)) return await handleSignin(request, env, url)
+			if (isAccountRoute(url.pathname)) return await handleAccount(request, env, url)
+			if (isConsoleRoute(url.pathname)) return await handleConsole(request, env, ctx, url)
 			if (url.pathname.startsWith('/blobs/')) return await handleSignedBlob(request, env, url)
 			if (url.pathname.startsWith('/webhooks/')) return await handleWebhookIngress(request, env, ctx, url)
 			if (url.pathname.startsWith('/email/inbound/')) return await handleEmailInbound(request, env, ctx, url)
@@ -439,6 +498,7 @@ export default {
 			if (url.pathname === '/api' || url.pathname.startsWith('/api/')) return await handleApi(request, env, ctx, url)
 			return json({ error: 'not_found', message: `No route for ${url.pathname}.` }, 404)
 		} catch (error) {
+			if (isWebRoute(url.pathname) && wantsHtml(request)) return errorPage(error)
 			return json(errorToJson(error), errorStatus(error))
 		}
 	},
