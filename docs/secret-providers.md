@@ -70,6 +70,7 @@ Rules the runtime enforces on the package:
 ## Binding and grants
 
 ```ts
+import { kody } from 'kody:runtime'
 await kody.secretSave({ name: 'op-connect-token', value: '<connect token>' })
 await kody.secretProviderBind({
   providerId: '1password',

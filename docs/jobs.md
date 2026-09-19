@@ -50,6 +50,7 @@ multi-node cron is on the unverified list in [run-fleet.md](./run-fleet.md).)
 ## Capabilities
 
 ```ts
+import { kody } from 'kody:runtime'
 await kody.jobList()
 await kody.jobGet({ id, runs: 10 })
 await kody.jobUpdate({ id, enabled: false })

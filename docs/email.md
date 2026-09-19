@@ -50,6 +50,7 @@ and `KODY_QUOTA_EMAIL_RECEIVES_PER_DAY` (see [operations.md](./operations.md)).
 
 ```js
 // lib/on-email.js — params: { topic, packageName, message }
+import { kody } from 'kody:runtime'
 export default async function onEmail({ message }) {
   // message: id, inboxAddress, from, to, subject, text, html, snippet, headers, attachments (metadata)
   const first = message.attachments[0]

@@ -2,7 +2,8 @@ name: Publish image
 
 # Builds the single-node/fleet image for linux/amd64 and linux/arm64 and pushes
 # it to ghcr.io/<owner>/kody-celld so self-hosters can `docker compose pull`
-# instead of building on their NAS.
+# instead of building on their NAS, then runs the smoke suite against the
+# pushed image exactly the way a self-hoster gets it (pull, no local build).
 #   push to main   -> :latest, :main, :sha-<short>
 #   tag v1.2.3     -> :1.2.3, :1.2, :latest
 on:
@@ -23,6 +24,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
@@ -47,7 +50,8 @@ jobs:
             org.opencontainers.image.title=kody-celld
             org.opencontainers.image.description=Self-hosted Kody core on Deno celld
             org.opencontainers.image.licenses=FSL-1.1-ALv2
-      - uses: docker/build-push-action@v6
+      - id: build
+        uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -56,3 +60,53 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  verify:
+    name: smoke against the pushed image
+    needs: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: read
+    env:
+      KODY_IMAGE: ghcr.io/${{ github.repository }}@${{ needs.image.outputs.digest }}
+      KODY_PORT: 8080
+      KODY_PUBLIC_URL: http://localhost:8080
+      # Same throwaway values as ci.yml: a container on the runner's loopback.
+      KODY_ADMIN_TOKEN: publish-admin-token-${{ github.run_id }}
+      KODY_MASTER_KEY: publish-master-key-${{ github.run_id }}-${{ github.run_attempt }}
+      KODY_ALLOW_INSECURE_SECRET_HOSTS: host.docker.internal
+      KODY_EMAIL_OUTBOUND_URL: http://host.docker.internal:9796
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Pull and start (no local build)
+        run: |
+          docker compose pull kody
+          docker compose up -d --no-build --wait --wait-timeout 180
+      - name: Wait for /health
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS "$KODY_PUBLIC_URL/health" >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          docker compose logs kody
+          exit 1
+      - name: Smoke
+        run: KODY_URL=$KODY_PUBLIC_URL SMOKE_ECHO_HOST=host.docker.internal npm run smoke
+      - name: Container logs
+        if: failure()
+        run: docker compose logs kody
+      - name: Stop
+        if: always()
+        run: docker compose down -v

@@ -40,6 +40,7 @@ each saved package and links to the public page once it is listed.
 ## Discover and install
 
 ```ts
+import { kody } from 'kody:runtime'
 const found = await kody.communitySearch({ query: 'weather', limit: 10 })
 const listing = await kody.communityGet({ name: found.packages[0].name, includeFiles: true })
 await kody.communityInstall({ name: '@kent/weather' }) // exact copy
