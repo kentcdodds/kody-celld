@@ -58,6 +58,17 @@ export const admin = {
 	jobs: (userId) => request(`/admin/users/${encodeURIComponent(userId)}/jobs`, { token: adminToken }),
 	runs: (userId, limit = 20) =>
 		request(`/admin/users/${encodeURIComponent(userId)}/runs?limit=${limit}`, { token: adminToken }),
+	limits: () => request('/admin/limits', { token: adminToken }),
+	usage: (userId, days = 7) =>
+		request(`/admin/users/${encodeURIComponent(userId)}/usage?days=${days}`, { token: adminToken }),
+	setQuota: (userId, override) =>
+		request(`/admin/users/${encodeURIComponent(userId)}/quota`, { method: 'PUT', token: adminToken, body: override }),
+	clearQuota: (userId) =>
+		request(`/admin/users/${encodeURIComponent(userId)}/quota`, { method: 'DELETE', token: adminToken }),
+	audit: (filter = {}) => {
+		const params = new URLSearchParams(Object.entries(filter).map(([k, v]) => [k, String(v)]))
+		return request(`/admin/audit?${params}`, { token: adminToken })
+	},
 }
 
 export class McpClient {

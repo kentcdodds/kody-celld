@@ -1,8 +1,9 @@
 import type { PackageStorageCell } from './cells/package-storage-cell.ts'
 import type { RegistryCell } from './cells/registry-cell.ts'
 import type { UserCell } from './cells/user-cell.ts'
+import type { LimitEnv } from './lib/limits.ts'
 
-export type Env = {
+export type Env = LimitEnv & {
 	LOADER: WorkerLoader
 	REGISTRY: DurableObjectNamespace<RegistryCell>
 	USER: DurableObjectNamespace<UserCell>

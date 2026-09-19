@@ -2,8 +2,21 @@ import { DurableObject } from 'cloudflare:workers'
 import type { Env } from '../env.ts'
 import { randomId, randomToken, sha256Hex } from '../lib/crypto.ts'
 import { KodyError } from '../lib/errors.ts'
+import { limitsFromEnv } from '../lib/limits.ts'
 
 export type UserRecord = { id: string; email: string; createdAt: string }
+
+export type AuditEntry = {
+	id: string
+	at: string
+	/** `admin`, `user:<id>`, or `system` (cron / internal). */
+	actor: string
+	/** Dotted verb, e.g. `user.create`, `secret_host.approve`, `secret.rekey`. */
+	action: string
+	/** What was acted on: a user id, host, package or secret *name* — never a value. */
+	target: string | null
+	details: Record<string, unknown> | null
+}
 
 /**
  * Fleet-wide registry: one cell (`getByName('registry')`) that owns user
@@ -26,7 +39,78 @@ export class RegistryCell extends DurableObject<Env> {
 				last_used_at TEXT
 			);
 			CREATE INDEX IF NOT EXISTS tokens_user ON tokens(user_id);
+			CREATE TABLE IF NOT EXISTS audit (
+				id TEXT PRIMARY KEY,
+				at TEXT NOT NULL,
+				actor TEXT NOT NULL,
+				action TEXT NOT NULL,
+				target TEXT,
+				details_json TEXT
+			);
+			CREATE INDEX IF NOT EXISTS audit_at ON audit(at DESC);
 		`)
+		this.auditRetentionCount = limitsFromEnv(env).auditRetentionCount
+	}
+
+	private readonly auditRetentionCount: number
+
+	// ------------------------------------------------------------------ audit
+
+	async auditAppend(entry: Omit<AuditEntry, 'id' | 'at'>): Promise<AuditEntry> {
+		const record: AuditEntry = { id: randomId('audit'), at: new Date().toISOString(), ...entry }
+		this.ctx.storage.sql.exec(
+			'INSERT INTO audit (id, at, actor, action, target, details_json) VALUES (?, ?, ?, ?, ?, ?)',
+			record.id,
+			record.at,
+			record.actor,
+			record.action,
+			record.target,
+			record.details ? JSON.stringify(record.details) : null,
+		)
+		this.ctx.storage.sql.exec(
+			'DELETE FROM audit WHERE id NOT IN (SELECT id FROM audit ORDER BY at DESC LIMIT ?)',
+			this.auditRetentionCount,
+		)
+		return record
+	}
+
+	async auditList(
+		filter: { limit?: number | undefined; actor?: string | undefined; action?: string | undefined } = {},
+	): Promise<Array<AuditEntry>> {
+		const limit = Math.min(Math.max(filter.limit ?? 50, 1), 1000)
+		const where: Array<string> = []
+		const params: Array<string> = []
+		if (filter.actor) {
+			where.push('actor = ?')
+			params.push(filter.actor)
+		}
+		if (filter.action) {
+			where.push('action LIKE ?')
+			params.push(`${filter.action}%`)
+		}
+		return this.ctx.storage.sql
+			.exec<{
+				id: string
+				at: string
+				actor: string
+				action: string
+				target: string | null
+				details_json: string | null
+			}>(
+				`SELECT id, at, actor, action, target, details_json FROM audit
+				 ${where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY at DESC LIMIT ?`,
+				...params,
+				limit,
+			)
+			.toArray()
+			.map((row) => ({
+				id: row.id,
+				at: row.at,
+				actor: row.actor,
+				action: row.action,
+				target: row.target,
+				details: row.details_json ? (JSON.parse(row.details_json) as Record<string, unknown>) : null,
+			}))
 	}
 
 	async createUser(input: { email: string; label?: string }) {

@@ -15,6 +15,7 @@ It is deliberately the _core_, not full product parity with
 | Jobs (package-owned cron / interval / once)          | Working, smoke-tested against the real celld cron trigger                                                 |
 | Docker: single node (NAS / home server) and fleet    | Working, smoke-tested (`compose.yaml`, `compose.fleet.yaml` + MinIO + Caddy)                              |
 | Master-key rotation                                  | Working, smoke-tested (`KODY_MASTER_KEY_PREVIOUS` + `POST /admin/secrets/rekey`)                          |
+| Limits, quotas, `usageGet`, admin audit log          | Working, smoke-tested ([docs/operations.md](./docs/operations.md))                                        |
 | npm imports inside `execute`                         | Experimental via esm.sh (see [provision matrix](./docs/known-gaps.md))                                    |
 | AI, memories, email, webhooks, OAuth, web UI, …      | Planned as built-ins and/or adapters — status per feature in the [provision matrix](./docs/known-gaps.md) |
 
@@ -160,6 +161,17 @@ run (`jobRuns`, `jobGet`). `jobRunNow`, `jobUpdate` (enable/disable) and
 `POST /admin/jobs` (force a dispatch) exist for operators. See
 [docs/jobs.md](./docs/jobs.md).
 
+## Limits, quotas and audit
+
+The execute timeout, run retention, log/result caps and per-user quotas (runs
+and execute time per day, package/secret/job counts) are environment variables
+with sane defaults (`KODY_EXECUTE_TIMEOUT_MS`, `KODY_QUOTA_RUNS_PER_DAY`, …;
+quotas default to unlimited). Admins override quotas per user with
+`PUT /admin/users/:id/quota`, users check their budget with `kody.usageGet()`,
+and every admin or state-changing user action lands in `GET /admin/audit`
+(names and ids only — never secret values or tokens). See
+[docs/operations.md](./docs/operations.md).
+
 ## Run a fleet
 
 ```sh
@@ -190,6 +202,7 @@ Layout:
 
 ```
 src/index.ts              Worker entry: /health, /mcp, /api/*, /admin/*, cron → dispatcher
+src/lib/                  KodyError, limits/quotas from env, audit helper
 src/mcp/                  JSON-RPC server (search, execute) + search ranking
 src/capabilities/         the kody.<capability>() catalog (packages, secrets, jobs, runs, storage, system)
 src/execute/              module graph → Worker Loader isolate; RuntimeHost RPC; kody:runtime source
@@ -199,7 +212,7 @@ src/jobs/                 schedule parsing + dispatcher
 smoke/                    real workloads against a running node (npm run smoke; smoke/rekey.mjs for key rotation)
 examples/packages/        @kody-smoke/counter, @kody-smoke/http-probe
 docker/                   entrypoint (single / deploy / node), healthcheck, Caddyfile, bucket bootstrap
-docs/                     getting started, architecture, run paths, decision record, provision matrix
+docs/                     getting started, architecture, run paths, operations, decision record, provision matrix
 ```
 
 See [AGENTS.md](./AGENTS.md) for contributor rules.

@@ -2,10 +2,10 @@ import type { RunRecord } from '../cells/user-cell.ts'
 import type { Env } from '../env.ts'
 import { sha256Hex } from '../lib/crypto.ts'
 import { KodyError } from '../lib/errors.ts'
+import { defaultLimits, limitsFromEnv } from '../lib/limits.ts'
 import { buildModuleGraph, type GraphEntry } from './module-graph.ts'
 
-export const defaultResponseLimitBytes = 100_000
-export const executeTimeoutMs = 60_000
+export const defaultResponseLimitBytes = defaultLimits.responseLimitBytes
 export const runRecordMaxIdempotencyKeyLength = 200
 
 export type ExecuteInput = {
@@ -68,6 +68,7 @@ export async function executeRun(
 	exports: ExecutionContext['exports'],
 	input: ExecuteInput,
 ): Promise<ExecuteResult> {
+	const limits = limitsFromEnv(env)
 	const userCell = getUserCell(env, input.user.id)
 	const packageName = input.entry.kind === 'package' ? input.entry.packageName : null
 	if (input.idempotencyKey !== undefined && input.idempotencyKey.length > runRecordMaxIdempotencyKeyLength) {
@@ -95,7 +96,7 @@ export async function executeRun(
 			status,
 			resultJson: fields.result === undefined ? null : JSON.stringify(fields.result),
 			error: fields.error ? { name: fields.error.name, message: fields.error.message } : null,
-			logsJson: JSON.stringify((fields.logs ?? []).slice(0, 200)),
+			logsJson: JSON.stringify((fields.logs ?? []).slice(0, limits.runLogLimit)),
 			warnings: fields.warnings,
 			durationMs: Date.now() - started,
 		})
@@ -126,8 +127,10 @@ export async function executeRun(
 	const timeout = new Promise<never>((_resolve, reject) => {
 		setTimeout(
 			() =>
-				reject(new KodyError('execute_timeout', `Execution exceeded ${executeTimeoutMs / 1000}s.`, { status: 504 })),
-			executeTimeoutMs,
+				reject(
+					new KodyError('execute_timeout', `Execution exceeded ${limits.executeTimeoutMs / 1000}s.`, { status: 504 }),
+				),
+			limits.executeTimeoutMs,
 		)
 	})
 
@@ -148,7 +151,7 @@ export async function executeRun(
 		if (!payload.ok) {
 			return finish('error', { error: payload.error, logs: payload.logs, warnings })
 		}
-		const limit = input.responseLimit ?? defaultResponseLimitBytes
+		const limit = input.responseLimit ?? limits.responseLimitBytes
 		const truncated = truncateResult(payload.result, limit)
 		if (truncated.truncated) warnings.push(truncated.note)
 		const result = await finish('success', { result: truncated.result, logs: payload.logs, warnings })

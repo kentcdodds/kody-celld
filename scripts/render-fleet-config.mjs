@@ -63,6 +63,13 @@ const rendered = {
 			? { KODY_ALLOW_INSECURE_SECRET_HOSTS: process.env.KODY_ALLOW_INSECURE_SECRET_HOSTS }
 			: {}),
 		...(process.env.KODY_MASTER_KEY_PREVIOUS ? { KODY_MASTER_KEY_PREVIOUS: process.env.KODY_MASTER_KEY_PREVIOUS } : {}),
+		// Runtime limits and quota defaults (docs/operations.md); unset/empty = built-in default.
+		...Object.fromEntries(
+			Object.entries(process.env).filter(
+				([name, value]) =>
+					/^KODY_(EXECUTE|RUN|RESPONSE|AUDIT|QUOTA)_/.test(name) && value !== undefined && value !== '',
+			),
+		),
 	},
 }
 

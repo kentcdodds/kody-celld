@@ -10,12 +10,12 @@ operators use `/admin/*` with the admin token.
  MCP client ──► │ src/index.ts (Worker)                                                 │
   Bearer token  │   /mcp  ─► mcp/server.ts ─► search | execute                          │
                 │   /api  ─► capabilities (host-side call)                              │
- admin ───────► │   /admin ─► users, tokens, secret hosts, jobs, runs                   │
+ admin ───────► │   /admin ─► users, tokens, secret hosts, jobs, runs, quotas, audit    │
                 │   cron * * * * * ─► jobs/dispatcher.ts                                 │
                 │                                                                       │
-                │   RegistryCell (DO, 1)     users + hashed API tokens                  │
+                │   RegistryCell (DO, 1)     users + hashed API tokens, audit log       │
                 │   UserCell (DO, per user)  packages, secrets (encrypted), hosts,      │
-                │                            jobs, runs, gateway events                 │
+                │                            jobs, runs, gateway events, daily usage    │
                 │   PackageStorageCell (DO, per user×package)  KV + free-form SQLite    │
                 │                                                                       │
                 │   execute ─► module graph ─► LOADER.get(hash) ──► isolate             │
@@ -84,19 +84,30 @@ before running so a crash cannot double-fire), then executes the entry via
 
 ## Durable Objects
 
-| Class                | Key                      | Holds                                                                                                   |
-| -------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------- |
-| `RegistryCell`       | `"registry"` (singleton) | users, SHA-256 token hashes → user id                                                                   |
-| `UserCell`           | user id                  | packages (files + manifest), secrets (ciphertext), approved hosts, jobs, job runs, runs, gateway events |
-| `PackageStorageCell` | `${userId}:${package}`   | `__kody_kv` table + whatever tables package `sql()` creates                                             |
+| Class                | Key                      | Holds                                                                                                                                      |
+| -------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `RegistryCell`       | `"registry"` (singleton) | users, SHA-256 token hashes → user id, admin audit log                                                                                     |
+| `UserCell`           | user id                  | packages (files + manifest), secrets (ciphertext), approved hosts, jobs, job runs, runs, gateway events, per-UTC-day usage, quota override |
+| `PackageStorageCell` | `${userId}:${package}`   | `__kody_kv` table + whatever tables package `sql()` creates                                                                                |
 
 All state is SQLite inside the DO; celld replicates it to the bucket. There is
 no KV/D1/R2 usage yet, which keeps the fleet footprint to "DOs + bucket".
 
+## Limits, quotas, audit
+
+`src/lib/limits.ts` parses the `KODY_*` limit/quota variables once per cell.
+`UserCell` enforces quotas at the point of mutation (`runStart`, `packageSave`,
+`secretSave`, job reconciliation) and throws `quota_exceeded` (429); `runFinish`
+accrues duration/errors into `usage_daily` and prunes runs past the retention
+count/age. `executeRun` reads the same limits for the timeout, log cap and
+result cap. Audit entries are appended to the registry cell through
+`src/lib/audit.ts` with names and ids only. Operator guide:
+[operations.md](./operations.md).
+
 ## Trust boundaries
 
 - **Admin token** (`KODY_ADMIN_TOKEN`): creates users/tokens, approves secret
-  hosts, forces job dispatch. Never accepted from the isolate (sandbox `fetch`
+  hosts, sets quotas, forces job dispatch, reads the audit log. Never accepted from the isolate (sandbox `fetch`
   to `/admin` is denied by the gateway).
 - **User token** (`kody_...`): full access to that user's cell, nothing else.
 - **Isolate**: talks only to `RuntimeHost` and `FetchGateway`, both scoped by

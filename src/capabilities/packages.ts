@@ -1,4 +1,5 @@
 import { executeRun } from '../execute/engine.ts'
+import { recordAudit } from '../lib/audit.ts'
 import { KodyError } from '../lib/errors.ts'
 import type { PackageFiles } from '../packages/manifest.ts'
 import { defineCapability, defineDomain } from './define.ts'
@@ -36,7 +37,14 @@ export default async function main({ files }) {
 		if (ctx.fromRuntime && ctx.packageName) {
 			throw new KodyError('forbidden', 'Package code may not save packages.', { status: 403 })
 		}
-		return ctx.userCell.packageSave({ files: args.files, source: args.source })
+		const saved = await ctx.userCell.packageSave({ files: args.files, source: args.source })
+		await recordAudit(ctx.env, {
+			actor: `user:${ctx.user.id}`,
+			action: 'package.save',
+			target: saved.name,
+			details: { version: saved.version, source: saved.source, jobs: Object.keys(saved.manifest.jobs) },
+		})
+		return saved
 	},
 })
 
@@ -106,7 +114,14 @@ export const packageDelete = defineCapability<{ name: string }>({
 		if (ctx.fromRuntime && ctx.packageName) {
 			throw new KodyError('forbidden', 'Package code may not delete packages.', { status: 403 })
 		}
-		return ctx.userCell.packageDelete(args.name)
+		const result = await ctx.userCell.packageDelete(args.name)
+		await recordAudit(ctx.env, {
+			actor: `user:${ctx.user.id}`,
+			action: 'package.delete',
+			target: args.name,
+			details: null,
+		})
+		return result
 	},
 })
 
