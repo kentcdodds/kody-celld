@@ -206,6 +206,7 @@ what the smoke suite installs. See [docs/packages.md](./docs/packages.md).
 ## Secrets
 
 ```ts
+import { kody } from 'kody:runtime'
 await kody.secretSave({ name: 'github', value: '...' }) // value is never echoed back
 await fetch('https://api.github.com/user', {
   headers: { authorization: 'Bearer {{secret:github}}' },
@@ -229,6 +230,7 @@ _names_ only. See [docs/secrets.md](./docs/secrets.md).
 Two more placeholder kinds ride the same gateway:
 
 ```ts
+import { kody } from 'kody:runtime'
 // OAuth: bring your own app, connect once in the browser, tokens refresh host-side
 await kody.integrationSave({
   name: 'github',
