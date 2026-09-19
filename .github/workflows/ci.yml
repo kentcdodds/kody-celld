@@ -36,6 +36,8 @@ jobs:
       # The secrets scenario's echo server runs on the runner; the container
       # reaches it over http as host.docker.internal.
       KODY_ALLOW_INSECURE_SECRET_HOSTS: host.docker.internal
+      # The email scenario's fake mail bridge also runs on the runner.
+      KODY_EMAIL_OUTBOUND_URL: http://host.docker.internal:9796
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
