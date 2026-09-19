@@ -24,6 +24,7 @@ fetch('https://api…', { headers: { authorization: 'Bearer {{integration-token:
 ### 1. Describe the OAuth app
 
 ```ts
+import { kody } from 'kody:runtime'
 await kody.integrationSave({
   name: 'github',
   provider: 'GitHub',
@@ -51,6 +52,7 @@ await kody.integrationSave({
 ### 2. Connect
 
 ```ts
+import { kody } from 'kody:runtime'
 const { url, expiresAt } = await kody.integrationConnect({ name: 'github' })
 // Show `url` to the human. It is single-use and expires in 15 minutes.
 ```
@@ -120,6 +122,7 @@ otherwise                                     → inject, forward, record 'injec
 ## Restricting who may use a token
 
 ```ts
+import { kody } from 'kody:runtime'
 await kody.integrationSetUsage({ name: 'github', usage: { mode: 'packages', packages: ['@me/gh-sync'] } })
 await kody.integrationSetUsage({ name: 'github', usage: 'any' })
 ```

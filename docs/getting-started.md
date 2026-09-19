@@ -183,7 +183,9 @@ create and revoke tokens later from `/account/tokens`.
 
 Ask it to "search Kody for secrets" — you should see the capability catalog.
 Then have it run something: `execute` takes an ES module with a default
-export (`export default async () => ({ hello: 'world' })`), and any `fetch`
+export (`export default async () => ({ hello: 'world' })`). Kody's own
+capabilities are not a global — code that calls them starts with
+`import { kody } from 'kody:runtime'` — and any `fetch`
 that uses a `{{secret:…}}` placeholder is refused with `secret_host_not_approved`
 until you approve that host once as admin (step 7).
 

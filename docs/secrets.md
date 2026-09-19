@@ -7,6 +7,7 @@ boundary, and only for destinations an admin approved.
 ## Storing
 
 ```ts
+import { kody } from 'kody:runtime'
 await kody.secretSave({ name: 'github', value: 'ghp_...' }) // user scope (default)
 await kody.secretSave({ name: 'api-key', value: '...', scope: 'package' }) // only the saving package may use it
 await kody.secretList() // names, scopes, timestamps — never values
