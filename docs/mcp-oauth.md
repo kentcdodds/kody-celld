@@ -101,7 +101,7 @@ already owns users and API tokens), tables `oauth_clients`, `oauth_codes`,
 
 ```sh
 claude mcp add --transport http kody https://kody.your-domain.example/mcp
-# first use opens the browser: sign in, click Allow
+# first use opens the browser: sign in, click Approve
 ```
 
 **Cursor / VS Code / Claude Desktop** — add an HTTP MCP server with the URL

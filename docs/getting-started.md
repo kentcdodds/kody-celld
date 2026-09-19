@@ -152,7 +152,7 @@ only:
 
 ```sh
 claude mcp add --transport http kody http://<nas-ip>:8080/mcp
-# first use opens the browser: sign in, click Allow
+# first use opens the browser: sign in, click Approve
 ```
 
 Cursor, VS Code and Claude Desktop work the same way (add an HTTP MCP server
