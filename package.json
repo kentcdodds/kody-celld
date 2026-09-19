@@ -5,13 +5,18 @@
   "license": "FSL-1.1-ALv2",
   "description": "Self-hosted Kody core (MCP search/execute, packages, secrets, jobs) running on Deno celld.",
   "type": "module",
+  "imports": {
+    "#app/*": "./src/app/*",
+    "#client/*": "./client/*",
+    "#universal/*": "./universal/*"
+  },
   "engines": {
     "node": ">=22.18"
   },
   "scripts": {
-    "dev": "celld dev . --port 8787",
-    "typecheck": "tsc -p tsconfig.json",
-    "lint": "oxlint src smoke examples scripts mail-bridge",
+    "dev": "npm run build:client && celld dev . --port 8787",
+    "typecheck": "tsc -p tsconfig.worker-typecheck.json && tsc -p tsconfig.client.json",
+    "lint": "oxlint src client universal smoke examples scripts mail-bridge",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "node --test 'src/**/*.test.ts' 'mail-bridge/*.test.mjs'",
@@ -20,20 +25,24 @@
     "smoke:ai-mock": "node smoke/ai-mock-server.mjs",
     "validate": "npm run typecheck && npm run lint && npm run format:check && npm run test",
     "fleet:render": "node scripts/render-fleet-config.mjs",
-    "fleet:deploy": "npm run fleet:render && celld deploy wrangler.fleet.jsonc"
+    "fleet:deploy": "npm run build:client && npm run fleet:render && celld deploy wrangler.fleet.jsonc",
+    "build:client": "vite build"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260918.1",
     "@types/node": "24.13.4",
-    "esbuild": "^0.25.12",
+    "esbuild": "0.28.2",
     "oxlint": "1.81.0",
     "prettier": "3.9.6",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vite": "8.2.2"
   },
   "allowScripts": {
-    "esbuild@0.25.12": true
+    "esbuild@0.28.2": true,
+    "esbuild@0.27.7": true
   },
   "dependencies": {
-    "postal-mime": "3.0.0"
+    "postal-mime": "3.0.0",
+    "remix": "3.0.0-rc.2"
   }
 }

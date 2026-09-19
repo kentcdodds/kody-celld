@@ -22,7 +22,8 @@ import { handleOAuth, isOAuthRoute } from './oauth/routes.ts'
 import { handleAccount, isAccountRoute } from './web/account.ts'
 import { handleCommunity, isCommunityRoute } from './web/community.ts'
 import { handleConsole, isConsoleRoute } from './web/console.ts'
-import { html, page, redirect } from './web/html.ts'
+import { renderPage } from '#app/render.tsx'
+import { redirect } from './web/http.ts'
 import { readWebSession } from './web/session.ts'
 import { handleSignin, isSigninRoute, issueSigninLink } from './web/signin.ts'
 import { isLoopbackHost } from './secrets/host-policy.ts'
@@ -87,13 +88,11 @@ function isWebRoute(pathname: string) {
 function errorPage(error: unknown) {
 	const body = errorToJson(error)
 	const status = errorStatus(error)
-	return page({
+	return renderPage({
 		title: status === 404 ? 'Not found' : 'Something went wrong',
+		pathname: '/',
 		status,
-		body: html`<div class="card">
-			<p><strong>${body.error}</strong> — ${body.message}</p>
-			<p><a href="/">Back</a></p>
-		</div>`,
+		data: { page: 'error', error: body.error, message: body.message, status },
 	})
 }
 

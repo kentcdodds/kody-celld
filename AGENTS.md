@@ -24,8 +24,10 @@ too and paste the smoke summary line in the PR.
   exactly once at issuance; `fromRuntime` calls may not mint or revoke them.
 - **Browser mutations are same-origin `POST`s with a CSRF token** (`src/web`,
   `src/oauth/routes.ts`). Keep `assertSameOrigin` + `assertCsrf` on every form
-  handler, keep the consent form's signed state, and render through the
-  auto-escaping `html` tag (`raw()` only for constants).
+  handler, keep the consent form's signed state, and render pages only through
+  `renderPage()` (`src/app/render.tsx`) with a serialisable `AppLoaderData`
+  payload — never string-concatenate HTML, and never put token/secret values
+  or session ids into loader data except the one-time reveal at issuance.
 - **No real secret values in code, docs, fixtures, or smoke output.** Smoke
   tests generate random values at runtime and assert with SHA-256 digests.
   `wrangler.jsonc` vars are loopback-only placeholders; fleet values are
@@ -53,6 +55,20 @@ them without re-testing on celld:
 - RPC preserves only `name`/`message` on errors (hence the `KodyError` rule).
 - `celld deploy` requires `main` to live inside the config's directory, which
   is why the rendered fleet config sits beside `wrangler.jsonc`.
+
+## Web UI mirrors kody
+
+`client/`, `universal/`, `public/` and `src/app/` are laid out like
+`packages/worker/` in kentcdodds/kody and use the same stack (Remix 3
+`remix/ui` + `remix/routes` + `remix/ui/server`, Vite client bundle served as
+celld static assets). Design tokens, style primitives, `styles.css`, fonts,
+icons and the shared components are verbatim copies — port upstream diffs
+instead of restyling; page components adapt to our `AppLoaderData` shapes.
+Pages must keep working with JavaScript off (forms round-trip; the browser
+bundle only hydrates islands registered in `client/entry.tsx`). The recipe is
+in [docs/web-ui.md](./docs/web-ui.md#porting-ui-changes-from-kody). Run
+`npm run build:client` before `celld dev`/`deploy` (`npm run dev` and the
+Dockerfile do).
 
 ## Style
 

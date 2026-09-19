@@ -1,0 +1,2575 @@
+/* Self-hosted fonts (CSP: style-src/font-src 'self') */
+/* latin */
+@font-face {
+	font-family: 'Bricolage Grotesque';
+	font-style: normal;
+	font-weight: 400 800;
+	font-stretch: 100%;
+	font-display: swap;
+	src: url('/fonts/bricolage-grotesque-latin.woff2') format('woff2');
+	unicode-range:
+		U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+		U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212,
+		U+2215, U+FEFF, U+FFFD;
+}
+/* latin-ext */
+@font-face {
+	font-family: 'Bricolage Grotesque';
+	font-style: normal;
+	font-weight: 400 800;
+	font-stretch: 100%;
+	font-display: swap;
+	src: url('/fonts/bricolage-grotesque-latin-ext.woff2') format('woff2');
+	unicode-range:
+		U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+		U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB,
+		U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+	font-family: 'Wix Madefor Text';
+	font-style: normal;
+	font-weight: 400 800;
+	font-display: swap;
+	src: url('/fonts/wix-madefor-text-latin.woff2') format('woff2');
+	unicode-range:
+		U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+		U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212,
+		U+2215, U+FEFF, U+FFFD;
+}
+/* latin-ext */
+@font-face {
+	font-family: 'Wix Madefor Text';
+	font-style: normal;
+	font-weight: 400 800;
+	font-display: swap;
+	src: url('/fonts/wix-madefor-text-latin-ext.woff2') format('woff2');
+	unicode-range:
+		U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+		U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB,
+		U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+	font-family: 'Wix Madefor Text';
+	font-style: italic;
+	font-weight: 400 800;
+	font-display: swap;
+	src: url('/fonts/wix-madefor-text-italic-latin.woff2') format('woff2');
+	unicode-range:
+		U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+		U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212,
+		U+2215, U+FEFF, U+FFFD;
+}
+/* latin-ext */
+@font-face {
+	font-family: 'Wix Madefor Text';
+	font-style: italic;
+	font-weight: 400 800;
+	font-display: swap;
+	src: url('/fonts/wix-madefor-text-italic-latin-ext.woff2') format('woff2');
+	unicode-range:
+		U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+		U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB,
+		U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+:root {
+	color-scheme: light dark;
+
+	/* Colors - Light mode (flat grey canvas, green accent) */
+	--color-primary: oklch(0.54 0.18 145);
+	--color-primary-hover: oklch(0.48 0.17 145);
+	--color-primary-active: oklch(0.48 0.17 145);
+	/* Pure white, not an off-white: the near-white this used to be
+	   (oklch(0.985 0.005 145), #f8fbf8) measured 4.44:1 on --color-primary,
+	   just under the 4.5:1 AA floor for 16px text like the primary pill CTA.
+	   White clears it at 4.63:1 and is indistinguishable on a green ground. */
+	--color-on-primary: oklch(1 0 0);
+	/* One step darker than the 0.47 this started at, which measured 4.36:1 on
+	   the 12%-primary soft green the "verified" pill uses as its ground — just
+	   under the 4.5:1 AA floor. 0.455 reads 4.63:1 there and improves every
+	   other green-on-light-ground use of this token too. */
+	--color-primary-text: oklch(0.455 0.17 145);
+	--color-background: oklch(0.93 0.004 250);
+	--color-surface: oklch(0.975 0.002 250);
+	--color-text: oklch(0.22 0.012 260);
+	--color-text-muted: oklch(0.44 0.014 260);
+	--color-border: oklch(0.84 0.008 250);
+	/* Form-control chrome (WCAG 1.4.11). --color-border is a decorative
+	   divider and only reads ~1.3–1.5:1 on surface/background; field borders
+	   need 3:1. Light 0.60 measures 3.21:1 on --color-background and 3.67:1
+	   on --color-surface. */
+	--color-field-border: oklch(0.6 0.012 250);
+	/* One step darker than the 0.55 this started at, which measured 4.34:1 on
+	   --color-background for 15px danger-pill text (Delete account on
+	   /account) — just under the 4.5:1 AA floor. 0.535 reads 4.64:1 there
+	   and keeps filled danger buttons further above the floor too. */
+	--color-danger: oklch(0.535 0.19 25);
+	--color-danger-hover: oklch(0.5 0.18 25);
+	--color-on-danger: oklch(0.985 0.005 25);
+	/* Amber, not a pale yellow: 0.72 still reads as yellow on the light
+	   canvas, and 0.48 warning-text clears 4.5:1 on --color-background. */
+	--color-warning: oklch(0.72 0.16 85);
+	--color-warning-text: oklch(0.48 0.15 80);
+	/* Warm light cast by the lantern Kody holds (landing + auth heroes) */
+	--lantern-glow: oklch(0.88 0.11 85 / 0.4);
+	--lantern-glow-dark: oklch(0.8 0.13 80 / 0.55);
+
+	/* Colors - Dark mode (graphite canvas, brighter green) */
+	--color-primary-dark: oklch(0.72 0.205 145);
+	--color-primary-hover-dark: oklch(0.78 0.21 145);
+	--color-primary-active-dark: oklch(0.78 0.21 145);
+	--color-on-primary-dark: oklch(0.2 0.05 148);
+	--color-primary-text-dark: oklch(0.75 0.2 145);
+	--color-background-dark: oklch(0.19 0.008 255);
+	--color-surface-dark: oklch(0.235 0.01 255);
+	--color-text-dark: oklch(0.945 0.005 250);
+	--color-text-muted-dark: oklch(0.72 0.01 255);
+	--color-border-dark: oklch(0.33 0.01 255);
+	/* 0.55 measures 3.81:1 on --color-background-dark and 3.44:1 on
+	   --color-surface-dark. */
+	--color-field-border-dark: oklch(0.55 0.012 255);
+	--color-danger-dark: oklch(0.75 0.16 25);
+	--color-danger-hover-dark: oklch(0.7 0.17 25);
+	--color-on-danger-dark: oklch(0.2 0.05 25);
+	--color-warning-dark: oklch(0.84 0.16 85);
+	--color-warning-text-dark: oklch(0.84 0.15 85);
+
+	/* Tab stops in code and other preformatted text. Browsers default to 8. */
+	tab-size: 2;
+
+	/* Typography */
+	--font-display: 'Bricolage Grotesque', system-ui, sans-serif;
+	--font-body: 'Wix Madefor Text', system-ui, sans-serif;
+	--font-family: var(--font-body);
+	--font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+	--font-size-xs: 0.75rem;
+	--font-size-sm: 0.875rem;
+	--font-size-base: 1rem;
+	--font-size-lg: 1.25rem;
+	--font-size-xl: 2rem;
+	--font-size-2xl: 3rem;
+	--font-weight-normal: 400;
+	--font-weight-medium: 500;
+	--font-weight-semibold: 600;
+	--font-weight-bold: 700;
+	--line-height-body: 1.62;
+	--line-height-body-dark: 1.7;
+
+	/* Spacing */
+	--spacing-xs: 0.25rem;
+	--spacing-sm: 0.5rem;
+	--spacing-md: 1rem;
+	--spacing-lg: 1.5rem;
+	--spacing-xl: 2rem;
+	--spacing-2xl: 3rem;
+
+	/* Border radius */
+	--radius-sm: 0.25rem;
+	--radius-md: 0.5rem;
+	--radius-lg: 0.75rem;
+	--radius-xl: 1rem;
+	--radius-card: 14px;
+	--radius-full: 999px;
+
+	/* Shadows */
+	--shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+	--shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+	--shadow-sm-dark: 0 1px 2px 0 rgb(255 255 255 / 0.05);
+	--shadow-md-dark:
+		0 4px 6px -1px rgb(255 255 255 / 0.08),
+		0 2px 4px -2px rgb(255 255 255 / 0.08);
+
+	/* Motion */
+	--ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+	--transition-fast: 160ms var(--ease-out);
+	--transition-normal: 200ms var(--ease-out);
+
+	/* Kody shirt pattern, used as a mask for background whispers.
+	   Lossless WebP: Fathom visitors are Chrome/Firefox/Safari/Edge/Opera. */
+	--kody-pattern: url('/images/kody-pattern.webp');
+
+	/* Select chevron (see `getSelectCss`). A data-URI background image cannot
+	   read `currentColor`, so the stroke is baked in and the token is themed
+	   instead. Each value is its theme's muted-text color, which clears the
+	   3:1 non-text contrast minimum on both that theme's surfaces. */
+	--select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234e535a' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+	--select-chevron-dark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a0a5ab' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+
+	/* Responsive spacing - used for page-level padding */
+	--spacing-page: var(--spacing-2xl);
+	--spacing-section: var(--spacing-xl);
+	--spacing-header: var(--spacing-xl);
+}
+
+/* Tablet responsive overrides */
+@media (max-width: 1024px) {
+	:root {
+		--spacing-page: var(--spacing-xl);
+		--spacing-section: var(--spacing-lg);
+		--spacing-header: var(--spacing-lg);
+	}
+}
+
+/* Mobile responsive overrides */
+@media (max-width: 640px) {
+	:root {
+		--spacing-page: var(--spacing-md);
+		--spacing-section: var(--spacing-md);
+		--spacing-header: var(--spacing-md);
+		--font-size-xl: 1.5rem;
+		--font-size-2xl: 2rem;
+	}
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		color-scheme: dark;
+		--color-primary: var(--color-primary-dark);
+		--color-primary-hover: var(--color-primary-hover-dark);
+		--color-primary-active: var(--color-primary-active-dark);
+		--color-on-primary: var(--color-on-primary-dark);
+		--color-primary-text: var(--color-primary-text-dark);
+		--color-background: var(--color-background-dark);
+		--color-surface: var(--color-surface-dark);
+		--color-text: var(--color-text-dark);
+		--color-text-muted: var(--color-text-muted-dark);
+		--color-border: var(--color-border-dark);
+		--color-field-border: var(--color-field-border-dark);
+		--color-danger: var(--color-danger-dark);
+		--color-danger-hover: var(--color-danger-hover-dark);
+		--color-on-danger: var(--color-on-danger-dark);
+		--color-warning: var(--color-warning-dark);
+		--color-warning-text: var(--color-warning-text-dark);
+		--lantern-glow: var(--lantern-glow-dark);
+		--select-chevron: var(--select-chevron-dark);
+		--line-height-body: var(--line-height-body-dark);
+
+		/* Dark mode shadows - lighter for visibility */
+		--shadow-sm: var(--shadow-sm-dark);
+		--shadow-md: var(--shadow-md-dark);
+	}
+}
+
+/* Reset and base styles */
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	padding: 0;
+	font-family: var(--font-family);
+	font-size: 1.0625rem;
+	line-height: var(--line-height-body);
+	color: var(--color-text);
+	background-color: var(--color-background);
+	-webkit-font-smoothing: antialiased;
+	text-rendering: optimizeLegibility;
+	overflow-x: clip;
+}
+
+h1,
+h2,
+h3 {
+	font-family: var(--font-display);
+	font-optical-sizing: auto;
+	text-wrap: balance;
+}
+
+/* No `border-radius` here. This rule used to force 4px onto whatever you
+   tabbed to, visibly resquaring pills, cards, and rounded fields at the moment
+   they took focus — and since it is unlayered, no component style could win
+   against it, so it had grown a set of per-component escape hatches whose only
+   job was to put the real radius back. `outline` already follows the element's
+   own `border-radius`, so the declaration was never needed. */
+:focus-visible {
+	outline: 2.5px solid var(--color-primary);
+	outline-offset: 3px;
+}
+
+/* The router moves focus to <main> after client-side navigation (and the
+   skip link targets it). That focus is managed wayfinding for assistive
+   tech — an outline around the entire page region communicates nothing,
+   and keyboard users still get real indicators on the elements inside. */
+main:focus-visible {
+	outline: none;
+}
+
+/* Connected pill controls (community search): the container
+   shows one focus ring via :focus-within; inner segments must not draw
+   their own. Unlayered on purpose — component styles live in @layer rmx,
+   which the global :focus-visible rule above would otherwise always beat. */
+[data-focus-container] :focus-visible {
+	outline: none;
+}
+
+/* ...except a submit button inside one. The suppression above is meant for the
+   text segments, which share the container's ring and show a caret. The button
+   is its own action, and by the time focus reaches it the container ring is
+   already lit, so without this there was no indication at all that the button
+   had focus. Drawn inside the button (negative offset) so it cannot collide
+   with the container edge, in the on-primary tone that the button's own label
+   uses: 4.6:1 on the green fill in light, 7.8:1 in dark. */
+[data-focus-container] button:focus-visible {
+	outline: 2.5px solid var(--color-on-primary);
+	outline-offset: -5px;
+}
+
+/* Individually bordered redesign fields (login form): the field draws its own
+   focus ring — green border + soft glow, see getAuthInputCss() — so the global
+   outline above would double-ring it. Same unlayered escape hatch as
+   data-focus-container. The radius override this used to carry is gone with the
+   global one it was undoing. */
+[data-field-ring]:focus-visible {
+	outline: none;
+}
+
+::selection {
+	background: oklch(from var(--color-primary) l c h / 0.3);
+}
+
+input[type='radio'],
+input[type='checkbox'] {
+	accent-color: var(--color-primary);
+}
+
+#root {
+	min-height: 100vh;
+}
+
+/* Header hairline is CSS-only so it paints before JS. A scroll-timeline
+   fade hung a11y waits (scroll-driven animations never finish), so the
+   line is always on. */
+.site-header {
+	border-bottom: 1px solid var(--color-border);
+}
+
+/* The account/admin shell owns its whole box (the prototype's `.account`
+   padding: the shared page gutter inline, so its content lines up with the
+   header's 72rem content box, plus the vertical rhythm). `<main>`'s generic
+   padding for non-redesigned routes would stack on top of it. Unlayered on
+   purpose — it has to beat the css() class that sets that padding. */
+main:has([data-account-shell]) {
+	padding: 0;
+}
+
+/* Always reserve the classic scrollbar's track, so a short page and a long one
+   have the same content width. Without it, every navigation between the two
+   shifts the layout sideways — which the route view transition then animates.
+   No-op where scrollbars overlay the content (macOS default, touch). */
+html {
+	scrollbar-gutter: stable;
+}
+
+/* Smooth scrolling only after the initial #hash jump has settled (set by
+   page-init.js) so cross-page anchor arrivals land instantly. */
+html.is-settled {
+	scroll-behavior: smooth;
+}
+
+/* Shiki dual-theme tokens follow the system color scheme. Inline light
+   colors are the default. */
+@media (prefers-color-scheme: dark) {
+	.shiki,
+	.shiki span {
+		color: var(--shiki-dark) !important;
+		background-color: var(--shiki-dark-bg) !important;
+		font-style: var(--shiki-dark-font-style) !important;
+		font-weight: var(--shiki-dark-font-weight) !important;
+		text-decoration: var(--shiki-dark-text-decoration) !important;
+	}
+}
+
+/* ---------- motion system (2026 landing redesign) ----------
+   Enhance-only: content is fully visible without JS; the `html.js` class
+   (set pre-paint by page-init.js) gates initial-hidden states, and
+   reduced-motion removes everything. One ease everywhere (--ease-out). */
+
+@media (prefers-reduced-motion: no-preference) {
+	/* list rhythm + illustration entrances (classes added by client/reveal.ts) */
+	html.js .reveal {
+		opacity: 0;
+		translate: 0 20px;
+		transition:
+			opacity 600ms var(--ease-out),
+			translate 600ms var(--ease-out);
+		transition-delay: var(--reveal-delay, 0ms);
+	}
+
+	html.js .reveal-pop {
+		opacity: 0;
+		translate: 0 8px;
+		scale: 0.94;
+		transition:
+			opacity 420ms var(--ease-out),
+			translate 420ms var(--ease-out),
+			scale 420ms var(--ease-out);
+		transition-delay: var(--reveal-delay, 0ms);
+	}
+
+	html.js .reveal.in,
+	html.js .reveal-pop.in {
+		opacity: 1;
+		translate: 0 0;
+		scale: 1;
+	}
+
+	/* Card reveal: the same quiet rise as .reveal, but as an animation rather
+	   than a transition, so the card's own hover transitions (border, lift)
+	   keep their easing after the entrance. No scale — text never pops. */
+	html.js .reveal-card {
+		opacity: 0;
+	}
+
+	html.js .reveal-card.in {
+		opacity: 1;
+		animation: card-in 600ms var(--ease-out) var(--reveal-delay, 0ms) backwards;
+	}
+
+	/* Page-open choreography: full document loads only — SPA navigations
+	   set html[data-spa-nav] (client-router) and get the view transition
+	   as their entrance instead. `both` + opacity 0 delays LCP on the
+	   homepage h1 (PSI lab). Keep the motion anyway — the entrance is
+	   worth that hit. */
+	html.js:not([data-spa-nav]) [data-rise] {
+		animation: rise 700ms var(--ease-out) both;
+		animation-delay: calc(60ms + var(--rise, 0) * 90ms);
+	}
+
+	/* SPA route transitions (View Transitions API). The router wraps the
+	   DOM swap in startViewTransition (client/client-router.tsx). Motion
+	   lives on `page` (`<main>`), not `root` — otherwise the account rail
+	   (inside main, no name of its own until lifted) fades and slides with
+	   the content. Always-present chrome is pinned static. The rail is
+	   named so it lifts out of `page`, but it is *not* always on screen:
+	   leaving `/account` or `/admin` has an old snapshot and no new one.
+	   Pinning old/new (`animation: none`) froze that leftover rail on top
+	   of the destination. Old/new fade; only the group stays still so
+	   account↔admin (rail on both sides) does not morph/squash. Intra-docs
+	   guide switches skip this API entirely (client-router shell areas).
+	   The docs sidebar is also named `docs-nav` so a leftover transition
+	   cannot slide the rail. Browsers without the API never match these
+	   pseudos — the swap is instant. */
+	::view-transition-old(root),
+	::view-transition-new(root) {
+		animation: none;
+	}
+
+	::view-transition-old(page) {
+		animation: vt-page-out 120ms var(--ease-out) both;
+	}
+
+	::view-transition-new(page) {
+		animation: vt-page-in 220ms var(--ease-out) both;
+	}
+
+	::view-transition-old(site-header),
+	::view-transition-new(site-header),
+	::view-transition-group(site-header),
+	::view-transition-old(site-footer),
+	::view-transition-new(site-footer),
+	::view-transition-group(site-footer),
+	::view-transition-old(nav-progress),
+	::view-transition-new(nav-progress),
+	::view-transition-group(nav-progress),
+	::view-transition-group(account-nav),
+	::view-transition-group(docs-nav),
+	::view-transition-group(files-back),
+	::view-transition-group(files-head),
+	::view-transition-group(files-tree),
+	::view-transition-group(files-blob) {
+		animation: none;
+	}
+
+	/* Same treatment for the whole package files explorer: switching files is
+	   an in-place content swap, so nothing there may lift and slide the way a
+	   route change does. Every part is named (lifted out of `page`) with its
+	   group pinned — the file pane's height changes per file, and an unpinned
+	   group would squash between the two sizes. Old/new cross-fade rather
+	   than being pinned outright: none of these are on screen outside
+	   `/files`, and pinning old/new strands the leftover snapshot. */
+	::view-transition-old(account-nav),
+	::view-transition-old(docs-nav),
+	::view-transition-old(files-back),
+	::view-transition-old(files-head),
+	::view-transition-old(files-tree),
+	::view-transition-old(files-blob) {
+		animation: vt-page-out 120ms var(--ease-out) both;
+	}
+
+	::view-transition-new(account-nav),
+	::view-transition-new(docs-nav),
+	::view-transition-new(files-back),
+	::view-transition-new(files-head),
+	::view-transition-new(files-tree),
+	::view-transition-new(files-blob) {
+		animation: vt-account-nav-in 220ms var(--ease-out) both;
+	}
+
+	@keyframes vt-page-out {
+		to {
+			opacity: 0;
+		}
+	}
+
+	@keyframes vt-page-in {
+		from {
+			opacity: 0;
+			transform: translateY(8px);
+		}
+	}
+
+	@keyframes vt-account-nav-in {
+		from {
+			opacity: 0;
+		}
+	}
+
+	@keyframes rise {
+		from {
+			opacity: 0;
+			translate: 0 26px;
+		}
+
+		to {
+			opacity: 1;
+			translate: 0 0;
+		}
+	}
+
+	@keyframes card-in {
+		from {
+			opacity: 0;
+			translate: 0 20px;
+		}
+
+		to {
+			opacity: 1;
+			translate: 0 0;
+		}
+	}
+
+	@keyframes success-in {
+		from {
+			opacity: 0;
+			translate: 0 6px;
+			scale: 0.97;
+		}
+
+		to {
+			opacity: 1;
+			translate: 0 0;
+			scale: 1;
+		}
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	html.is-settled {
+		scroll-behavior: auto;
+	}
+}
+
+.app-shell {
+	min-height: 100vh;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.loading-spinner {
+	width: 36px;
+	height: 36px;
+	border-radius: 999px;
+	border: 4px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+	border-top-color: var(--color-primary);
+	opacity: 0;
+	animation:
+		spinner-fade-in 0.2s ease 120ms forwards,
+		spinner-spin 0.9s linear 120ms infinite;
+}
+
+@keyframes spinner-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+@keyframes spinner-fade-in {
+	to {
+		opacity: 1;
+	}
+}
+
+.visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
+}
+
+/* Landing page — static classes so SSR does not emit a <style data-rmx>
+   tag per node. Tokens already live on :root. */
+.landing-section-heading {
+	margin: 0;
+	font-size: clamp(1.9rem, 3.8vw, 2.8rem);
+	font-weight: 730;
+	letter-spacing: -0.025em;
+	line-height: 1.08;
+}
+
+.landing-section-heading em {
+	font-style: normal;
+	color: var(--color-primary-text);
+}
+
+.landing-inline-link {
+	color: var(--color-primary-text);
+	text-decoration-thickness: 1.5px;
+	text-underline-offset: 3px;
+}
+
+.landing-inline-link:hover {
+	color: var(--color-text);
+}
+
+.landing-code-link {
+	color: var(--color-primary-text);
+	font-weight: 600;
+	text-decoration-thickness: 1.5px;
+	text-underline-offset: 3px;
+}
+
+.landing-code-link:hover {
+	color: var(--color-text);
+}
+
+.landing-pill {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+	font: 650 1rem/1 var(--font-display);
+	border: none;
+	border-radius: var(--radius-full);
+	padding: 0.95rem 1.7rem;
+	cursor: pointer;
+	text-decoration: none;
+	white-space: nowrap;
+	background-color: var(--color-primary);
+	color: var(--color-on-primary);
+	transition:
+		background-color var(--transition-fast),
+		color var(--transition-fast),
+		transform var(--transition-fast),
+		box-shadow var(--transition-fast);
+}
+
+.landing-pill:disabled {
+	cursor: not-allowed;
+	opacity: 0.7;
+}
+
+.landing-pill:not(:disabled):active {
+	transform: translateY(0) scale(0.97);
+}
+
+@media (hover: hover) and (pointer: fine) {
+	.landing-pill:not(:disabled):hover {
+		background-color: var(--color-primary-hover);
+		color: var(--color-on-primary);
+		transform: translateY(-1px);
+		box-shadow: 0 6px 20px -8px oklch(from var(--color-primary) l c h / 0.6);
+	}
+
+	.landing-pill:not(:disabled):active {
+		transform: translateY(0) scale(0.97);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.landing-pill {
+		transition:
+			background-color var(--transition-normal),
+			border-color var(--transition-normal),
+			color var(--transition-normal),
+			opacity var(--transition-normal),
+			box-shadow var(--transition-normal);
+	}
+
+	.landing-pill:not(:disabled):hover,
+	.landing-pill:not(:disabled):active {
+		transform: none;
+	}
+}
+
+.landing-pill-swap {
+	display: inline-grid;
+	justify-items: center;
+	align-items: center;
+}
+
+.landing-pill-swap [data-swap-label] {
+	grid-area: 1 / 1;
+	white-space: nowrap;
+	transition:
+		opacity 90ms var(--ease-out),
+		filter 90ms var(--ease-out),
+		scale 90ms var(--ease-out);
+}
+
+.landing-pill-swap [data-swap-label]:not([data-active]) {
+	opacity: 0;
+	filter: blur(3px);
+	scale: 0.96;
+}
+
+.landing-pill-swap [data-swap-label][data-active] {
+	transition:
+		opacity 200ms var(--ease-out) 50ms,
+		filter 200ms var(--ease-out) 50ms,
+		scale 200ms var(--ease-out) 50ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.landing-pill-swap [data-swap-label] {
+		transition: opacity 90ms var(--ease-out);
+		filter: none;
+		scale: none;
+	}
+
+	.landing-pill-swap [data-swap-label][data-active] {
+		transition: opacity 200ms var(--ease-out) 50ms;
+	}
+}
+
+.landing-pill-swap[aria-disabled='true'] {
+	cursor: progress;
+	opacity: 0.7;
+	transform: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+	.landing-pill-swap[aria-disabled='true']:hover,
+	.landing-pill-swap[aria-disabled='true']:active {
+		transform: none;
+		box-shadow: none;
+	}
+}
+
+.landing-hero {
+	max-width: 72rem;
+	margin-inline: auto;
+	padding: clamp(3.5rem, 8vw, 6.5rem) clamp(1.25rem, 4vw, 2.5rem) 0;
+	text-align: center;
+}
+
+.landing-hero-top {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+	gap: clamp(1.5rem, 4vw, 3rem);
+	align-items: center;
+	text-align: left;
+}
+
+.landing-hero-intro {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	align-self: start;
+	min-width: 0;
+	container-type: inline-size;
+}
+
+.landing-hero-title {
+	margin: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	/* Size from the intro column so "Switching Agents" stays on one line.
+	   Skip a rem floor: it beats 13.2cqi when the root font is enlarged, and
+	   nowrap would overflow. Keep a rem/vw fallback for browsers without cqi. */
+	font-size: clamp(2.15rem, 5.2vw, 4.05rem);
+	font-size: min(13.2cqi, 4.05rem);
+	font-weight: 760;
+	line-height: 1.02;
+	letter-spacing: -0.03em;
+	font-variation-settings: 'opsz' 96;
+	text-wrap: wrap;
+}
+
+.landing-hero-title-line {
+	white-space: nowrap;
+}
+
+.landing-hero-title em {
+	font-style: normal;
+	color: var(--color-primary-text);
+}
+
+.landing-hero-actions {
+	margin-top: 1.6rem;
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 0.75rem;
+	width: 100%;
+}
+
+.landing-hero-media {
+	min-width: 0;
+}
+
+.landing-hero-video {
+	position: relative;
+	width: 100%;
+	aspect-ratio: 16 / 9;
+	min-height: 12.5rem;
+	background-color: #000;
+	border-radius: var(--radius-card);
+	overflow: hidden;
+}
+
+/* Video chooser: a horizontally scrolling strip of small thumbnails that can
+   grow with the video list. One tab stop (the listbox); arrow keys move
+   `data-active` (wrapping) and scroll it into view; Enter picks. The strip
+   bleeds past the video's edges by `--chooser-bleed` (negative margin +
+   matching padding) so the zoomed thumb has room and the first/last thumb
+   still align with the player at rest. Edges fade only when there is more to
+   scroll to on that side (`data-overflow-*`, set from scroll position).
+   Each option reserves a title slot (padding-bottom) below its thumbnail; the
+   title rests *behind* the thumb (translated up, z-index 0, faded so it cannot
+   peek through the rounded corners) and slides down into    the slot on hover or
+   keyboard-active while the whole thumb zooms and its neighbours step aside. The listbox
+   draws no ring of its own — the active option carries it, so the indicator is
+   on the thing the arrows move. */
+.landing-hero-chooser {
+	--chooser-thumb-width: 6.75rem;
+	--chooser-title-slot: 3.4rem;
+	--chooser-zoom: 1.18;
+	/* Half the zoomed card's extra width, plus a breath: how far neighbours
+	   step aside so the zoomed card never covers them. */
+	--chooser-shift: calc(
+		var(--chooser-thumb-width) * (var(--chooser-zoom) - 1) / 2 + 0.15rem
+	);
+	/* Must hold a card that has stepped aside by --chooser-shift plus its
+	   focus ring, and must stay within the hero's smallest side padding
+	   (1.25rem) so the strip never widens the page on phones. */
+	--chooser-bleed: 1.2rem;
+	--chooser-fade: 2.75rem;
+	--chooser-fade-start: black;
+	--chooser-fade-end: black;
+	position: relative;
+	display: flex;
+	gap: 0.6rem;
+	margin: calc(0.85rem - var(--chooser-bleed)) calc(-1 * var(--chooser-bleed)) 0;
+	padding: var(--chooser-bleed) var(--chooser-bleed) 0;
+	overflow-x: auto;
+	overflow-y: hidden;
+	scroll-snap-type: x proximity;
+	scroll-padding-inline: var(--chooser-bleed);
+	scrollbar-width: none;
+}
+
+.landing-hero-chooser::-webkit-scrollbar {
+	display: none;
+}
+
+.landing-hero-chooser:focus-visible {
+	outline: none;
+}
+
+.landing-hero-chooser[data-overflow-start] {
+	--chooser-fade-start: transparent;
+}
+
+.landing-hero-chooser[data-overflow-end] {
+	--chooser-fade-end: transparent;
+}
+
+.landing-hero-chooser[data-overflow-start],
+.landing-hero-chooser[data-overflow-end] {
+	mask-image: linear-gradient(
+		to right,
+		var(--chooser-fade-start),
+		black var(--chooser-fade),
+		black calc(100% - var(--chooser-fade)),
+		var(--chooser-fade-end)
+	);
+}
+
+.landing-hero-chooser-option {
+	position: relative;
+	flex: 0 0 var(--chooser-thumb-width);
+	width: var(--chooser-thumb-width);
+	padding-bottom: var(--chooser-title-slot);
+	scroll-snap-align: center;
+	cursor: pointer;
+}
+
+.landing-hero-chooser-option:hover,
+.landing-hero-chooser:focus-visible .landing-hero-chooser-option[data-active] {
+	z-index: 2;
+}
+
+.landing-hero-chooser-thumb {
+	position: relative;
+	z-index: 1;
+	display: block;
+	aspect-ratio: 16 / 9;
+	overflow: hidden;
+	background-color: #000;
+	border-radius: var(--radius-md);
+	box-shadow: var(--shadow-sm);
+	scale: 1;
+}
+
+.landing-hero-chooser-thumb img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.landing-hero-chooser-option[aria-selected='true'] .landing-hero-chooser-thumb {
+	outline: 2.5px solid var(--color-primary);
+	outline-offset: 2px;
+}
+
+.landing-hero-chooser:focus-visible
+	.landing-hero-chooser-option[data-active]
+	.landing-hero-chooser-thumb {
+	outline: 2.5px solid var(--color-primary);
+	outline-offset: 3px;
+}
+
+.landing-hero-chooser-title {
+	position: absolute;
+	inset: auto -0.6rem 0;
+	z-index: 0;
+	box-sizing: border-box;
+	height: var(--chooser-title-slot);
+	padding: 0.65rem 0.2rem 0;
+	font-size: 0.72rem;
+	line-height: 1.3;
+	color: var(--color-text-muted);
+	text-align: center;
+	text-wrap: balance;
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 3;
+	overflow: hidden;
+	translate: 0 -100%;
+	opacity: 0;
+}
+
+.landing-hero-chooser-option:hover .landing-hero-chooser-thumb,
+.landing-hero-chooser:focus-visible
+	.landing-hero-chooser-option[data-active]
+	.landing-hero-chooser-thumb {
+	scale: var(--chooser-zoom);
+	box-shadow: var(--shadow-md);
+}
+
+/* Neighbours make room for the zoomed card: everything before it slides
+   left, everything after slides right, by the card's horizontal overflow.
+   `:has(~ …)` reaches the preceding siblings, which plain combinators cannot.
+   Transform-only, so the strip's scroll geometry does not change under the
+   pointer; the outermost cards move into the bleed padding. */
+.landing-hero-chooser-option:has(~ .landing-hero-chooser-option:hover),
+.landing-hero-chooser:focus-visible
+	.landing-hero-chooser-option:has(
+		~ .landing-hero-chooser-option[data-active]
+	) {
+	translate: calc(-1 * var(--chooser-shift)) 0;
+}
+
+.landing-hero-chooser-option:hover ~ .landing-hero-chooser-option,
+.landing-hero-chooser:focus-visible
+	.landing-hero-chooser-option[data-active]
+	~ .landing-hero-chooser-option {
+	translate: var(--chooser-shift) 0;
+}
+.landing-hero-chooser-option:hover .landing-hero-chooser-title,
+.landing-hero-chooser:focus-visible
+	.landing-hero-chooser-option[data-active]
+	.landing-hero-chooser-title {
+	translate: 0 0;
+	opacity: 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.landing-hero-chooser-option {
+		transition: translate 260ms var(--ease-out);
+	}
+
+	.landing-hero-chooser-thumb {
+		transition:
+			scale 260ms var(--ease-out),
+			box-shadow 260ms var(--ease-out);
+	}
+
+	.landing-hero-chooser-title {
+		transition:
+			translate 260ms var(--ease-out),
+			opacity 200ms var(--ease-out);
+	}
+}
+
+.landing-hero-cta {
+	width: 100%;
+	box-sizing: border-box;
+}
+
+.landing-hero-copy {
+	display: flex;
+}
+
+.landing-hero-copy-button,
+.landing-hero-copy :where(button) {
+	width: 100%;
+}
+
+@media (max-width: 800px) {
+	.landing-hero-top {
+		grid-template-columns: 1fr;
+	}
+}
+
+.landing-hero-art {
+	margin-top: 0.85rem;
+	position: relative;
+	isolation: isolate;
+}
+
+.landing-hero-art::before {
+	content: '';
+	position: absolute;
+	z-index: -1;
+	inset: -6% -18%;
+	background: radial-gradient(
+		closest-side,
+		oklch(from var(--color-text) l c h / 0.07),
+		transparent 74%
+	);
+	mask-image: var(--kody-pattern);
+	mask-position: center;
+	mask-size: 340px;
+	mask-repeat: repeat;
+	-webkit-mask-image: var(--kody-pattern);
+	-webkit-mask-position: center;
+	-webkit-mask-size: 340px;
+	-webkit-mask-repeat: repeat;
+	pointer-events: none;
+}
+
+.landing-hero-art::after {
+	content: '';
+	position: absolute;
+	left: 50%;
+	top: 63%;
+	width: min(36%, 230px);
+	aspect-ratio: 4 / 3;
+	transform: translate(-50%, -50%);
+	border-radius: 50%;
+	background: radial-gradient(
+		closest-side,
+		var(--lantern-glow),
+		transparent 72%
+	);
+	mix-blend-mode: screen;
+	pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.landing-hero-art::after {
+		animation: lantern-breathe 4.5s ease-in-out infinite alternate;
+	}
+}
+
+@keyframes lantern-breathe {
+	from {
+		opacity: 0.55;
+	}
+
+	to {
+		opacity: 1;
+	}
+}
+
+/* Hero stage: Kody with the host agents tethered to his lantern. Tethers are
+   drawn over him so they visibly reach the globe; balls of lantern light
+   travel them (frame-driven, shown only with JS + motion OK). */
+.landing-hero-agents {
+	width: min(100%, 40rem);
+	margin: 2.5rem auto 0;
+}
+
+.landing-hero-agents-stage {
+	position: relative;
+	width: 100%;
+	aspect-ratio: 1 / 1;
+	isolation: isolate;
+}
+
+.landing-hero-agents-kody {
+	position: relative;
+	z-index: 1;
+	display: block;
+	width: 100%;
+	height: auto;
+}
+
+.landing-hero-agents-lines {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	overflow: visible;
+	pointer-events: none;
+	z-index: 2;
+}
+
+/* Strokes and lights dissolve into the globe instead of crossing it. Masked
+   on the <svg> box (percentages: the stage is square, so they match viewBox
+   units); the centre tracks the lantern through parallax. */
+.landing-hero-agents-lines {
+	/* Glass radii ≈ 6.3% × 5.4%; fully clear inside, faded out by ~1.5× that. */
+	mask-image: radial-gradient(
+		ellipse 9.5% 8.2% at var(--lantern-x) var(--lantern-y),
+		transparent 66%,
+		black 100%
+	);
+	-webkit-mask-image: radial-gradient(
+		ellipse 9.5% 8.2% at var(--lantern-x) var(--lantern-y),
+		transparent 66%,
+		black 100%
+	);
+}
+
+/* Neutral threads; only the travelling lights carry the lantern's warmth. */
+.landing-hero-agent-line {
+	stroke: color-mix(in oklab, var(--color-border) 75%, var(--color-text));
+	stroke-width: 0.4;
+	stroke-linecap: round;
+}
+
+/* Faint soft bloom under each line so they sit in the scene, not on it. */
+.landing-hero-agent-glow {
+	stroke: var(--color-text);
+	stroke-width: 1.4;
+	stroke-linecap: round;
+	opacity: 0.06;
+	filter: blur(0.5px);
+}
+
+/* Lights are motion-only: no JS or reduced motion leaves the tethers still. */
+.landing-hero-agent-light {
+	display: none;
+}
+
+.landing-hero-agent-light-halo {
+	fill: oklch(0.88 0.13 85 / 0.45);
+	filter: blur(0.6px);
+}
+
+.landing-hero-agent-light-core {
+	fill: oklch(0.97 0.05 90);
+}
+
+/* The shared .landing-hero-art glow is placed for the old stage; here the
+   glow lives inside the stage, centred on the globe (the image parallaxes,
+   so the glow moves with it). Static on purpose: the lights are the motion. */
+.landing-hero-agents.landing-hero-art::after {
+	display: none;
+}
+
+.landing-hero-agents-glow {
+	position: absolute;
+	z-index: 1;
+	width: 26%;
+	aspect-ratio: 1;
+	/* translate, not transform: pointer parallax owns transform. */
+	translate: -50% -50%;
+	border-radius: 50%;
+	background: radial-gradient(
+		closest-side,
+		var(--lantern-glow),
+		transparent 70%
+	);
+	mix-blend-mode: screen;
+	pointer-events: none;
+}
+
+.landing-hero-agents-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	position: absolute;
+	inset: 0;
+	z-index: 3;
+	pointer-events: none;
+}
+
+.landing-hero-agent {
+	position: absolute;
+	left: var(--x);
+	top: var(--y);
+	translate: -50% -50%;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.45rem;
+	white-space: nowrap;
+}
+
+.landing-hero-agent-tile {
+	display: grid;
+	place-items: center;
+	width: 3.5rem;
+	height: 3.5rem;
+	border-radius: 1rem;
+	color: var(--color-text);
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+	box-shadow:
+		0 10px 24px oklch(from var(--color-text) l c h / 0.1),
+		inset 0 1px 0 oklch(from var(--color-surface) calc(l + 0.06) c h);
+}
+
+.landing-hero-agent-tile::before {
+	content: '';
+	width: 1.7rem;
+	height: 1.7rem;
+	background: currentColor;
+	mask-image: var(--chip-icon);
+	mask-position: center;
+	mask-size: contain;
+	mask-repeat: no-repeat;
+	-webkit-mask-image: var(--chip-icon);
+	-webkit-mask-position: center;
+	-webkit-mask-size: contain;
+	-webkit-mask-repeat: no-repeat;
+}
+
+.landing-hero-agent-name {
+	font-size: 0.8rem;
+	font-weight: 600;
+	letter-spacing: 0.01em;
+	color: var(--color-text-muted);
+	text-shadow: 0 1px 0 var(--color-background);
+}
+
+@keyframes agent-drift {
+	from {
+		translate: -50% -50%;
+	}
+
+	to {
+		translate: -50% calc(-50% - 10px);
+	}
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	html.js .landing-hero-agent {
+		animation: agent-drift var(--dur, 7s) ease-in-out var(--del, 0s) infinite
+			alternate;
+	}
+
+	html.js .landing-hero-agent-light {
+		display: inline;
+	}
+}
+
+@media (max-width: 640px) {
+	.landing-hero-agents {
+		width: min(100%, 26rem);
+		margin-top: 1.35rem;
+	}
+
+	.landing-hero-agent {
+		gap: 0.3rem;
+	}
+
+	.landing-hero-agent-tile {
+		width: 2.5rem;
+		height: 2.5rem;
+		border-radius: 0.75rem;
+	}
+
+	.landing-hero-agent-tile::before {
+		width: 1.2rem;
+		height: 1.2rem;
+	}
+
+	.landing-hero-agent-name {
+		font-size: 0.66rem;
+	}
+}
+
+.landing-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.55em;
+	font-size: 0.95rem;
+	font-weight: 550;
+	color: var(--color-text);
+	background-color: var(--color-surface);
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-full);
+	padding: 0.45rem 1rem;
+}
+
+.landing-chip-muted {
+	color: var(--color-text-muted);
+	background-color: transparent;
+	border-style: dashed;
+}
+
+.landing-chip-icon::before {
+	content: '';
+	width: 1.05em;
+	height: 1.05em;
+	flex: none;
+	background: currentColor;
+	mask-image: var(--chip-icon);
+	mask-position: center;
+	mask-size: contain;
+	mask-repeat: no-repeat;
+	-webkit-mask-image: var(--chip-icon);
+	-webkit-mask-position: center;
+	-webkit-mask-size: contain;
+	-webkit-mask-repeat: no-repeat;
+}
+
+.landing-chip-link {
+	text-decoration: none;
+	cursor: pointer;
+}
+
+.landing-chip-link:hover {
+	color: var(--color-text);
+	border-color: color-mix(
+		in oklch,
+		var(--color-primary) 40%,
+		var(--color-border)
+	);
+	background-color: color-mix(in oklch, var(--color-primary) 8%, transparent);
+}
+
+.landing-world-link-item {
+	display: flex;
+}
+
+.landing-factory {
+	max-width: 72rem;
+	margin-inline: auto;
+	padding: clamp(3.5rem, 8vw, 6.5rem) clamp(1.25rem, 4vw, 2.5rem)
+		clamp(2rem, 4vw, 3.5rem);
+	text-align: center;
+}
+
+.landing-factory-lead {
+	margin: 1.1rem auto 0;
+	color: var(--color-text-muted);
+	font-size: 1.08rem;
+	max-width: 48ch;
+	text-wrap: pretty;
+}
+
+.landing-factory-lead strong {
+	font-weight: 700;
+	color: var(--color-text);
+}
+
+.landing-path {
+	margin: clamp(1.75rem, 4vw, 2.75rem) auto 0;
+	max-width: 48rem;
+}
+
+.landing-path-split {
+	margin-inline: 0;
+	max-width: none;
+}
+
+.landing-path-rail {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	align-items: flex-start;
+	justify-content: center;
+	gap: 0;
+	position: relative;
+}
+
+.landing-path-rail::before {
+	content: '';
+	position: absolute;
+	top: 1.15rem;
+	left: 16.67%;
+	right: 16.67%;
+	height: 2px;
+	background: color-mix(
+		in oklab,
+		var(--color-primary) 45%,
+		var(--color-border)
+	);
+	pointer-events: none;
+}
+
+.landing-path-step {
+	flex: 1 1 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.45rem;
+	position: relative;
+	z-index: 1;
+	min-width: 0;
+	padding: 0 0.65rem;
+	text-align: center;
+}
+
+.landing-path-node {
+	display: grid;
+	place-items: center;
+	width: 2.3rem;
+	height: 2.3rem;
+	border-radius: 50%;
+	border: 2px solid var(--color-primary);
+	background: var(--color-surface);
+	color: var(--color-primary-text);
+	font: 700 0.95rem/1 var(--font-display);
+}
+
+.landing-path-kicker {
+	margin: 0.35rem 0 0;
+	font-size: 0.78rem;
+	font-weight: 600;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--color-primary-text);
+}
+
+.landing-path-label {
+	margin: 0;
+	font-size: 1.15rem;
+	font-weight: 700;
+	letter-spacing: -0.015em;
+	line-height: 1.2;
+}
+
+.landing-path-note {
+	margin: 0;
+	color: var(--color-text-muted);
+	font-size: 0.92rem;
+	max-width: 16ch;
+	text-wrap: pretty;
+}
+
+.landing-path-stem {
+	width: 2px;
+	height: 1.15rem;
+	margin: 0.45rem auto 0;
+	background: color-mix(
+		in oklab,
+		var(--color-primary) 45%,
+		var(--color-border)
+	);
+}
+
+.landing-path-fan {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 0.85rem;
+}
+
+.landing-path-fan-item {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.35rem;
+	padding: 0.85rem 0.6rem;
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+	border-radius: 16px;
+	text-align: center;
+	min-width: 0;
+}
+
+.landing-path-fan-item .landing-path-kicker {
+	margin: 0;
+}
+
+.landing-path-fan-title {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-wrap: wrap;
+	gap: 0.4rem;
+	margin: 0;
+	font-size: 0.98rem;
+	font-weight: 700;
+	letter-spacing: -0.01em;
+	line-height: 1.25;
+}
+
+.landing-path-fan-title svg {
+	flex: 0 0 18px;
+	width: 18px;
+	height: 18px;
+	color: var(--color-primary-text);
+}
+
+.landing-path-fan-chips {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 0.55rem;
+}
+
+.landing-factory-ritual {
+	margin: clamp(3.5rem, 7vw, 5.25rem) auto 0;
+	font-family: var(--font-display);
+	font-size: clamp(1.85rem, 3.6vw, 2.6rem);
+	font-weight: 740;
+	letter-spacing: -0.025em;
+	line-height: 1.2;
+}
+
+.landing-factory-ritual span {
+	white-space: nowrap;
+}
+
+.landing-factory-close {
+	margin: clamp(2.25rem, 4.5vw, 3.25rem) auto 0;
+	color: var(--color-text-muted);
+	font-size: 1.02rem;
+	max-width: 42ch;
+	text-wrap: balance;
+}
+
+.landing-factory-close strong {
+	color: var(--color-text);
+	font-weight: 650;
+}
+
+.landing-walkthrough-story {
+	margin: clamp(3.75rem, 8vw, 6rem) auto 0;
+	max-width: 40rem;
+}
+
+.landing-walkthrough-heading {
+	margin: 0 0 1.35rem;
+}
+
+.landing-walkthrough-intro {
+	margin: 0 0 1rem;
+	color: var(--color-text-muted);
+	font-size: 1.05rem;
+	text-wrap: pretty;
+}
+
+.landing-walkthrough-story .landing-loop {
+	margin-top: 0;
+}
+
+.landing-loop {
+	margin: clamp(1.75rem, 4vw, 2.5rem) auto 0;
+	max-width: 40rem;
+	text-align: left;
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+	border-radius: 16px;
+	overflow: hidden;
+}
+
+.landing-loop-head,
+.landing-loop-foot {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 0.8rem;
+	padding: 0.75rem 1.05rem;
+	font-size: 0.75rem;
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--color-text-muted);
+}
+
+.landing-loop-head {
+	container-type: inline-size;
+	justify-content: space-between;
+	border-bottom: 1px solid var(--color-border);
+}
+
+.landing-loop-title {
+	min-width: 0;
+	margin: 0;
+	flex: 1;
+	text-transform: none;
+	letter-spacing: 0;
+	font-size: 0.88rem;
+	font-weight: 650;
+	line-height: 1.3;
+	color: var(--color-primary-text);
+	text-wrap: pretty;
+}
+
+.landing-loop-title-short {
+	display: none;
+}
+
+@container (max-width: 28rem) {
+	.landing-loop-title-full {
+		display: none;
+	}
+
+	.landing-loop-title-short {
+		display: inline;
+	}
+}
+
+.landing-loop-foot {
+	border-top: 1px solid var(--color-border);
+	justify-content: flex-end;
+	text-transform: none;
+	letter-spacing: 0;
+	font-size: 0.92rem;
+	font-weight: 600;
+}
+
+.landing-loop-status-dot {
+	width: 0.5rem;
+	height: 0.5rem;
+	flex: 0 0 auto;
+	border-radius: 50%;
+	background: var(--color-text-muted);
+	box-shadow: 0 0 0 3px
+		color-mix(in oklch, var(--color-text-muted) 18%, transparent);
+}
+
+.landing-loop[data-playing] .landing-loop-status-dot {
+	background: var(--color-primary-text);
+	box-shadow: 0 0 0 3px
+		color-mix(in oklch, var(--color-primary) 22%, transparent);
+}
+
+.landing-loop[data-paused] .landing-loop-status-dot,
+.landing-loop[data-ended] .landing-loop-status-dot {
+	background: var(--color-text-muted);
+	box-shadow: none;
+}
+
+.landing-loop-toggle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.45rem;
+	margin: 0;
+	padding: 0.45rem 0.7rem;
+	min-height: 2.25rem;
+	min-width: 3.5rem;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-full);
+	background: var(--color-surface);
+	color: var(--color-text);
+	font-size: 0.95rem;
+	line-height: 1;
+	cursor: pointer;
+}
+
+.landing-loop-toggle svg {
+	display: block;
+	width: 1.1em;
+	height: 1.1em;
+	flex: none;
+}
+
+/* Same box as the controls so reduced-motion can drop the buttons
+   without shrinking the header. */
+.landing-loop-toggle-slot {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.4rem;
+	min-height: 2.25rem;
+	min-width: 3.5rem;
+	flex: 0 0 auto;
+}
+
+.landing-loop-toggle:hover,
+.landing-loop-toggle:focus-visible {
+	border-color: color-mix(
+		in oklch,
+		var(--color-primary) 45%,
+		var(--color-border)
+	);
+	background: color-mix(
+		in oklch,
+		var(--color-primary) 10%,
+		var(--color-surface)
+	);
+	color: var(--color-primary-text);
+	text-decoration: none;
+}
+
+.landing-loop-chat {
+	display: flex;
+	flex-direction: column;
+	gap: 0.9rem;
+	height: min(32rem, 70vh);
+	overflow-x: hidden;
+	overflow-y: auto;
+	overflow-anchor: none;
+	padding: 1rem 1.05rem;
+}
+
+.landing-loop-scene {
+	display: flex;
+	flex-direction: column;
+	gap: 0.9rem;
+}
+
+.landing-loop-later {
+	margin: 0.4rem 0 0;
+	text-align: center;
+	font-size: 0.72rem;
+	font-weight: 700;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--color-text-muted);
+}
+
+.landing-loop-later::before,
+.landing-loop-later::after {
+	content: '';
+	display: inline-block;
+	width: 2.4rem;
+	height: 1px;
+	margin: 0 0.7rem;
+	vertical-align: middle;
+	background: var(--color-border);
+}
+
+.landing-loop-act {
+	display: grid;
+	gap: 0.2rem;
+}
+
+.landing-loop-kicker {
+	margin: 0;
+	font-size: 0.95rem;
+	font-weight: 600;
+	line-height: 1.4;
+	color: var(--color-primary-text);
+	text-wrap: pretty;
+}
+
+.landing-loop-act h3 {
+	margin: 0;
+	font-size: 1.2rem;
+	font-weight: 720;
+	letter-spacing: -0.02em;
+	color: var(--color-text);
+}
+
+.landing-loop-you {
+	margin: 0;
+}
+
+.landing-loop-you figcaption {
+	margin: 0;
+	font-size: 0.75rem;
+	font-weight: 650;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--color-text-muted);
+	text-align: right;
+}
+
+.landing-loop-you blockquote {
+	margin: 0.35rem 0 0 auto;
+	max-width: min(36rem, 100%);
+	padding: 0.5rem 1rem;
+	border: 1px solid color-mix(in srgb, var(--color-primary) 12%, transparent);
+	border-radius: 12px;
+	background: color-mix(in srgb, var(--color-primary) 6%, transparent);
+	color: var(--color-text);
+}
+
+.landing-loop-you p {
+	margin: 0;
+	min-width: 0;
+	text-wrap: pretty;
+	overflow-wrap: anywhere;
+	white-space: pre-line;
+}
+
+.landing-loop-line * {
+	min-width: 0;
+}
+
+.landing-loop-foot a {
+	color: var(--color-primary-text);
+	text-decoration: none;
+}
+
+.landing-loop-foot a:hover {
+	text-decoration: underline;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.landing-loop-line[data-newest],
+	.landing-loop-act[data-newest] {
+		animation: landing-loop-in 280ms ease-out;
+	}
+
+	@keyframes landing-loop-in {
+		from {
+			opacity: 0;
+			transform: translateY(0.35rem);
+		}
+	}
+}
+
+.landing-testimonials {
+	max-width: 44rem;
+	margin-inline: auto;
+	padding: clamp(2.5rem, 6vw, 5rem) clamp(1.25rem, 4vw, 2.5rem);
+	text-align: center;
+}
+
+.landing-testimonials-lead {
+	margin: 1.1rem auto 0;
+	color: var(--color-text-muted);
+	font-size: 1.08rem;
+	max-width: 42ch;
+	text-wrap: pretty;
+}
+
+.landing-testimonials-marquee {
+	margin: clamp(1.8rem, 4vw, 2.5rem) 0 0;
+	text-align: left;
+}
+
+.landing-testimonials-fade {
+	overflow: hidden;
+}
+
+.landing-testimonials-track {
+	display: flex;
+	flex-direction: column;
+	gap: 1.25rem;
+}
+
+.landing-testimonials-nav {
+	display: none;
+}
+
+.landing-testimonial-card {
+	margin: 0;
+	padding: clamp(1.35rem, 3vw, 1.85rem);
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+	border-radius: 16px;
+}
+
+.landing-testimonial-quote {
+	margin: 0;
+}
+
+.landing-testimonial-quote p {
+	margin: 0;
+	font-size: clamp(0.79rem, 1.65vw, 0.9rem);
+	line-height: 1.55;
+	text-wrap: pretty;
+}
+
+.landing-testimonial-person {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	margin: 1.35rem 0 0;
+}
+
+.landing-testimonial-identity {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.85rem;
+	min-width: 0;
+	color: inherit;
+	border-radius: var(--radius-md);
+}
+
+.landing-testimonial-link {
+	text-decoration: none;
+}
+
+.landing-testimonial-link:hover .landing-testimonial-name {
+	color: var(--color-primary-text);
+}
+
+.landing-testimonial-link:focus-visible {
+	outline: 2.5px solid var(--color-primary);
+	outline-offset: 3px;
+}
+
+.landing-testimonial-photo,
+.landing-testimonial-initials {
+	flex: 0 0 auto;
+	width: 3.5rem;
+	height: 3.5rem;
+	border-radius: 50%;
+}
+
+.landing-testimonial-photo {
+	object-fit: cover;
+	background: var(--color-border);
+}
+
+.landing-testimonial-initials {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	background: color-mix(
+		in oklab,
+		var(--color-primary) 18%,
+		var(--color-surface)
+	);
+	color: var(--color-primary-text);
+	font: 700 0.95rem/1 var(--font-display);
+	letter-spacing: 0.04em;
+}
+
+.landing-testimonial-meta {
+	display: flex;
+	flex-direction: column;
+	gap: 0.2rem;
+	min-width: 0;
+}
+
+.landing-testimonial-name {
+	font-weight: 650;
+	font-size: 1.02rem;
+	transition: color var(--transition-fast);
+}
+
+.landing-testimonial-title {
+	color: var(--color-text-muted);
+	font-size: 0.92rem;
+}
+
+.landing-testimonial-story {
+	margin-top: 0.75rem;
+	color: var(--color-primary-text);
+	font-size: 0.92rem;
+	font-weight: 550;
+	text-decoration: none;
+	border-radius: var(--radius-md);
+}
+
+.landing-testimonial-story:hover {
+	text-decoration: underline;
+}
+
+.landing-testimonial-story:focus-visible {
+	outline: 2.5px solid var(--color-primary);
+	outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	html.js .landing-testimonials-marquee {
+		width: 100vw;
+		max-width: 100vw;
+		margin-inline: calc(50% - 50vw);
+	}
+
+	html.js .landing-testimonials-fade {
+		overflow: hidden;
+		padding-block: 0.4rem;
+		touch-action: pan-y;
+		mask-image: linear-gradient(
+			to right,
+			transparent,
+			#000 clamp(1.5rem, 6vw, 4rem),
+			#000 calc(100% - clamp(1.5rem, 6vw, 4rem)),
+			transparent
+		);
+		-webkit-mask-image: linear-gradient(
+			to right,
+			transparent,
+			#000 clamp(1.5rem, 6vw, 4rem),
+			#000 calc(100% - clamp(1.5rem, 6vw, 4rem)),
+			transparent
+		);
+	}
+
+	html.js .landing-testimonials-track {
+		flex-direction: row;
+		align-items: stretch;
+		width: max-content;
+		gap: 1.25rem;
+	}
+
+	html.js .landing-testimonials-track.is-virtual {
+		display: grid;
+		grid-template: 1fr / 1fr;
+		align-items: stretch;
+		width: 100%;
+		gap: 0;
+	}
+
+	html.js .landing-testimonial-card {
+		display: flex;
+		flex-direction: column;
+		flex: 0 0 min(32rem, 82vw);
+		width: min(32rem, 82vw);
+		will-change: transform;
+	}
+
+	html.js .landing-testimonials-track.is-virtual .landing-testimonial-card {
+		grid-area: 1 / 1;
+		justify-self: start;
+		flex: none;
+	}
+
+	/* Author `display: flex` above beats the UA `[hidden]` rule. Unused
+	   virtual cards would stay painted at the grid origin — a stuck
+	   leading card while the rest of the lane translates past it. */
+	html.js
+		.landing-testimonials-track.is-virtual
+		.landing-testimonial-card[hidden] {
+		display: none;
+	}
+
+	html.js .landing-testimonial-person {
+		margin-top: auto;
+		padding-top: 1.35rem;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	html.js .landing-testimonials-track {
+		gap: 0;
+	}
+
+	html.js .landing-testimonial-card {
+		display: none;
+	}
+
+	html.js .landing-testimonial-card.is-active,
+	html.js
+		.landing-testimonials-track:not(:has(.landing-testimonial-card.is-active))
+		.landing-testimonial-card:first-child {
+		display: flex;
+		flex-direction: column;
+	}
+
+	html.js .landing-testimonials-nav {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.75rem;
+		margin: 0 0 1rem;
+	}
+
+	html.js .landing-testimonials-nav-button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 2.4rem;
+		height: 2.4rem;
+		margin: 0;
+		padding: 0;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-full);
+		background: var(--color-surface);
+		color: var(--color-text);
+		cursor: pointer;
+	}
+
+	html.js .landing-testimonials-nav-button svg {
+		display: block;
+		width: 1.15rem;
+		height: 1.15rem;
+	}
+
+	html.js .landing-testimonials-nav-button:hover,
+	html.js .landing-testimonials-nav-button:focus-visible {
+		border-color: color-mix(
+			in oklch,
+			var(--color-primary) 45%,
+			var(--color-border)
+		);
+		background: color-mix(
+			in oklch,
+			var(--color-primary) 10%,
+			var(--color-surface)
+		);
+	}
+}
+
+.landing-ecosystem,
+.landing-byok {
+	max-width: 72rem;
+	margin-inline: auto;
+	padding: clamp(2rem, 5vw, 4rem) clamp(1.25rem, 4vw, 2.5rem);
+	display: grid;
+	gap: clamp(2rem, 5vw, 4.5rem);
+	align-items: center;
+}
+
+.landing-ecosystem {
+	grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+}
+
+.landing-byok {
+	grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+}
+
+.landing-ecosystem-art,
+.landing-byok-art {
+	width: min(100%, 400px);
+	max-width: 100%;
+	height: auto;
+	aspect-ratio: 1;
+	display: block;
+	margin-inline: auto;
+}
+
+.landing-byok-art {
+	width: min(100%, 380px);
+}
+
+.landing-byok-copy {
+	max-width: 48ch;
+}
+
+.landing-split-copy {
+	margin: 1.1rem 0 0;
+	color: var(--color-text-muted);
+	max-width: 48ch;
+	text-wrap: pretty;
+}
+
+.landing-split-copy strong {
+	font-weight: 700;
+	color: var(--color-text);
+}
+
+.landing-world {
+	max-width: 72rem;
+	margin-inline: auto;
+	padding: clamp(3rem, 7vw, 5.5rem) clamp(1.25rem, 4vw, 2.5rem)
+		clamp(2rem, 4vw, 3rem);
+	text-align: center;
+}
+
+.landing-world-lead {
+	margin: 1.1rem auto 0;
+	color: var(--color-text-muted);
+	font-size: 1.08rem;
+	max-width: 46ch;
+	text-wrap: balance;
+}
+
+.landing-world-cloud {
+	list-style: none;
+	margin: 2.2rem auto 0;
+	padding: 0;
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 0.6rem;
+	max-width: 46rem;
+}
+
+.landing-trust {
+	max-width: 72rem;
+	margin-inline: auto;
+	padding: clamp(1.5rem, 4vw, 2.5rem) clamp(1.25rem, 4vw, 2.5rem);
+	text-align: center;
+	display: grid;
+	gap: 1.1rem;
+	justify-items: center;
+}
+
+.landing-trust p {
+	margin: 0;
+	color: var(--color-text-muted);
+	font-size: 0.98rem;
+	max-width: 58ch;
+	text-wrap: balance;
+}
+
+.landing-invite {
+	max-width: 72rem;
+	margin-inline: auto;
+	padding: clamp(2rem, 5vw, 4rem) clamp(1.25rem, 4vw, 2.5rem)
+		clamp(4.5rem, 9vw, 7rem);
+	text-align: center;
+	position: relative;
+	isolation: isolate;
+}
+
+.landing-invite::before {
+	content: '';
+	position: absolute;
+	z-index: -1;
+	inset: 0;
+	background: radial-gradient(
+		ellipse 55% 50% at 50% 42%,
+		oklch(from var(--color-text) l c h / 0.055),
+		transparent 72%
+	);
+	mask-image: var(--kody-pattern);
+	mask-position: center;
+	mask-size: 340px;
+	mask-repeat: repeat;
+	-webkit-mask-image: var(--kody-pattern);
+	-webkit-mask-position: center;
+	-webkit-mask-size: 340px;
+	-webkit-mask-repeat: repeat;
+	pointer-events: none;
+}
+
+.landing-invite-art {
+	width: min(62%, 330px);
+	max-width: 100%;
+	height: auto;
+	aspect-ratio: 1;
+	display: block;
+	margin-inline: auto;
+}
+
+.landing-invite-title {
+	margin-top: 1.6rem;
+}
+
+.landing-invite-lead {
+	margin: 1.1rem auto 0;
+	color: var(--color-text-muted);
+	font-size: 1.08rem;
+	max-width: 44ch;
+	text-wrap: balance;
+}
+
+.landing-invite-cta {
+	margin: 1.8rem auto 0;
+}
+
+/*
+ * Cloudflare's managed Turnstile widget is 300×65. Reserve that exact box
+ * on every `.kody-turnstile` host from first paint so the iframe cannot
+ * shift the form. Keep these numbers in sync with `turnstileWidgetWidthPx`
+ * / `turnstileWidgetHeightPx` in public-form-protection.ts.
+ */
+.kody-turnstile {
+	display: block;
+	box-sizing: border-box;
+	flex-shrink: 0;
+	width: min(300px, 100%);
+	height: 65px;
+	min-height: 65px;
+}
+
+@media (max-width: 800px) {
+	.landing-section-heading {
+		font-size: 2rem;
+	}
+
+	.landing-factory {
+		padding: 3.25rem 1.25rem 1.75rem;
+	}
+
+	.landing-loop-chat {
+		height: min(26rem, 65vh);
+	}
+
+	.landing-path-rail {
+		flex-direction: column;
+		align-items: stretch;
+		gap: 0;
+	}
+
+	.landing-path-rail::before {
+		top: 1.15rem;
+		bottom: 1.15rem;
+		left: 1.15rem;
+		right: auto;
+		width: 2px;
+		height: auto;
+	}
+
+	.landing-path-step {
+		flex-direction: row;
+		flex-wrap: wrap;
+		justify-content: flex-start;
+		align-items: center;
+		gap: 0.35rem 0.85rem;
+		text-align: left;
+		padding: 0 0 1.5rem 0;
+	}
+
+	.landing-path-step:last-child {
+		padding-bottom: 0;
+	}
+
+	.landing-path-kicker {
+		margin: 0;
+		flex: 1 1 auto;
+	}
+
+	.landing-path-label,
+	.landing-path-note {
+		flex: 1 1 100%;
+		padding-left: 3.15rem;
+		max-width: none;
+	}
+
+	.landing-path-stem {
+		display: none;
+	}
+
+	.landing-path-fan {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		margin-top: 1.15rem;
+	}
+
+	.landing-testimonials {
+		padding: 1.75rem 1.25rem;
+	}
+
+	.landing-ecosystem,
+	.landing-byok {
+		grid-template-columns: 1fr;
+		text-align: center;
+		padding: 1.75rem 1.25rem;
+	}
+
+	.landing-ecosystem-art {
+		order: -1;
+		width: min(60%, 300px);
+	}
+
+	.landing-byok-art {
+		width: min(60%, 300px);
+	}
+
+	.landing-byok-copy {
+		max-width: 46ch;
+		margin-inline: auto;
+	}
+
+	.landing-split-copy {
+		font-size: 1rem;
+		margin-inline: auto;
+		max-width: 46ch;
+	}
+
+	.landing-world {
+		padding: 3.25rem 1.25rem 1.75rem;
+	}
+
+	.landing-invite {
+		padding: 1.75rem 1.25rem 4.5rem;
+	}
+
+	.landing-invite-title {
+		font-size: 2rem;
+	}
+
+	.landing-invite-lead {
+		font-size: 1rem;
+		max-width: 46ch;
+	}
+}
+
+@media (max-width: 560px) {
+	.landing-path-fan {
+		grid-template-columns: 1fr;
+	}
+}
+
+/* BYOK “agent never sees the key” demo. Parked still without JS / after
+   SSR; `html.js` + `.is-playing` (added post-hydrate) start the loop. */
+.landing-byok-demo {
+	display: block;
+	width: fit-content;
+	max-width: 100%;
+	margin-top: 1.15rem;
+	margin-inline: auto;
+	text-align: left;
+	user-select: none;
+}
+
+.landing-byok-stage {
+	position: relative;
+	display: flex;
+	align-items: center;
+	padding: 0.55rem 0.15rem 2.75rem;
+	min-height: 5rem;
+	overflow: visible;
+}
+
+.landing-byok-field {
+	display: flex;
+	align-items: stretch;
+	min-width: 0;
+	background: var(--color-surface);
+	border: 1px solid var(--color-field-border);
+	border-radius: 0.9rem;
+	box-shadow:
+		0 10px 24px oklch(from var(--color-text) l c h / 0.08),
+		inset 0 1px 0 oklch(from var(--color-surface) calc(l + 0.06) c h);
+}
+
+.landing-byok-input {
+	font: 550 1rem/1.2 var(--font-body);
+	letter-spacing: 0.22em;
+	color: var(--color-text);
+	background: transparent;
+	border: none;
+	border-radius: 0.9rem 0 0 0.9rem;
+	padding: 0.72rem 0.7rem 0.72rem 1rem;
+	width: 11.5rem;
+	min-width: 0;
+	pointer-events: none;
+}
+
+.landing-byok-input:focus {
+	outline: none;
+}
+
+.landing-byok-eye {
+	display: grid;
+	place-items: center;
+	flex: none;
+	width: 2.65rem;
+	color: var(--color-text-muted);
+	background: transparent;
+	border: none;
+	border-left: 1px solid var(--color-border);
+	border-radius: 0 0.9rem 0.9rem 0;
+}
+
+.landing-byok-cursor {
+	position: absolute;
+	left: -3.15rem;
+	top: 50%;
+	z-index: 2;
+	width: 3.2rem;
+	height: 4.2rem;
+	color: var(--color-text);
+	translate: var(--byok-x, 0px) var(--byok-y, 0px);
+	pointer-events: none;
+}
+
+.landing-byok-hotspot {
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 1px;
+	height: 1px;
+}
+
+.landing-byok-cursor-shape {
+	display: block;
+	width: 20px;
+	height: 30px;
+	overflow: visible;
+	rotate: -16deg;
+	scale: var(--byok-scale, 1);
+	transform-origin: 0 0;
+	filter: drop-shadow(0 2px 4px oklch(from var(--color-text) l c h / 0.16));
+}
+
+.landing-byok-cursor-mark {
+	position: absolute;
+	left: 0.85rem;
+	top: 1.12rem;
+	display: grid;
+	place-items: center;
+	width: 2.25rem;
+	height: 2.25rem;
+	border-radius: 0.75rem;
+	color: var(--color-text);
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+	box-shadow:
+		0 10px 24px oklch(from var(--color-text) l c h / 0.1),
+		inset 0 1px 0 oklch(from var(--color-surface) calc(l + 0.06) c h);
+}
+
+.landing-byok-cursor-mark-icon {
+	display: block;
+	width: 1.15rem;
+	height: 1.15rem;
+	object-fit: contain;
+}
+
+@media (prefers-color-scheme: dark) {
+	.landing-byok-cursor-mark-icon {
+		filter: invert(1);
+	}
+}
+
+@keyframes landing-byok-shake {
+	0% {
+		translate: 0;
+	}
+
+	16% {
+		translate: -7px;
+	}
+
+	32% {
+		translate: 7px;
+	}
+
+	48% {
+		translate: -5px;
+	}
+
+	64% {
+		translate: 4px;
+	}
+
+	80% {
+		translate: -2px;
+	}
+
+	100% {
+		translate: 0;
+	}
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	html.js .landing-byok-demo.is-playing.is-clicking .landing-byok-eye {
+		color: var(--color-primary-text);
+		background: oklch(from var(--color-primary) l c h / 0.12);
+	}
+
+	html.js .landing-byok-demo.is-playing.is-clicking .landing-byok-eye svg {
+		scale: 0.88;
+	}
+
+	html.js .landing-byok-demo.is-playing.is-shaking .landing-byok-input {
+		animation: landing-byok-shake 0.42s linear;
+	}
+}

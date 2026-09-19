@@ -7,6 +7,11 @@
   "compatibility_date": "2026-01-01",
   "compatibility_flags": ["nodejs_compat", "sqlite_vec"],
   "worker_loaders": [{ "binding": "LOADER" }],
+  // Static web UI assets (stylesheet, fonts, icons, and the Vite-built browser
+  // bundle in public/build — run `npm run build:client` first). Served by celld's
+  // asset layer before the Worker; requests with no matching file fall through
+  // to src/index.ts, so the Worker still owns every route it did before.
+  "assets": { "directory": "./public", "run_worker_first": false },
   // R2-compatible bucket binding. celld stores objects under r2/<bucket_name>/ in
   // the fleet bucket (or .celld/dev locally). Optional: KODY_BLOB_PROVIDER=s3
   // talks to any S3-compatible bucket directly instead (docs/blobs.md).

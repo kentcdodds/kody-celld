@@ -1,0 +1,14 @@
+// Browser-side typecheck (DOM lib, no Workers globals) for client/ and universal/.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": [],
+    "paths": {
+      "#app/*": ["./src/app/*"],
+      "#client/*": ["./client/*"],
+      "#universal/*": ["./universal/*"]
+    }
+  },
+  "include": ["client/**/*.ts", "client/**/*.tsx", "universal/**/*.ts", "universal/**/*.tsx"]
+}

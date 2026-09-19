@@ -1,13 +1,17 @@
 import { inviteTtlMs, magicLinkTtlMs, type SigninTokenKind } from '../auth/account-store.ts'
 import { assertSameOrigin } from '../auth/cookies.ts'
-import { passwordMinLength, validatePassword } from '../auth/password.ts'
+import { passwordMinLength } from '../auth/password.ts'
 import { sendOutbound } from '../email/outbound.ts'
 import { loadEmailConfig } from '../email/service.ts'
 import type { Env } from '../env.ts'
 import { getUserCell } from '../execute/engine.ts'
 import { recordAudit } from '../lib/audit.ts'
 import { KodyError } from '../lib/errors.ts'
-import { html, page, readForm, redirect, safeNext, type Html } from './html.ts'
+import { renderPage } from '#app/render.tsx'
+import { type PageFlash } from '#universal/loader-data.ts'
+import { readForm, redirect, safeNext } from './http.ts'
+import { passwordFormView, passwordProblem } from './password-form.ts'
+export { passwordFormView, passwordProblem }
 import { endWebSession, readWebSession, startWebSession } from './session.ts'
 
 const registry = (env: Env) => env.REGISTRY.getByName('registry')
@@ -150,13 +154,11 @@ async function handleSignout(request: Request, env: Env) {
 async function handleLink(request: Request, env: Env, token: string) {
 	const peek = await registry(env).signinTokenPeek(token)
 	if (!peek) {
-		return page({
+		return renderPage({
 			title: 'Link expired',
+			pathname: '/signin',
 			status: 410,
-			body: html`<div class="card">
-				<p>This sign-in link is invalid, expired, or was already used.</p>
-				<p><a href="/signin">Back to sign in</a></p>
-			</div>`,
+			data: { page: 'signinLinkExpired' },
 		})
 	}
 
@@ -167,29 +169,34 @@ async function handleLink(request: Request, env: Env, token: string) {
 		return await finishSignin(request, env, consumed.user.id, 'magic', '/account')
 	}
 
-	const title = peek.kind === 'invite' ? 'Welcome to Kody' : 'Reset your password'
-	if (request.method === 'GET') {
-		return page({
+	const kind = peek.kind
+	const title = kind === 'invite' ? 'Welcome to Kody' : 'Reset your password'
+	const pathname = new URL(request.url).pathname
+	const linkPage = (input: { submit: string; status?: number; flash?: PageFlash | null }) =>
+		renderPage({
 			title,
-			body: html`<div class="card">
-				<p>
-					${peek.kind === 'invite' ? 'Set a password for' : 'Choose a new password for'}
-					<strong>${peek.user.email}</strong>.
-				</p>
-				${passwordForm({ action: request.url, submit: peek.kind === 'invite' ? 'Create account' : 'Set password' })}
-			</div>`,
+			pathname,
+			status: input.status ?? 200,
+			flash: input.flash ?? null,
+			data: {
+				page: 'signinLinkPassword',
+				kind,
+				email: peek.user.email,
+				passwordForm: passwordFormView({ action: pathname, submit: input.submit }),
+			},
 		})
+	if (request.method === 'GET') {
+		return linkPage({ submit: peek.kind === 'invite' ? 'Create account' : 'Set password' })
 	}
 	if (request.method !== 'POST') throw new KodyError('method_not_allowed', 'GET or POST only.', { status: 405 })
 	assertSameOrigin(request, env.KODY_PUBLIC_URL)
 	const form = await readForm(request)
 	const problem = passwordProblem(form)
 	if (problem || !form.password) {
-		return page({
-			title,
+		return linkPage({
+			submit: 'Set password',
 			status: 400,
 			flash: { kind: 'error', text: problem ?? 'Passwords do not match.' },
-			body: html`<div class="card">${passwordForm({ action: request.url, submit: 'Set password' })}</div>`,
 		})
 	}
 	const consumed = await registry(env).signinTokenConsume(token)
@@ -214,31 +221,12 @@ async function handleLink(request: Request, env: Env, token: string) {
 async function handleSetup(request: Request, env: Env) {
 	if ((await registry(env).userCount()) > 0) return redirect('/signin')
 	const body = (error: string | null = null) =>
-		page({
+		renderPage({
 			title: 'Set up Kody',
+			pathname: '/setup',
 			status: error ? 400 : 200,
 			flash: error ? { kind: 'error', text: error } : null,
-			body: html`<div class="card">
-				<p>
-					No accounts exist yet. Create the first one with the admin token from your deployment's
-					<code>KODY_ADMIN_TOKEN</code> (see <code>.env</code> or the Docker volume).
-				</p>
-				<form method="post" action="/setup" class="stack">
-					<label>Admin token <input name="adminToken" type="password" autocomplete="off" required /></label>
-					<label>Your email <input name="email" type="email" autocomplete="email" required /></label>
-					<label
-						>Password (${passwordMinLength}+ characters)
-						<input
-							name="password"
-							type="password"
-							autocomplete="new-password"
-							minlength="${passwordMinLength}"
-							required
-					/></label>
-					<label>Confirm password <input name="confirm" type="password" autocomplete="new-password" required /></label>
-					<div><button class="primary" type="submit">Create account</button></div>
-				</form>
-			</div>`,
+			data: { page: 'setup', passwordMinLength },
 		})
 	if (request.method === 'GET') return body()
 	if (request.method !== 'POST') throw new KodyError('method_not_allowed', 'GET or POST only.', { status: 405 })
@@ -262,17 +250,6 @@ async function handleSetup(request: Request, env: Env) {
 	return await finishSignin(request, env, created.user.id, 'setup', '/account?flash=welcome')
 }
 
-/** Validates before any token is consumed or account created, so a typo does not burn a one-time link. */
-export function passwordProblem(form: { password?: string; confirm?: string }) {
-	if (!form.password || form.password !== form.confirm) return 'Passwords do not match.'
-	try {
-		validatePassword(form.password)
-		return null
-	} catch (error) {
-		return KodyError.fromUnknown(error)?.message ?? 'That password is not allowed.'
-	}
-}
-
 function timingSafeEqual(a: string, b: string) {
 	const enc = new TextEncoder()
 	const ab = enc.encode(a)
@@ -283,7 +260,7 @@ function timingSafeEqual(a: string, b: string) {
 
 // ------------------------------------------------------------------ views
 
-const flashes: Record<string, { kind: 'ok' | 'error'; text: string }> = {
+const flashes: Record<string, PageFlash> = {
 	signed_out: { kind: 'ok', text: 'Signed out.' },
 	link_expired: { kind: 'error', text: 'That link expired or was already used. Request a new one.' },
 	signin_required: { kind: 'error', text: 'Sign in to continue.' },
@@ -300,73 +277,19 @@ function signinPage(
 		error?: string
 		email?: string
 		status?: number
-		flash?: { kind: 'ok' | 'error'; text: string } | null
+		flash?: PageFlash | null
 	},
 ) {
-	const magic = magicLinksAvailable(env)
-	return page({
+	return renderPage({
 		title: 'Sign in',
+		pathname: '/signin',
 		status: input.status ?? (input.error ? 400 : 200),
 		flash: input.error ? { kind: 'error', text: input.error } : (input.flash ?? null),
-		body: html` <div class="card">
-				<h2 style="margin-top:0">Email and password</h2>
-				<form method="post" action="/signin" class="stack">
-					<input type="hidden" name="method" value="password" />
-					<input type="hidden" name="next" value="${input.next}" />
-					<label
-						>Email <input name="email" type="email" autocomplete="username" value="${input.email ?? ''}" required
-					/></label>
-					<label>Password <input name="password" type="password" autocomplete="current-password" required /></label>
-					<div><button class="primary" type="submit">Sign in</button></div>
-				</form>
-			</div>
-			${
-				magic
-					? html`<div class="card">
-							<h2 style="margin-top:0">Email me a link</h2>
-							<form method="post" action="/signin" class="stack">
-								<input type="hidden" name="method" value="magic" />
-								<input type="hidden" name="next" value="${input.next}" />
-								<label>Email <input name="email" type="email" autocomplete="username" required /></label>
-								<div><button type="submit">Send sign-in link</button></div>
-							</form>
-						</div>`
-					: ''
-			}
-			<div class="card">
-				<h2 style="margin-top:0">API token</h2>
-				<p class="muted small">
-					Have a <code>kc_…</code> token from the admin? Paste it to sign in and set a password.
-				</p>
-				<form method="post" action="/signin" class="stack">
-					<input type="hidden" name="method" value="token" />
-					<input type="hidden" name="next" value="${input.next}" />
-					<label>Token <input name="token" type="password" autocomplete="off" required /></label>
-					<div><button type="submit">Sign in with token</button></div>
-				</form>
-			</div>
-			<p class="muted small">
-				No account? Ask the operator for an invite link${magic ? '' : ' or an API token'}. Operators use the
-				<a href="/console">admin console</a>.
-			</p>`,
+		data: {
+			page: 'login',
+			next: input.next,
+			email: input.email ?? '',
+			magicLinks: magicLinksAvailable(env),
+		},
 	})
-}
-
-export function passwordForm(input: { action: string; submit: string; requireCurrent?: boolean; csrf?: string }): Html {
-	return html`<form method="post" action="${input.action}" class="stack">
-		${input.csrf ? html`<input type="hidden" name="csrf" value="${input.csrf}" />` : ''}
-		${
-			input.requireCurrent
-				? html`<label
-						>Current password <input name="current" type="password" autocomplete="current-password" required
-					/></label>`
-				: ''
-		}
-		<label
-			>New password (${passwordMinLength}+ characters)
-			<input name="password" type="password" autocomplete="new-password" minlength="${passwordMinLength}" required
-		/></label>
-		<label>Confirm <input name="confirm" type="password" autocomplete="new-password" required /></label>
-		<div><button class="primary" type="submit">${input.submit}</button></div>
-	</form>`
 }

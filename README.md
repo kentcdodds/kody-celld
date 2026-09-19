@@ -282,6 +282,7 @@ and was not verified: [docs/run-fleet.md](./docs/run-fleet.md).
 
 ```sh
 npm run validate     # typecheck + lint (oxlint) + prettier --check + unit tests (node --test)
+npm run dev          # builds the browser bundle (vite) then `celld dev` on :8787
 npm run smoke        # needs `npm run dev` running
 ```
 
@@ -292,7 +293,11 @@ src/index.ts              Worker entry: /health, /mcp, /api/*, /admin/*, OAuth +
 src/lib/                  KodyError, limits/quotas from env, audit helper
 src/auth/                 bearer authentication (API + OAuth tokens), passwords (PBKDF2), cookies/CSRF, account store
 src/oauth/                MCP OAuth 2.1 authorization server: protocol rules, registry-cell store, routes
-src/web/                  server-rendered HTML: sign-in/setup, account pages, operator console
+src/web/                  browser route handlers: sign-in/setup, account pages, operator console, community (build loader data → renderPage)
+src/app/                  SSR: renderPage (remix/ui/server), document shell, security headers — mirrors kody's packages/worker/src/app
+client/                   remix/ui page components, shell, hydration islands — mirrors kody's packages/worker/client
+universal/                typed routes, loader-data contracts, design tokens/primitives/icons shared by Worker + browser — mirrors kody's universal/
+public/                   static assets served by celld: styles.css, fonts, page-init.js, build/ (vite output)
 src/mcp/                  JSON-RPC server (search, execute) + search ranking
 src/capabilities/         the kody.<capability>() catalog (packages, community, secrets, jobs, runs, storage, memories, ai, blobs, browser, account, system)
 src/execute/              module graph → Worker Loader isolate; RuntimeHost RPC; kody:runtime source; npm resolver + durable module cache

@@ -93,7 +93,7 @@ export async function smokeWeb({ user, mcp }) {
 	// API tokens: create (value shown once) then revoke; token works on /mcp until revoked.
 	const created = await browser.post('/account/tokens', { action: 'create', label: 'smoke-web', csrf })
 	assert(created.status === 200 && created.text.includes('smoke-web'), 'token created page shows label', created.status)
-	const shownToken = /<pre class="secret">([^<]+)<\/pre>/.exec(created.text)?.[1]
+	const shownToken = /<pre class="secret[^"]*"[^>]*>([^<]+)<\/pre>/.exec(created.text)?.[1]
 	assert(shownToken?.startsWith('kc_'), 'token value shown once')
 	const probe = await fetch(`${baseUrl}/mcp`, {
 		method: 'POST',

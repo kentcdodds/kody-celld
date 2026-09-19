@@ -211,7 +211,9 @@ persistence (hashed clients/codes/tokens, refresh-token families with replay
 detection), `src/oauth/routes.ts` the HTTP surface incl. the signed consent
 form.
 
-Browser sign-in (`src/web/*`, `src/auth/*`) is server-rendered HTML with a
+Browser sign-in (`src/web/*`, `src/auth/*`) is server-rendered with the same
+Remix 3 / `remix/ui` stack and design system as kentcdodds/kody (`client/`,
+`universal/`, `src/app/` mirror `packages/worker/`), with a
 hashed session cookie, PBKDF2 passwords with lockout, one-time invite / reset /
 magic tokens, session-bound CSRF + same-origin checks, and a separate
 admin-token console cookie. The account pages and the operator console call

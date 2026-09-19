@@ -7,3 +7,4 @@ node_modules/
 .DS_Store
 wrangler.fleet.jsonc
 .dev.vars
+public/build

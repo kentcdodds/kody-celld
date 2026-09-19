@@ -1,3 +1,4 @@
+import { renderPage } from '#app/render.tsx'
 import type { Env } from '../env.ts'
 import { getUserCell } from '../execute/engine.ts'
 import { recordAudit } from '../lib/audit.ts'
@@ -16,32 +17,16 @@ export function connectUrl(baseUrl: string, userId: string, connectId: string, t
 	return `${baseUrl}/connect/oauth/${encodeURIComponent(userId)}/${encodeURIComponent(connectId)}?ticket=${encodeURIComponent(ticket)}`
 }
 
-function escapeHtml(value: string) {
-	return value.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
-}
-
-function page(title: string, body: string, status = 200) {
-	return new Response(
-		`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)} · Kody</title><style>body{font:16px/1.5 system-ui,sans-serif;max-width:40rem;margin:3rem auto;padding:0 1rem;color:#111}code{background:#f3f3f3;padding:.1em .3em;border-radius:3px}button{font:inherit;padding:.6em 1.2em;border-radius:6px;border:1px solid #333;background:#111;color:#fff;cursor:pointer}ul{padding-left:1.2em}.muted{color:#666}</style></head><body>${body}</body></html>`,
-		{
-			status,
-			headers: {
-				'content-type': 'text/html; charset=utf-8',
-				'cache-control': 'no-store',
-				'referrer-policy': 'no-referrer',
-			},
-		},
-	)
-}
-
 function errorPage(error: unknown) {
 	const json = errorToJson(error)
 	const status = KodyError.fromUnknown(error)?.status ?? 500
-	return page(
-		'Connection failed',
-		`<h1>Connection failed</h1><p><code>${escapeHtml(json.error)}</code>: ${escapeHtml(json.message)}</p><p class="muted">Ask your assistant for a fresh connect link and try again.</p>`,
+	return renderPage({
+		title: 'Connection failed',
+		pathname: oauthCallbackPath,
 		status,
-	)
+		headers: { 'referrer-policy': 'no-referrer' },
+		data: { page: 'connectOauthError', error: json.error, message: json.message },
+	})
 }
 
 async function lookupUser(env: Env, userId: string) {
@@ -103,20 +88,22 @@ export async function handleOAuthConnect(
 			}
 			const record = await userCell.integrationGet(connect.name)
 			if (!record) throw new KodyError('integration_not_found', 'This integration no longer exists.', { status: 404 })
-			const hosts = record.allowedHosts.map((h) => `<li><code>${escapeHtml(h)}</code></li>`).join('')
-			const scopes = record.scopes.length
-				? `<p>Requested scopes: ${record.scopes.map((s) => `<code>${escapeHtml(s)}</code>`).join(' ')}</p>`
-				: ''
-			return page(
-				`Connect ${record.provider}`,
-				`<h1>Connect <code>${escapeHtml(record.name)}</code> (${escapeHtml(record.provider)})</h1>
-				<p>Signed in as <strong>${escapeHtml(user.email)}</strong>.</p>
-				<p>After you authorize, Kody will hold the access token encrypted and inject it only into requests to:</p>
-				<ul>${hosts}</ul>${scopes}
-				${record.description ? `<p class="muted">${escapeHtml(record.description)}</p>` : ''}
-				<form method="post"><input type="hidden" name="ticket" value="${escapeHtml(ticket)}"><button type="submit">Continue to ${escapeHtml(record.provider)}</button></form>
-				<p class="muted">This link expires ${escapeHtml(connect.expiresAt)} and works once.</p>`,
-			)
+			return renderPage({
+				title: `Connect ${record.provider}`,
+				pathname: url.pathname,
+				headers: { 'referrer-policy': 'no-referrer' },
+				data: {
+					page: 'connectOauth',
+					name: record.name,
+					provider: record.provider,
+					email: user.email,
+					hosts: record.allowedHosts,
+					scopes: record.scopes,
+					description: record.description ?? null,
+					ticket,
+					expiresAt: connect.expiresAt,
+				},
+			})
 		}
 
 		if (request.method === 'POST') {
@@ -154,10 +141,12 @@ async function handleCallback(request: Request, env: Env, ctx: ExecutionContext,
 			details: { provider: record.provider, grantedScope: record.grantedScope, expiresAt: record.expiresAt },
 		})
 		notify(env, ctx, user, 'integration.auth.succeeded', record, null)
-		return page(
-			'Connected',
-			`<h1>Connected <code>${escapeHtml(record.name)}</code></h1><p>${escapeHtml(record.provider)} is now connected for <strong>${escapeHtml(user.email)}</strong>. You can close this tab and tell your assistant to continue.</p>`,
-		)
+		return renderPage({
+			title: 'Connected',
+			pathname: oauthCallbackPath,
+			headers: { 'referrer-policy': 'no-referrer' },
+			data: { page: 'connectOauthDone', name: record.name, provider: record.provider, email: user.email },
+		})
 	} catch (error) {
 		const json = errorToJson(error)
 		// A connect attempt fails at most once; later hits on the same state are replays.

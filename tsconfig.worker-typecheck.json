@@ -1,0 +1,14 @@
+// `tsc` view of the Worker: `#client/app-root.tsx` resolves to a type stub so
+// the browser component tree (DOM lib) never enters the Worker typecheck —
+// kody's packages/worker/tsconfig-worker-typecheck.json does the same.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "#app/*": ["./src/app/*"],
+      "#client/app-root.tsx": ["./src/app/ssr-stubs/app-root.ts"],
+      "#client/*": ["./client/*"],
+      "#universal/*": ["./universal/*"]
+    }
+  }
+}
