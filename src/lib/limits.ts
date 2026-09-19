@@ -49,6 +49,8 @@ export type Quotas = {
 	emailReceivesPerDay: number
 	/** Minted webhook URLs per user. */
 	webhooks: number
+	/** OAuth integrations (app + connection) per user. */
+	integrations: number
 }
 
 export type LimitEnv = Partial<
@@ -72,7 +74,8 @@ export type LimitEnv = Partial<
 		| 'KODY_QUOTA_EMAIL_MESSAGES'
 		| 'KODY_QUOTA_EMAIL_SENDS_PER_DAY'
 		| 'KODY_QUOTA_EMAIL_RECEIVES_PER_DAY'
-		| 'KODY_QUOTA_WEBHOOKS',
+		| 'KODY_QUOTA_WEBHOOKS'
+		| 'KODY_QUOTA_INTEGRATIONS',
 		string | undefined
 	>
 >
@@ -102,6 +105,7 @@ export const defaultQuotas: Quotas = {
 	emailSendsPerDay: 0,
 	emailReceivesPerDay: 0,
 	webhooks: 0,
+	integrations: 0,
 }
 
 export const quotaKeys = Object.keys(defaultQuotas) as Array<keyof Quotas>
@@ -178,6 +182,7 @@ export function quotasFromEnv(env: LimitEnv): Quotas {
 			nonNegative(raw, defaultQuotas.emailReceivesPerDay),
 		),
 		webhooks: read('KODY_QUOTA_WEBHOOKS', env, (raw) => nonNegative(raw, defaultQuotas.webhooks)),
+		integrations: read('KODY_QUOTA_INTEGRATIONS', env, (raw) => nonNegative(raw, defaultQuotas.integrations)),
 	}
 }
 

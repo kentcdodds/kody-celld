@@ -54,7 +54,19 @@ export const subscriptionTopics = [
 	'email.message.received',
 	'email.message.quarantined',
 	'email.message.delivery.updated',
+	'integration.auth.succeeded',
+	'integration.auth.failed',
 ] as const
+
+/** Export a package must declare to act as a `{{secret/<id>:<ref>}}` provider. */
+export const secretProviderExportName = 'secretProvider'
+export const secretProviderIdPattern = /^[a-z0-9][a-z0-9._-]{0,63}$/
+
+export type SecretProviderDefinition = {
+	id: string
+	entry: string
+	description?: string
+}
 
 export type SubscriptionTopic = (typeof subscriptionTopics)[number]
 
@@ -71,6 +83,7 @@ export type PackageManifest = {
 	jobs: Record<string, JobDefinition>
 	webhooks: Array<WebhookDefinition>
 	subscriptions: Array<SubscriptionDefinition>
+	secretProvider: SecretProviderDefinition | null
 	dependencies: Record<string, string>
 	hidden: boolean
 	keywords: Array<string>
@@ -286,6 +299,31 @@ function parseSubscriptions(raw: unknown, files: PackageFiles): Array<Subscripti
 	return subscriptions
 }
 
+function parseSecretProvider(raw: unknown, exports: Record<string, string>): SecretProviderDefinition | null {
+	if (raw === undefined) return null
+	if (!isRecord(raw) || typeof raw.id !== 'string') {
+		throw new KodyError('invalid_manifest', 'kody.secretProvider must be an object with a string "id".')
+	}
+	if (!secretProviderIdPattern.test(raw.id)) {
+		throw new KodyError(
+			'invalid_manifest',
+			`kody.secretProvider.id "${raw.id}" is invalid (lowercase letters, digits, ".", "_", "-").`,
+		)
+	}
+	const entry = exports[secretProviderExportName]
+	if (!entry) {
+		throw new KodyError(
+			'invalid_manifest',
+			`kody.secretProvider requires an "./${secretProviderExportName}" export in package.json#exports.`,
+		)
+	}
+	return {
+		id: raw.id,
+		entry,
+		...(typeof raw.description === 'string' ? { description: raw.description } : {}),
+	}
+}
+
 export function parsePackageManifest(files: PackageFiles): PackageManifest {
 	const source = files['package.json']
 	if (!source) throw new KodyError('invalid_manifest', 'package.json is required.')
@@ -379,6 +417,7 @@ export function parsePackageManifest(files: PackageFiles): PackageManifest {
 		jobs,
 		webhooks: parseWebhooks(kody.webhooks, exports),
 		subscriptions: parseSubscriptions(kody.subscriptions, files),
+		secretProvider: parseSecretProvider(kody.secretProvider, exports),
 		dependencies,
 		hidden: kody.hidden === true,
 		keywords: Array.isArray(json.keywords) ? json.keywords.filter((k): k is string => typeof k === 'string') : [],

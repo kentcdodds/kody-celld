@@ -10,6 +10,7 @@ import { getMemoryCell } from './capabilities/memory.ts'
 import { capabilities, domains, runCapability } from './capabilities/registry.ts'
 import { KODY_CELLD_VERSION, type Env } from './env.ts'
 import { getUserCell } from './execute/engine.ts'
+import { handleOAuthConnect } from './integrations/connect.ts'
 import { dispatchDueJobs } from './jobs/dispatcher.ts'
 import { recordAudit } from './lib/audit.ts'
 import { errorStatus, errorToJson, KodyError } from './lib/errors.ts'
@@ -431,6 +432,7 @@ export default {
 			if (url.pathname.startsWith('/webhooks/')) return await handleWebhookIngress(request, env, ctx, url)
 			if (url.pathname.startsWith('/email/inbound/')) return await handleEmailInbound(request, env, ctx, url)
 			if (url.pathname.startsWith('/email/events/')) return await handleEmailEvents(request, env, ctx, url)
+			if (url.pathname.startsWith('/connect/oauth/')) return await handleOAuthConnect(request, env, ctx, url)
 			if (url.pathname === '/admin' || url.pathname.startsWith('/admin/')) {
 				return await handleAdmin(request, env, ctx, url)
 			}

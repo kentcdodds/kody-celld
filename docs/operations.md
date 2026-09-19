@@ -103,20 +103,22 @@ curl -s "$BASE/admin/audit?actor=admin&action=secret_host." -H "authorization: B
 
 `action` filters by prefix. Actions recorded today:
 
-| Action                                                                                | Actor | Target               | Details                                                      |
-| ------------------------------------------------------------------------------------- | ----- | -------------------- | ------------------------------------------------------------ |
-| `user.create`, `token.issue`                                                          | admin | user id              | email / label                                                |
-| `secret_host.approve`, `secret_host.revoke`                                           | admin | user id              | host                                                         |
-| `quota.set`, `quota.clear`                                                            | admin | user id              | the override                                                 |
-| `jobs.dispatch`                                                                       | admin | —                    | jobs ran / skipped                                           |
-| `secret.rekey`                                                                        | admin | —                    | current key id, rows resealed / remaining                    |
-| `memory.reindex`                                                                      | admin | user id              | embedding model, rows re-embedded                            |
-| `secret.save`, `secret.delete`                                                        | user  | secret name          | scope, package name                                          |
-| `package.save`, `package.delete`                                                      | user  | package name         | version, source, job names                                   |
-| `job.enable`, `job.disable`                                                           | user  | job id               | —                                                            |
-| `memory.create`, `memory.update`, `memory.delete.soft`, `memory.delete.hard`          | user  | memory id            | category, status, package (never the text)                   |
-| `webhook.mint`, `webhook.rotate`, `webhook.delete`, `webhook.apply`, `webhook.reveal` | user  | handle               | package + webhook name, provider host (never the URL secret) |
-| `email.inbox.claim`, `email.inbox.release`, `email.destination.verify`, `email.send`  | user  | address / message id | provider, recipient count (never bodies or codes)            |
+| Action                                                                                                                                                                    | Actor | Target               | Details                                                                 |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | -------------------- | ----------------------------------------------------------------------- |
+| `user.create`, `token.issue`                                                                                                                                              | admin | user id              | email / label                                                           |
+| `secret_host.approve`, `secret_host.revoke`                                                                                                                               | admin | user id              | host                                                                    |
+| `quota.set`, `quota.clear`                                                                                                                                                | admin | user id              | the override                                                            |
+| `jobs.dispatch`                                                                                                                                                           | admin | —                    | jobs ran / skipped                                                      |
+| `secret.rekey`                                                                                                                                                            | admin | —                    | current key id, rows resealed / remaining                               |
+| `memory.reindex`                                                                                                                                                          | admin | user id              | embedding model, rows re-embedded                                       |
+| `secret.save`, `secret.delete`                                                                                                                                            | user  | secret name          | scope, package name                                                     |
+| `package.save`, `package.delete`                                                                                                                                          | user  | package name         | version, source, job names                                              |
+| `job.enable`, `job.disable`                                                                                                                                               | user  | job id               | —                                                                       |
+| `memory.create`, `memory.update`, `memory.delete.soft`, `memory.delete.hard`                                                                                              | user  | memory id            | category, status, package (never the text)                              |
+| `webhook.mint`, `webhook.rotate`, `webhook.delete`, `webhook.apply`, `webhook.reveal`                                                                                     | user  | handle               | package + webhook name, provider host (never the URL secret)            |
+| `email.inbox.claim`, `email.inbox.release`, `email.destination.verify`, `email.send`                                                                                      | user  | address / message id | provider, recipient count (never bodies or codes)                       |
+| `integration.save`, `integration.connect_start`, `integration.connect`, `integration.connect_failed`, `integration.usage`, `integration.disconnect`, `integration.delete` | user  | integration name     | provider, flow, hosts, failure code (never tokens or client secrets)    |
+| `secret_provider.bind`, `secret_provider.unbind`, `secret_provider.lock`, `secret_provider.grant`, `secret_provider.revoke`                                               | user  | provider id          | package name, ref, locked flag (never config values or resolved values) |
 
 **What is never in the log:** secret values, encrypted blobs, API tokens, the
 admin token, master keys, run code or run results. Callers pass names and ids
@@ -137,6 +139,14 @@ The log is a record of _who changed what_, not a copy of the data.
 Per-webhook rate limits come from the package manifest
 (`rateLimitPerMinute`, capped at 600). Email counters show up in `usageGet`
 (`emailMessages`, `emailSends`, `emailReceives`). See [email.md](./email.md) and [webhooks.md](./webhooks.md).
+
+## Integrations and secret providers
+
+| Variable                             | Default | Notes                                                                                                                                    |
+| ------------------------------------ | ------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `KODY_PUBLIC_URL`                    | —       | OAuth redirect URI is `${KODY_PUBLIC_URL}/connect/oauth/callback`; register it in each OAuth app ([integrations.md](./integrations.md)). |
+| `KODY_SECRET_PROVIDER_CACHE_SECONDS` | `300`   | In-memory TTL for resolved `{{secret/…}}` values in the user cell; `0` disables caching ([secret-providers.md](./secret-providers.md)).  |
+| `KODY_SECRET_PROVIDER_TIMEOUT_MS`    | `20000` | Wall-clock cap for one sealed provider run (minimum 1000).                                                                               |
 
 ## Smoke coverage
 

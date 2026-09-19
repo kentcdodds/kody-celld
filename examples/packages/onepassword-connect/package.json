@@ -1,0 +1,15 @@
+{
+  "name": "@kody-examples/onepassword-connect",
+  "version": "1.0.0",
+  "description": "Secret provider for a self-hosted 1Password Connect server: {{secret/1password:vaults/<vault>/items/<item>/fields/<field>}}.",
+  "exports": {
+    ".": "./status.js",
+    "./secretProvider": "./provider.js"
+  },
+  "kody": {
+    "secretProvider": {
+      "id": "1password",
+      "description": "Resolves item fields from 1Password Connect; the item's website URLs become the allowed hosts."
+    }
+  }
+}

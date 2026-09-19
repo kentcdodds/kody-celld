@@ -1,11 +1,10 @@
 import type { EmailAddress, EmailMessageRecord, UserCell } from '../cells/user-cell.ts'
-import type { UserRecord } from '../cells/registry-cell.ts'
 import type { Env } from '../env.ts'
-import { executeRun, getUserCell } from '../execute/engine.ts'
+import { getUserCell } from '../execute/engine.ts'
 import { recordAudit } from '../lib/audit.ts'
 import { KodyError } from '../lib/errors.ts'
 import { limitsFromEnv } from '../lib/limits.ts'
-import type { SubscriptionTopic } from '../packages/manifest.ts'
+import { dispatchTopic } from '../packages/subscriptions.ts'
 import { emailConfigFromEnv, type EmailConfig } from './config.ts'
 import { isOutboundProvider, normalizeDeliveryEvents, type DeliveryEvent } from './events.ts'
 import {
@@ -17,8 +16,6 @@ import {
 } from './inbound.ts'
 import { snippetOf, splitInboxAddress } from './message.ts'
 import { sendOutbound, type OutboundAttachment, type OutboundMessage } from './outbound.ts'
-
-type Exports = ExecutionContext['exports']
 
 function json(payload: unknown, status: number, headers: Record<string, string> = {}) {
 	return Response.json(payload, { status, headers: { 'cache-control': 'no-store', ...headers } })
@@ -207,7 +204,7 @@ export async function deliverInbound(
 			classification,
 		})
 		ctx.waitUntil(
-			dispatchEmailTopic(
+			dispatchTopic(
 				env,
 				ctx.exports,
 				user,
@@ -227,33 +224,6 @@ function safeIso(value: string) {
 /** What subscription handlers receive: metadata + bodies, never attachment bytes (fetch via emailAttachmentGet). */
 export function subscriptionMessage(record: EmailMessageRecord) {
 	return { ...record, snippet: snippetOf(record.text, record.html) }
-}
-
-/** Runs every package handler subscribed to `topic` for this user; failures land in run history, not here. */
-export async function dispatchEmailTopic(
-	env: Env,
-	exports: Exports,
-	user: UserRecord,
-	topic: SubscriptionTopic,
-	payload: Record<string, unknown>,
-) {
-	const userCell = getUserCell(env, user.id)
-	const subscriptions = await userCell.subscriptionList({ topic })
-	await Promise.all(
-		subscriptions.map(async (subscription) => {
-			try {
-				await executeRun(env, exports, {
-					kind: 'subscription',
-					user: { id: user.id, email: user.email },
-					entry: { kind: 'package', packageName: subscription.packageName, entryPath: subscription.handler },
-					params: { topic, packageName: subscription.packageName, ...payload },
-					trigger: `subscription:${topic}`,
-				})
-			} catch (error) {
-				console.error(`subscription ${subscription.packageName} (${topic}) failed:`, error)
-			}
-		}),
-	)
 }
 
 /** `POST /email/events/:provider` — outbound delivery status webhooks. */
@@ -321,7 +291,7 @@ export async function applyDeliveryEvents(
 		if (!updated) continue
 		matched++
 		ctx.waitUntil(
-			dispatchEmailTopic(env, ctx.exports, user, 'email.message.delivery.updated', {
+			dispatchTopic(env, ctx.exports, user, 'email.message.delivery.updated', {
 				message: subscriptionMessage(updated),
 				delivery: { event: event.event, status: event.status, detail: event.detail, at: event.at },
 			}),

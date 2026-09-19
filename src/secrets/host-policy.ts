@@ -63,6 +63,22 @@ export function isHostApproved(host: string, approvedHosts: Iterable<string>) {
 	return false
 }
 
+/** Parses `KODY_ALLOW_INSECURE_SECRET_HOSTS` (comma-separated hosts or the `loopback` keyword). */
+export function parseInsecureHostAllowance(value: string | undefined) {
+	return (value ?? '')
+		.split(',')
+		.map((h) => h.trim().toLowerCase())
+		.filter(Boolean)
+}
+
+/** Credentials only travel over https unless the operator allowed this host in plain http (dev/loopback). */
+export function isCredentialTransportAllowed(url: URL, insecureAllowance: ReadonlyArray<string>) {
+	if (url.protocol === 'https:') return true
+	if (url.protocol !== 'http:') return false
+	const host = requestHost(url)
+	return insecureAllowance.includes(host) || (insecureAllowance.includes('loopback') && isLoopbackHost(host))
+}
+
 export function isLoopbackHost(host: string) {
 	return (
 		host === 'localhost' || host.endsWith('.localhost') || host === '127.0.0.1' || host === '[::1]' || host === '::1'

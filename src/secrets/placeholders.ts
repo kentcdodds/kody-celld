@@ -23,6 +23,17 @@ export type ReferencedBasicAuthSecret = {
 	scope: SecretScope | null
 }
 
+export type ReferencedIntegrationToken = {
+	placeholder: string
+	name: string
+}
+
+export type ReferencedProviderSecret = {
+	placeholder: string
+	provider: string
+	ref: string
+}
+
 /**
  * WHATWG URL serialization percent-encodes `{` and `}` in pathnames, so a
  * placeholder in a URL path arrives as `%7B%7Bsecret:name%7D%7D`.
@@ -57,15 +68,36 @@ export function parseBasicAuthSecretPlaceholders(value: string) {
 }
 
 export function parseIntegrationTokenPlaceholders(value: string) {
-	return Array.from(value.matchAll(integrationTokenPlaceholderRegex), (m) => m[0])
+	const out: Array<ReferencedIntegrationToken> = []
+	for (const match of value.matchAll(integrationTokenPlaceholderRegex)) {
+		const name = match[1]?.trim()
+		if (!name) continue
+		out.push({ placeholder: match[0], name })
+	}
+	return out
 }
 
 export function parseProviderSecretPlaceholders(value: string) {
-	return Array.from(value.matchAll(providerSecretPlaceholderRegex), (m) => m[0])
+	const out: Array<ReferencedProviderSecret> = []
+	for (const match of value.matchAll(providerSecretPlaceholderRegex)) {
+		const provider = match[1]?.trim()
+		const ref = match[2]?.trim()
+		if (!provider || !ref) continue
+		out.push({ placeholder: match[0], provider, ref })
+	}
+	return out
 }
 
 export function buildSecretPlaceholder(name: string, scope?: SecretScope | null) {
 	return scope ? `{{secret:${name}|scope=${scope}}}` : `{{secret:${name}}}`
+}
+
+export function buildIntegrationTokenPlaceholder(name: string) {
+	return `{{integration-token:${name}}}`
+}
+
+export function buildProviderSecretPlaceholder(provider: string, ref: string) {
+	return `{{secret/${provider}:${ref}}}`
 }
 
 export function replaceSecretPlaceholders(value: string, replacements: ReadonlyMap<string, string>) {

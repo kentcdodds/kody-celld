@@ -12,6 +12,8 @@ import { storageCapabilities, storageDomain } from './storage.ts'
 import { systemCapabilities, systemDomain } from './system.ts'
 import { emailCapabilities, emailDomain } from './email.ts'
 import { webhookCapabilities, webhooksDomain } from './webhooks.ts'
+import { integrationCapabilities, integrationsDomain } from './integrations.ts'
+import { secretProviderCapabilities, secretProvidersDomain } from './secret-providers.ts'
 
 export const domains: Array<DomainDefinition> = [
 	systemDomain,
@@ -26,6 +28,8 @@ export const domains: Array<DomainDefinition> = [
 	browserDomain,
 	webhooksDomain,
 	emailDomain,
+	integrationsDomain,
+	secretProvidersDomain,
 ]
 
 export const capabilities: Array<CapabilityDefinition> = [
@@ -41,6 +45,8 @@ export const capabilities: Array<CapabilityDefinition> = [
 	...browserCapabilities,
 	...webhookCapabilities,
 	...emailCapabilities,
+	...integrationCapabilities,
+	...secretProviderCapabilities,
 ]
 
 const byName = new Map(capabilities.map((c) => [c.name, c]))

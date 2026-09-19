@@ -75,6 +75,25 @@ Values are encrypted in `UserCell` with AES-GCM under an HKDF key derived from
 via `KODY_MASTER_KEY_PREVIOUS` until `POST /admin/secrets/rekey` has re-sealed
 every row (see [secrets.md](./secrets.md#master-key-rotation)).
 
+Two more placeholder kinds resolve in the same `FetchGateway.fetch` call, so
+there is still exactly one place where values meet requests:
+
+- `{{integration-token:<name>}}` — `src/integrations/store.ts` (inside
+  `UserCell`) keeps OAuth client secrets and access/refresh tokens in the same
+  encrypted-column shape as secrets, runs the PKCE connect flow
+  (`src/integrations/connect.ts`, routes `/connect/oauth/*`) and refreshes
+  tokens host-side; the gateway checks the integration's own `allowedHosts`
+  and usage grant, injects, and on a 401 refreshes once and replays.
+  [integrations.md](./integrations.md).
+- `{{secret/<provider>:<ref>}}` — `src/secrets/provider-store.ts` binds a
+  provider id to a saved package declaring `kody.secretProvider`. The gateway
+  runs that package's `./secretProvider` export through `executeRun` with
+  `sealed: true` (no result/logs persisted; `module-graph.ts` refuses the entry
+  as a direct run or import target), caches the `{ value, hosts, canonicalRef }`
+  in cell memory, enforces item hosts and per-package grants, then injects.
+  The provider reaches its vault with an ordinary `{{secret:<door>}}`.
+  [secret-providers.md](./secret-providers.md).
+
 ## Jobs
 
 `package.json#kody.jobs` is validated on `packageSave` (`src/packages/manifest.ts`,
@@ -86,12 +105,12 @@ before running so a crash cannot double-fire), then executes the entry via
 
 ## Durable Objects
 
-| Class                | Key                      | Holds                                                                                                                                                  |
-| -------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `RegistryCell`       | `"registry"` (singleton) | users, SHA-256 token hashes → user id, admin audit log                                                                                                 |
-| `UserCell`           | user id                  | packages (files + manifest), secrets (ciphertext), approved hosts, jobs, job runs, runs, gateway events, per-UTC-day usage, quota override, blob index |
-| `PackageStorageCell` | `${userId}:${package}`   | `__kody_kv` table + whatever tables package `sql()` creates                                                                                            |
-| `MemoryCell`         | user id                  | memories, `memories_fts` (FTS5), suppressions, embedding cache, `memory_vectors` (sqlite-vec, local provider)                                          |
+| Class                | Key                      | Holds                                                                                                                                                                                                                                  |
+| -------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RegistryCell`       | `"registry"` (singleton) | users, SHA-256 token hashes → user id, admin audit log                                                                                                                                                                                 |
+| `UserCell`           | user id                  | packages (files + manifest), secrets (ciphertext), approved hosts, jobs, job runs, runs, gateway events, per-UTC-day usage, quota override, blob index, integrations + connect tickets (ciphertext), secret provider bindings + grants |
+| `PackageStorageCell` | `${userId}:${package}`   | `__kody_kv` table + whatever tables package `sql()` creates                                                                                                                                                                            |
+| `MemoryCell`         | user id                  | memories, `memories_fts` (FTS5), suppressions, embedding cache, `memory_vectors` (sqlite-vec, local provider)                                                                                                                          |
 
 All state is SQLite inside the DO; celld replicates it to the bucket. The only
 other binding is the R2-compatible `BLOBS` bucket for blob bytes (stored under
@@ -182,5 +201,8 @@ result cap. Audit entries are appended to the registry cell through
 - **Isolate**: talks only to `RuntimeHost` and `FetchGateway`, both scoped by
   `props.userId`. Reused isolates are keyed by user, so code never shares an
   isolate across users.
+- **Sealed runs** (`kind: 'secret-provider'`): started only by the gateway, run
+  only a `kody.secretProvider` entry, persist no result or console output. The
+  entry cannot be run or imported from anywhere else.
 - Non-loopback requests are refused outright while the dev placeholder
   `KODY_ADMIN_TOKEN`/`KODY_MASTER_KEY` are in effect (`insecureConfigError`).

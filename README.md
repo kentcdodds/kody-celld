@@ -23,7 +23,9 @@ It is deliberately the _core_, not full product parity with
 | npm imports inside `execute`                                       | Experimental via esm.sh (see [provision matrix](./docs/known-gaps.md))                                                                                  |
 | Email (inboxes, send/reply, subscriptions)                         | Working, smoke-tested: self-hosted SMTP `mail-bridge` overlay + Postmark/Mailgun/SendGrid/Resend/Cloudflare adapters ([docs/email.md](./docs/email.md)) |
 | Package inbound webhooks (mint/rotate, HMAC, replay, deliveries)   | Working, smoke-tested ([docs/webhooks.md](./docs/webhooks.md))                                                                                          |
-| OAuth integrations, MCP OAuth, web UI, registry                    | Planned as built-ins and/or adapters — status per feature in the [provision matrix](./docs/known-gaps.md)                                               |
+| OAuth integrations (`{{integration-token:…}}`)                     | Working, smoke-tested: bring-your-own OAuth app, PKCE connect, encrypted tokens, host-side refresh ([docs/integrations.md](./docs/integrations.md))     |
+| Provider-backed secrets (`{{secret/<provider>:…}}`)                | Working, smoke-tested: vault packages run sealed, values injected only at the gateway ([docs/secret-providers.md](./docs/secret-providers.md))          |
+| MCP OAuth, web UI, registry                                        | Planned as built-ins and/or adapters — status per feature in the [provision matrix](./docs/known-gaps.md)                                               |
 
 **New here? Start with [docs/getting-started.md](./docs/getting-started.md)** —
 it goes from zero to a running Kody in one Docker container (or a two-node
@@ -59,7 +61,7 @@ npm run dev          # celld dev . --port 8787  (state persists in .celld/dev)
 In another terminal:
 
 ```sh
-npm run smoke        # mcp, packages, secrets, jobs, limits, memory, blobs, browser, webhooks, email against http://127.0.0.1:8787
+npm run smoke        # mcp, packages, secrets, jobs, limits, memory, blobs, browser, webhooks, email, integrations, secret-providers against http://127.0.0.1:8787
 npm run smoke:cron   # same, plus waits (~60s) for celld's real cron trigger to run a job
 ```
 
@@ -146,6 +148,36 @@ Otherwise the request is denied _before_ leaving the box and the run sees a
 hosts, read values, or reach `/admin`. Values are AES-GCM encrypted with a
 per-user HKDF key derived from `KODY_MASTER_KEY`; run history records secret
 _names_ only. See [docs/secrets.md](./docs/secrets.md).
+
+Two more placeholder kinds ride the same gateway:
+
+```ts
+// OAuth: bring your own app, connect once in the browser, tokens refresh host-side
+await kody.integrationSave({
+  name: 'github',
+  authorizeUrl,
+  tokenUrl,
+  clientId,
+  clientSecret,
+  scopes: ['repo'],
+  allowedHosts: ['api.github.com'],
+})
+const { url } = await kody.integrationConnect({ name: 'github' }) // open in a browser
+await fetch('https://api.github.com/user', { headers: { authorization: 'Bearer {{integration-token:github}}' } })
+
+// Vault-backed: a bound provider package (1Password Connect, Vault, …) fetches the item in a sealed run
+await kody.secretProviderBind({
+  providerId: '1password',
+  packageName: '@kody-examples/onepassword-connect',
+  doorSecretName: 'op-connect-token',
+  config: { baseUrl: 'https://connect.example.com' },
+})
+await fetch('https://api.stripe.com/v1/charges', {
+  headers: { authorization: 'Bearer {{secret/1password:vaults/Ops/items/Stripe/fields/credential}}' },
+})
+```
+
+[docs/integrations.md](./docs/integrations.md), [docs/secret-providers.md](./docs/secret-providers.md).
 
 ## Jobs
 
