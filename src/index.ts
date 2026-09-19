@@ -1,4 +1,6 @@
+import { aiConfigFromEnv, describeAiConfig } from './ai/config.ts'
 import type { CapabilityContext } from './capabilities/define.ts'
+import { getMemoryCell } from './capabilities/memory.ts'
 import { capabilities, domains, runCapability } from './capabilities/registry.ts'
 import { KODY_CELLD_VERSION, type Env } from './env.ts'
 import { getUserCell } from './execute/engine.ts'
@@ -9,6 +11,7 @@ import { limitsFromEnv, parseQuotaOverride, quotasFromEnv } from './lib/limits.t
 import { handleMcpRequest } from './mcp/server.ts'
 import { isLoopbackHost } from './secrets/host-policy.ts'
 
+export { MemoryCell } from './cells/memory-cell.ts'
 export { PackageStorageCell } from './cells/package-storage-cell.ts'
 export { RegistryCell } from './cells/registry-cell.ts'
 export { UserCell } from './cells/user-cell.ts'
@@ -133,6 +136,10 @@ async function handleAdmin(request: Request, env: Env, ctx: ExecutionContext, ur
 		return json({ limits: limitsFromEnv(env), quotaDefaults: quotasFromEnv(env) })
 	}
 
+	if (segments.length === 2 && segments[1] === 'ai' && request.method === 'GET') {
+		return json({ ai: describeAiConfig(aiConfigFromEnv(env)) })
+	}
+
 	if (segments.length === 3 && segments[1] === 'secrets' && segments[2] === 'rekey' && request.method === 'POST') {
 		// Master-key rotation step 2: re-seal every user's secrets with KODY_MASTER_KEY.
 		const users = await registry.listUsers()
@@ -196,6 +203,21 @@ async function handleAdmin(request: Request, env: Env, ctx: ExecutionContext, ur
 		}
 		if (resource === 'usage' && request.method === 'GET') {
 			return json(await userCell.usageGet({ days: Number(url.searchParams.get('days') ?? 7) }))
+		}
+		if (resource === 'memories') {
+			const memoryCell = getMemoryCell(env, user.id)
+			await memoryCell.init(user.id)
+			if (request.method === 'GET' && !segments[4]) {
+				return json({
+					memories: await memoryCell.memoryList({ limit: Number(url.searchParams.get('limit') ?? 50) }),
+					status: await memoryCell.aiStatus(),
+				})
+			}
+			if (request.method === 'POST' && segments[4] === 'reindex') {
+				const result = await memoryCell.memoryReindex()
+				await audit('memory.reindex', user.id, { model: result.model, reindexed: result.reindexed })
+				return json(result)
+			}
 		}
 		if (resource === 'quota') {
 			if (request.method === 'GET') return json(await userCell.quotaGet())

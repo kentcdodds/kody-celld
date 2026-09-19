@@ -2,7 +2,7 @@
 
 Everything an operator can tune or inspect at run time, beyond the secrets and
 fleet mechanics covered in [secrets.md](./secrets.md) and
-[run-fleet.md](./run-fleet.md). All of it is built in; nothing here needs an
+[run-fleet.md](./run-fleet.md), and the AI/vector settings in [ai.md](./ai.md). All of it is built in; nothing here needs an
 external service.
 
 Every setting is an environment variable read by the Worker (`src/lib/limits.ts`).
@@ -97,16 +97,18 @@ curl -s "$BASE/admin/audit?actor=admin&action=secret_host." -H "authorization: B
 
 `action` filters by prefix. Actions recorded today:
 
-| Action                                      | Actor | Target       | Details                                   |
-| ------------------------------------------- | ----- | ------------ | ----------------------------------------- |
-| `user.create`, `token.issue`                | admin | user id      | email / label                             |
-| `secret_host.approve`, `secret_host.revoke` | admin | user id      | host                                      |
-| `quota.set`, `quota.clear`                  | admin | user id      | the override                              |
-| `jobs.dispatch`                             | admin | —            | jobs ran / skipped                        |
-| `secret.rekey`                              | admin | —            | current key id, rows resealed / remaining |
-| `secret.save`, `secret.delete`              | user  | secret name  | scope, package name                       |
-| `package.save`, `package.delete`            | user  | package name | version, source, job names                |
-| `job.enable`, `job.disable`                 | user  | job id       | —                                         |
+| Action                                                                       | Actor | Target       | Details                                    |
+| ---------------------------------------------------------------------------- | ----- | ------------ | ------------------------------------------ |
+| `user.create`, `token.issue`                                                 | admin | user id      | email / label                              |
+| `secret_host.approve`, `secret_host.revoke`                                  | admin | user id      | host                                       |
+| `quota.set`, `quota.clear`                                                   | admin | user id      | the override                               |
+| `jobs.dispatch`                                                              | admin | —            | jobs ran / skipped                         |
+| `secret.rekey`                                                               | admin | —            | current key id, rows resealed / remaining  |
+| `memory.reindex`                                                             | admin | user id      | embedding model, rows re-embedded          |
+| `secret.save`, `secret.delete`                                               | user  | secret name  | scope, package name                        |
+| `package.save`, `package.delete`                                             | user  | package name | version, source, job names                 |
+| `job.enable`, `job.disable`                                                  | user  | job id       | —                                          |
+| `memory.create`, `memory.update`, `memory.delete.soft`, `memory.delete.hard` | user  | memory id    | category, status, package (never the text) |
 
 **What is never in the log:** secret values, encrypted blobs, API tokens, the
 admin token, master keys, run code or run results. Callers pass names and ids

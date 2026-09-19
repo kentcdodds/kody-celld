@@ -59,6 +59,11 @@ export const admin = {
 	runs: (userId, limit = 20) =>
 		request(`/admin/users/${encodeURIComponent(userId)}/runs?limit=${limit}`, { token: adminToken }),
 	limits: () => request('/admin/limits', { token: adminToken }),
+	ai: () => request('/admin/ai', { token: adminToken }),
+	memories: (userId, limit = 50) =>
+		request(`/admin/users/${encodeURIComponent(userId)}/memories?limit=${limit}`, { token: adminToken }),
+	reindexMemories: (userId) =>
+		request(`/admin/users/${encodeURIComponent(userId)}/memories/reindex`, { method: 'POST', token: adminToken }),
 	usage: (userId, days = 7) =>
 		request(`/admin/users/${encodeURIComponent(userId)}/usage?days=${days}`, { token: adminToken }),
 	setQuota: (userId, override) =>
