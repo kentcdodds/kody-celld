@@ -18,6 +18,8 @@ export type Limits = {
 	responseLimitBytes: number
 	/** Admin audit entries kept in the registry. */
 	auditRetentionCount: number
+	/** Serialized cap for `__mcpContent` blocks (images, audio) returned by execute. */
+	mcpContentLimitBytes: number
 }
 
 export type Quotas = {
@@ -31,6 +33,10 @@ export type Quotas = {
 	secrets: number
 	/** Package-owned jobs per user. */
 	jobs: number
+	/** Stored blobs (objects) per user. */
+	blobs: number
+	/** Total stored blob bytes per user. */
+	blobBytes: number
 }
 
 export type LimitEnv = Partial<
@@ -41,11 +47,14 @@ export type LimitEnv = Partial<
 		| 'KODY_RUN_LOG_LIMIT'
 		| 'KODY_RESPONSE_LIMIT_BYTES'
 		| 'KODY_AUDIT_RETENTION_COUNT'
+		| 'KODY_MCP_CONTENT_LIMIT_BYTES'
 		| 'KODY_QUOTA_RUNS_PER_DAY'
 		| 'KODY_QUOTA_EXECUTE_MS_PER_DAY'
 		| 'KODY_QUOTA_PACKAGES'
 		| 'KODY_QUOTA_SECRETS'
-		| 'KODY_QUOTA_JOBS',
+		| 'KODY_QUOTA_JOBS'
+		| 'KODY_QUOTA_BLOBS'
+		| 'KODY_QUOTA_BLOB_BYTES',
 		string | undefined
 	>
 >
@@ -57,6 +66,7 @@ export const defaultLimits: Limits = {
 	runLogLimit: 200,
 	responseLimitBytes: 100_000,
 	auditRetentionCount: 10_000,
+	mcpContentLimitBytes: 512_000,
 }
 
 /** All zero: unlimited unless the operator says otherwise. */
@@ -66,6 +76,8 @@ export const defaultQuotas: Quotas = {
 	packages: 0,
 	secrets: 0,
 	jobs: 0,
+	blobs: 0,
+	blobBytes: 0,
 }
 
 export const quotaKeys = Object.keys(defaultQuotas) as Array<keyof Quotas>
@@ -110,6 +122,9 @@ export function limitsFromEnv(env: LimitEnv): Limits {
 		auditRetentionCount: read('KODY_AUDIT_RETENTION_COUNT', env, (raw) =>
 			integer(raw, defaultLimits.auditRetentionCount, { min: 100, max: 1_000_000 }),
 		),
+		mcpContentLimitBytes: read('KODY_MCP_CONTENT_LIMIT_BYTES', env, (raw) =>
+			integer(raw, defaultLimits.mcpContentLimitBytes, { min: 10_000, max: 50_000_000 }),
+		),
 	}
 }
 
@@ -123,6 +138,8 @@ export function quotasFromEnv(env: LimitEnv): Quotas {
 		packages: read('KODY_QUOTA_PACKAGES', env, (raw) => nonNegative(raw, defaultQuotas.packages)),
 		secrets: read('KODY_QUOTA_SECRETS', env, (raw) => nonNegative(raw, defaultQuotas.secrets)),
 		jobs: read('KODY_QUOTA_JOBS', env, (raw) => nonNegative(raw, defaultQuotas.jobs)),
+		blobs: read('KODY_QUOTA_BLOBS', env, (raw) => nonNegative(raw, defaultQuotas.blobs)),
+		blobBytes: read('KODY_QUOTA_BLOB_BYTES', env, (raw) => nonNegative(raw, defaultQuotas.blobBytes)),
 	}
 }
 

@@ -103,11 +103,35 @@ export type GatewayEvent = {
 
 export type DailyUsage = { day: string; runs: number; errors: number; executeMs: number }
 
+type BlobRow = {
+	key: string
+	size: number
+	content_type: string
+	sha256: string
+	etag: string
+	package_name: string | null
+	metadata_json: string
+	created_at: string
+	updated_at: string
+}
+
+export type BlobRecord = {
+	key: string
+	size: number
+	contentType: string
+	sha256: string
+	etag: string
+	packageName: string | null
+	metadata: Record<string, string>
+	createdAt: string
+	updatedAt: string
+}
+
 export type UsageReport = {
 	day: string
 	today: DailyUsage
 	history: Array<DailyUsage>
-	counts: { packages: number; secrets: number; jobs: number; runsRetained: number }
+	counts: { packages: number; secrets: number; jobs: number; runsRetained: number; blobs: number; blobBytes: number }
 	quotas: Quotas
 	quotaOverride: Partial<Quotas> | null
 	limits: Limits
@@ -205,6 +229,17 @@ export class UserCell extends DurableObject<Env> {
 				errors INTEGER NOT NULL DEFAULT 0,
 				execute_ms INTEGER NOT NULL DEFAULT 0
 			);
+			CREATE TABLE IF NOT EXISTS blobs (
+				key TEXT PRIMARY KEY,
+				size INTEGER NOT NULL,
+				content_type TEXT NOT NULL,
+				sha256 TEXT NOT NULL,
+				etag TEXT NOT NULL,
+				package_name TEXT,
+				metadata_json TEXT NOT NULL DEFAULT '{}',
+				created_at TEXT NOT NULL,
+				updated_at TEXT NOT NULL
+			);
 		`)
 		this.limits = limitsFromEnv(env)
 		this.defaultQuotas = quotasFromEnv(env)
@@ -251,8 +286,14 @@ export class UserCell extends DurableObject<Env> {
 		return effectiveQuotas(this.defaultQuotas, this.quotaOverride())
 	}
 
-	private count(table: 'packages' | 'secrets' | 'jobs' | 'runs') {
+	private count(table: 'packages' | 'secrets' | 'jobs' | 'runs' | 'blobs') {
 		return Number(this.ctx.storage.sql.exec<{ n: number }>(`SELECT COUNT(*) AS n FROM ${table}`).toArray()[0]?.n ?? 0)
+	}
+
+	private blobBytes() {
+		return Number(
+			this.ctx.storage.sql.exec<{ n: number | null }>('SELECT SUM(size) AS n FROM blobs').toArray()[0]?.n ?? 0,
+		)
 	}
 
 	private usageFor(day: string): DailyUsage {
@@ -310,6 +351,8 @@ export class UserCell extends DurableObject<Env> {
 				secrets: this.count('secrets'),
 				jobs: this.count('jobs'),
 				runsRetained: this.count('runs'),
+				blobs: this.count('blobs'),
+				blobBytes: this.blobBytes(),
 			},
 			quotas: this.quotas(),
 			quotaOverride: this.quotaOverride(),
@@ -864,6 +907,125 @@ export class UserCell extends DurableObject<Env> {
 			error: row.error,
 			logsJson: row.logs_json,
 		}))
+	}
+
+	// ------------------------------------------------------------------ blobs
+
+	private blobFromRow(row: BlobRow): BlobRecord {
+		return {
+			key: row.key,
+			size: row.size,
+			contentType: row.content_type,
+			sha256: row.sha256,
+			etag: row.etag,
+			packageName: row.package_name,
+			metadata: JSON.parse(row.metadata_json) as Record<string, string>,
+			createdAt: row.created_at,
+			updatedAt: row.updated_at,
+		}
+	}
+
+	private assertBlobQuota(input: { key: string; size: number }): BlobRow | undefined {
+		const existing = this.ctx.storage.sql.exec<BlobRow>('SELECT * FROM blobs WHERE key = ?', input.key).toArray()[0]
+		if (!existing) this.assertQuota('blobs', this.count('blobs'), 'Blob count')
+		const quotas = this.quotas()
+		const used = this.blobBytes()
+		const projected = used - (existing?.size ?? 0) + input.size
+		if (quotas.blobBytes !== 0 && projected > quotas.blobBytes) {
+			throw new KodyError(
+				'quota_exceeded',
+				`Blob storage quota reached (${projected}/${quotas.blobBytes} bytes after this write).`,
+				{ status: 429, details: { quota: 'blobBytes', limit: quotas.blobBytes, used } },
+			)
+		}
+		return existing
+	}
+
+	/**
+	 * Pre-flight quota check so oversized puts fail before any bytes are
+	 * uploaded. Returns the previous record (for overwrite accounting) or null.
+	 * `blobIndexPut` re-checks against the index, which is what makes the quota
+	 * hold when two puts race.
+	 */
+	async blobReserve(input: { key: string; size: number }): Promise<BlobRecord | null> {
+		const existing = this.assertBlobQuota(input)
+		return existing ? this.blobFromRow(existing) : null
+	}
+
+	async blobIndexPut(input: {
+		key: string
+		size: number
+		contentType: string
+		sha256: string
+		etag: string
+		packageName: string | null
+		metadata: Record<string, string>
+	}): Promise<BlobRecord> {
+		this.assertBlobQuota(input)
+		const now = nowIso()
+		this.ctx.storage.sql.exec(
+			`INSERT INTO blobs (key, size, content_type, sha256, etag, package_name, metadata_json, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+			 ON CONFLICT(key) DO UPDATE SET
+			   size = excluded.size, content_type = excluded.content_type, sha256 = excluded.sha256,
+			   etag = excluded.etag, package_name = excluded.package_name, metadata_json = excluded.metadata_json,
+			   updated_at = excluded.updated_at`,
+			input.key,
+			input.size,
+			input.contentType,
+			input.sha256,
+			input.etag,
+			input.packageName,
+			JSON.stringify(input.metadata),
+			now,
+			now,
+		)
+		return this.blobFromRow(this.ctx.storage.sql.exec<BlobRow>('SELECT * FROM blobs WHERE key = ?', input.key).one())
+	}
+
+	async blobIndexGet(key: string): Promise<BlobRecord | null> {
+		const row = this.ctx.storage.sql.exec<BlobRow>('SELECT * FROM blobs WHERE key = ?', key).toArray()[0]
+		return row ? this.blobFromRow(row) : null
+	}
+
+	async blobIndexDelete(key: string): Promise<BlobRecord | null> {
+		const existing = await this.blobIndexGet(key)
+		if (existing) this.ctx.storage.sql.exec('DELETE FROM blobs WHERE key = ?', key)
+		return existing
+	}
+
+	async blobIndexList(input: {
+		prefix?: string | undefined
+		cursor?: string | undefined
+		limit?: number | undefined
+	}): Promise<{ items: Array<BlobRecord>; cursor: string | null }> {
+		const limit = Math.min(Math.max(input.limit ?? 100, 1), 1000)
+		const prefix = input.prefix ?? ''
+		const rows = this.ctx.storage.sql
+			.exec<BlobRow>(
+				`SELECT * FROM blobs
+				 WHERE substr(key, 1, ?) = ? AND key > ?
+				 ORDER BY key ASC LIMIT ?`,
+				prefix.length,
+				prefix,
+				input.cursor ?? '',
+				limit + 1,
+			)
+			.toArray()
+		const page = rows.slice(0, limit)
+		return {
+			items: page.map((row) => this.blobFromRow(row)),
+			cursor: rows.length > limit ? (page[page.length - 1]?.key ?? null) : null,
+		}
+	}
+
+	async blobUsage(): Promise<{ blobs: number; blobBytes: number; quotas: Pick<Quotas, 'blobs' | 'blobBytes'> }> {
+		const quotas = this.quotas()
+		return {
+			blobs: this.count('blobs'),
+			blobBytes: this.blobBytes(),
+			quotas: { blobs: quotas.blobs, blobBytes: quotas.blobBytes },
+		}
 	}
 
 	// ------------------------------------------------------------------- runs

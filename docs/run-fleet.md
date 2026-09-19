@@ -126,7 +126,11 @@ this with `host.docker.internal`.
 - **Logs:** node stdout (`RUST_LOG=info`), plus `GET /admin/users/:id/runs`
   for per-user run history and gateway events.
 - **Backups:** the bucket _is_ the durable copy; snapshot it with your
-  provider's versioning/replication.
+  provider's versioning/replication. User blobs live in the same bucket under
+  `r2/kody-blobs/` unless you switch to `KODY_BLOB_PROVIDER=s3`
+  ([blobs.md](./blobs.md)).
+- **Browser rendering:** run one browserless container reachable from every
+  node and set `KODY_BROWSER_*` before `fleet:deploy` ([browser.md](./browser.md)).
 
 ## Verified and not verified
 

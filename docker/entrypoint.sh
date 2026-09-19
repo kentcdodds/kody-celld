@@ -21,7 +21,8 @@ done
 # Runtime limits / quota defaults (docs/operations.md) are plain KODY_* vars
 # that the Worker reads from its bindings; list the ones that are set.
 tunable_vars() {
-	compgen -v | grep -E '^KODY_(EXECUTE|RUN|RESPONSE|AUDIT|QUOTA|AI|SEARCH|VECTOR|QDRANT)_' || true
+	compgen -v | grep -E '^KODY_(EXECUTE|RUN|RESPONSE|AUDIT|MCP|QUOTA|AI|SEARCH|VECTOR|QDRANT|BLOB|BROWSER)_' |
+		grep -v '^KODY_BROWSER_ALLOW_PRIVATE_HOSTS$' || true
 }
 
 random_hex() {
@@ -84,6 +85,8 @@ run_single() {
 		echo "KODY_PUBLIC_URL=$KODY_PUBLIC_URL"
 		echo "KODY_ALLOW_INSECURE_SECRET_HOSTS=${KODY_ALLOW_INSECURE_SECRET_HOSTS:-}"
 		echo "KODY_MASTER_KEY_PREVIOUS=${KODY_MASTER_KEY_PREVIOUS:-}"
+		# Empty on purpose: the wrangler.jsonc dev value allows loopback rendering for smoke only.
+		echo "KODY_BROWSER_ALLOW_PRIVATE_HOSTS=${KODY_BROWSER_ALLOW_PRIVATE_HOSTS:-}"
 		for tunable in $(tunable_vars); do
 			echo "$tunable=${!tunable}"
 		done

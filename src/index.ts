@@ -1,4 +1,8 @@
 import { aiConfigFromEnv, describeAiConfig } from './ai/config.ts'
+import { blobConfigFromEnv, describeBlobConfig } from './blobs/config.ts'
+import { verifyBlobUrlSignature } from './blobs/keys.ts'
+import { BlobService, normalizeMetadata } from './blobs/service.ts'
+import { browserConfigFromEnv, describeBrowserConfig } from './browser/config.ts'
 import type { CapabilityContext } from './capabilities/define.ts'
 import { getMemoryCell } from './capabilities/memory.ts'
 import { capabilities, domains, runCapability } from './capabilities/registry.ts'
@@ -140,6 +144,14 @@ async function handleAdmin(request: Request, env: Env, ctx: ExecutionContext, ur
 		return json({ ai: describeAiConfig(aiConfigFromEnv(env)) })
 	}
 
+	if (segments.length === 2 && segments[1] === 'blobs' && request.method === 'GET') {
+		return json({ blobs: describeBlobConfig(blobConfigFromEnv(env)), bucketBound: env.BLOBS !== undefined })
+	}
+
+	if (segments.length === 2 && segments[1] === 'browser' && request.method === 'GET') {
+		return json({ browser: describeBrowserConfig(browserConfigFromEnv(env)) })
+	}
+
 	if (segments.length === 3 && segments[1] === 'secrets' && segments[2] === 'rekey' && request.method === 'POST') {
 		// Master-key rotation step 2: re-seal every user's secrets with KODY_MASTER_KEY.
 		const users = await registry.listUsers()
@@ -204,6 +216,14 @@ async function handleAdmin(request: Request, env: Env, ctx: ExecutionContext, ur
 		if (resource === 'usage' && request.method === 'GET') {
 			return json(await userCell.usageGet({ days: Number(url.searchParams.get('days') ?? 7) }))
 		}
+		if (resource === 'blobs' && request.method === 'GET') {
+			const page = await userCell.blobIndexList({
+				prefix: url.searchParams.get('prefix') ?? undefined,
+				cursor: url.searchParams.get('cursor') ?? undefined,
+				limit: Number(url.searchParams.get('limit') ?? 100),
+			})
+			return json({ ...page, usage: await userCell.blobUsage() })
+		}
 		if (resource === 'memories') {
 			const memoryCell = getMemoryCell(env, user.id)
 			await memoryCell.init(user.id)
@@ -252,6 +272,9 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext, url:
 		const result = await runCapability(segments[2], await readJson(request), context)
 		return json({ ok: true, result })
 	}
+	if (segments[1] === 'blobs' && segments.length > 2) {
+		return handleBlobApi(request, context, segments.slice(2).map(decodeURIComponent).join('/'))
+	}
 	if (segments[1] === 'capabilities' && request.method === 'GET') {
 		return json({
 			domains,
@@ -264,6 +287,94 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext, url:
 		})
 	}
 	throw new KodyError('not_found', `No API route for ${request.method} ${url.pathname}.`, { status: 404 })
+}
+
+function blobService(context: CapabilityContext) {
+	return new BlobService({
+		env: context.env,
+		userCell: context.userCell,
+		userId: context.user.id,
+		packageName: null,
+		baseUrl: context.baseUrl,
+	})
+}
+
+function blobResponse(
+	record: { contentType: string; size: number; etag: string; sha256: string },
+	body: BodyInit | null,
+) {
+	return new Response(body, {
+		headers: {
+			'content-type': record.contentType,
+			'content-length': String(record.size),
+			etag: `"${record.etag}"`,
+			'x-kody-sha256': record.sha256,
+			'cache-control': 'private, no-store',
+			'x-content-type-options': 'nosniff',
+		},
+	})
+}
+
+/**
+ * Raw-bytes companion to the blob capabilities for clients that would rather
+ * stream a file than base64 it through execute: PUT uploads the request body,
+ * GET downloads, DELETE removes.
+ */
+async function handleBlobApi(request: Request, context: CapabilityContext, key: string): Promise<Response> {
+	const blobs = blobService(context)
+	if (request.method === 'PUT' || request.method === 'POST') {
+		const body = new Uint8Array(await request.arrayBuffer())
+		const metadataHeader = request.headers.get('x-kody-blob-metadata')
+		let metadata: Record<string, string> | undefined
+		if (metadataHeader) {
+			try {
+				metadata = normalizeMetadata(JSON.parse(metadataHeader))
+			} catch (error) {
+				if (error instanceof KodyError) throw error
+				throw new KodyError('invalid_args', 'x-kody-blob-metadata must be a JSON object of strings.')
+			}
+		}
+		const record = await blobs.put({
+			key,
+			body,
+			contentType: request.headers.get('content-type')?.split(';')[0]?.trim() || undefined,
+			metadata,
+		})
+		return json(record, 201)
+	}
+	if (request.method === 'GET' || request.method === 'HEAD') {
+		const found = await blobs.get(key)
+		if (!found) throw new KodyError('blob_not_found', `No blob at "${key}".`, { status: 404 })
+		return blobResponse(found.record, request.method === 'HEAD' ? null : (found.body as BodyInit))
+	}
+	if (request.method === 'DELETE') {
+		const record = await blobs.delete(key)
+		return json({ key, deleted: record !== null })
+	}
+	throw new KodyError('not_found', `No blob route for ${request.method}.`, { status: 404 })
+}
+
+/** `GET /blobs/:userId/:key?exp=&sig=` — HMAC-signed download links minted by blobUrl. */
+async function handleSignedBlob(request: Request, env: Env, url: URL): Promise<Response> {
+	if (request.method !== 'GET' && request.method !== 'HEAD') {
+		throw new KodyError('not_found', 'Signed blob links are read-only.', { status: 405 })
+	}
+	const segments = url.pathname.split('/').filter(Boolean) // ['blobs', userId, ...key]
+	const userId = decodeURIComponent(segments[1] ?? '')
+	const key = segments.slice(2).map(decodeURIComponent).join('/')
+	const expiresAt = Number(url.searchParams.get('exp'))
+	const signatureHex = url.searchParams.get('sig') ?? ''
+	if (!userId || !key) throw new KodyError('not_found', 'Malformed blob link.', { status: 404 })
+	const valid = await verifyBlobUrlSignature(env.KODY_MASTER_KEY, { userId, key, expiresAt, signatureHex })
+	if (!valid) {
+		throw new KodyError('blob_link_invalid', 'This blob link is invalid or has expired.', { status: 403 })
+	}
+	const userCell = getUserCell(env, userId)
+	await userCell.init(userId)
+	const blobs = new BlobService({ env, userCell, userId, packageName: null, baseUrl: env.KODY_PUBLIC_URL })
+	const found = await blobs.get(key)
+	if (!found) throw new KodyError('blob_not_found', 'This blob no longer exists.', { status: 404 })
+	return blobResponse(found.record, request.method === 'HEAD' ? null : (found.body as BodyInit))
 }
 
 export default {
@@ -285,10 +396,13 @@ export default {
 			if (url.pathname === '/mcp') {
 				const auth = await authenticateUser(request, env)
 				if (!auth) return unauthorized('A Kody API token is required (Authorization: Bearer <token>).')
-				return handleMcpRequest(request, capabilityContext(env, ctx, auth), env)
+				return await handleMcpRequest(request, capabilityContext(env, ctx, auth), env)
 			}
-			if (url.pathname === '/admin' || url.pathname.startsWith('/admin/')) return handleAdmin(request, env, ctx, url)
-			if (url.pathname === '/api' || url.pathname.startsWith('/api/')) return handleApi(request, env, ctx, url)
+			if (url.pathname.startsWith('/blobs/')) return await handleSignedBlob(request, env, url)
+			if (url.pathname === '/admin' || url.pathname.startsWith('/admin/')) {
+				return await handleAdmin(request, env, ctx, url)
+			}
+			if (url.pathname === '/api' || url.pathname.startsWith('/api/')) return await handleApi(request, env, ctx, url)
 			return json({ error: 'not_found', message: `No route for ${url.pathname}.` }, 404)
 		} catch (error) {
 			return json(errorToJson(error), errorStatus(error))

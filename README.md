@@ -18,6 +18,8 @@ It is deliberately the _core_, not full product parity with
 | Limits, quotas, `usageGet`, admin audit log                        | Working, smoke-tested ([docs/operations.md](./docs/operations.md))                                                   |
 | AI chat/embeddings (Ollama, LM Studio, vLLM, OpenAI, Anthropic, …) | Working, smoke-tested adapters ([docs/ai.md](./docs/ai.md))                                                          |
 | Memories (`metaMemory*`) + semantic search                         | Working, smoke-tested: FTS5 + sqlite-vec built in, Qdrant adapter, optional LLM re-rank ([docs/ai.md](./docs/ai.md)) |
+| Blob storage (`blob*`, raw HTTP routes, signed links)              | Working, smoke-tested: celld R2 binding built in, direct S3 adapter ([docs/blobs.md](./docs/blobs.md))               |
+| Browser rendering (content, screenshots, PDF)                      | Working, smoke-tested adapters: self-hosted browserless overlay or Cloudflare ([docs/browser.md](./docs/browser.md)) |
 | npm imports inside `execute`                                       | Experimental via esm.sh (see [provision matrix](./docs/known-gaps.md))                                               |
 | Email, webhooks, OAuth, web UI, …                                  | Planned as built-ins and/or adapters — status per feature in the [provision matrix](./docs/known-gaps.md)            |
 
@@ -55,7 +57,7 @@ npm run dev          # celld dev . --port 8787  (state persists in .celld/dev)
 In another terminal:
 
 ```sh
-npm run smoke        # MCP + packages + secrets + jobs against http://127.0.0.1:8787
+npm run smoke        # mcp, packages, secrets, jobs, limits, memory, blobs, browser against http://127.0.0.1:8787
 npm run smoke:cron   # same, plus waits (~60s) for celld's real cron trigger to run a job
 ```
 
@@ -195,6 +197,26 @@ docker compose up -d && docker compose exec ollama ollama pull nomic-embed-text
 Variables, recipes (Ollama on the host, hosted models, fleet) and how ranking
 works: [docs/ai.md](./docs/ai.md).
 
+## Blobs and browser rendering
+
+`kody.blobPut/Get/Head/List/Delete/Url/Usage` store per-user files on celld's
+R2-compatible bucket binding (local disk on a single node, the fleet bucket in
+a fleet) or, with `KODY_BLOB_PROVIDER=s3`, in any S3-compatible bucket you
+already run. Files are also reachable as raw bytes at `/api/blobs/<key>` and
+through HMAC-signed `blobUrl` links served by Kody, so bucket credentials never
+leave the server. Per-user count/byte quotas, size caps and key rules:
+[docs/blobs.md](./docs/blobs.md).
+
+`kody.browserContent/Screenshot/Pdf` render pages in a real browser through an
+adapter — the bundled self-hosted browserless container or Cloudflare Browser
+Rendering. Screenshots come back as protocol-valid MCP `image` blocks from
+`execute` (`__mcpContent`) or land in blob storage. Private/loopback targets
+are refused unless allowlisted. [docs/browser.md](./docs/browser.md).
+
+```sh
+echo 'COMPOSE_FILE=compose.yaml:compose.browser.yaml' >> .env && docker compose up -d
+```
+
 ## Run a fleet
 
 ```sh
@@ -227,10 +249,12 @@ Layout:
 src/index.ts              Worker entry: /health, /mcp, /api/*, /admin/*, cron → dispatcher
 src/lib/                  KodyError, limits/quotas from env, audit helper
 src/mcp/                  JSON-RPC server (search, execute) + search ranking
-src/capabilities/         the kody.<capability>() catalog (packages, secrets, jobs, runs, storage, system)
+src/capabilities/         the kody.<capability>() catalog (packages, secrets, jobs, runs, storage, memories, ai, blobs, browser, system)
 src/execute/              module graph → Worker Loader isolate; RuntimeHost RPC; kody:runtime source
 src/secrets/              placeholders, host policy, FetchGateway (network-boundary injection)
-src/cells/                Durable Objects: RegistryCell (users/tokens), UserCell (per-user state), PackageStorageCell
+src/blobs/                blob store abstraction: R2 binding + S3 SigV4 adapter, keys, signed links
+src/browser/              browser rendering adapters (browserless, Cloudflare) + SSRF guard
+src/cells/                Durable Objects: RegistryCell (users/tokens), UserCell (per-user state + blob index), PackageStorageCell, MemoryCell
 src/jobs/                 schedule parsing + dispatcher
 smoke/                    real workloads against a running node (npm run smoke; smoke/rekey.mjs for key rotation)
 examples/packages/        @kody-smoke/counter, @kody-smoke/http-probe
