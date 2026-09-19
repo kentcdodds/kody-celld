@@ -41,17 +41,86 @@ Read [docs/architecture.md](./docs/architecture.md) for how it fits together
 and [docs/decision-standalone-vs-adapters.md](./docs/decision-standalone-vs-adapters.md)
 for why this is a standalone project rather than a fork of production Kody.
 
-## Run with Docker
+## Self-host it (Docker, five minutes)
 
-```sh
-cp .env.example .env            # optional; empty values are generated and persisted
-docker compose up -d            # one node on http://localhost:8080, state in the kody-data volume
-docker compose exec kody cat /data/kody.env   # KODY_ADMIN_TOKEN / KODY_MASTER_KEY
+**What you need**
+
+| Requirement | Notes                                                                                                                                                                                  |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Docker      | 24+ with the `docker compose` plugin, on anything that runs Compose files: Synology Container Manager, QNAP Container Station, Unraid, Portainer, Docker Desktop, plain Linux.         |
+| CPU / arch  | `linux/amd64` or `linux/arm64` (Raspberry Pi 4/5 64-bit, Apple-silicon Docker Desktop). 1 core is enough; 32-bit ARM is not supported.                                                 |
+| RAM         | ~60 MB idle; ~600 MB measured with a dozen heavy `execute` runs in flight (each run is a V8 isolate). Plan 1 GB for Kody alone; the optional Ollama overlay wants several GB on top.   |
+| Disk        | ~550 MB image + your data (SQLite files in one volume; a fresh install is 2 MB). Uploaded blobs live in the same volume.                                                               |
+| Network     | One TCP port (default `8080`). Outbound HTTPS for `execute` code that calls APIs, `npm` imports and package installs. No Cloudflare account, no domain required for LAN/Tailscale use. |
+| Time        | Pulling the prebuilt image: about a minute. Building from source instead: ~2 min on a laptop, 10+ min on a small NAS.                                                                  |
+
+**1. Start it** — save this as `compose.yaml` in a folder (or paste it into your
+NAS's Compose/"stack" UI) and run `docker compose up -d`:
+
+```yaml
+services:
+  kody:
+    image: ghcr.io/kentcdodds/kody-celld:latest
+    init: true
+    restart: unless-stopped
+    ports:
+      - '8080:8080'
+    environment:
+      # The address browsers and MCP clients will actually use — change it when
+      # you put Kody behind a hostname or reverse proxy (sign-in and OAuth
+      # depend on it). Empty admin token / master key are generated on first
+      # start and persisted in the volume.
+      KODY_PUBLIC_URL: http://192.168.1.20:8080
+    volumes:
+      - kody-data:/data
+volumes:
+  kody-data:
 ```
 
-Fleet (two nodes + MinIO + Caddy): `COMPOSE_FILE=compose.fleet.yaml:compose.minio.yaml`
-in `.env`, then `docker compose up -d`. Details, TLS, backups and swapping
-MinIO for S3/R2/GCS/Azure: [docs/getting-started.md](./docs/getting-started.md).
+Prefer to build from source (or want the AI / browser / mail / fleet overlays)?
+`git clone https://github.com/kentcdodds/kody-celld && cd kody-celld && docker compose up -d`
+uses the same image name and builds it locally when it is not present.
+
+**2. Check it and read your admin token**
+
+```sh
+curl http://192.168.1.20:8080/health           # {"ok":true, ...}
+docker compose exec kody cat /data/kody.env    # KODY_ADMIN_TOKEN + KODY_MASTER_KEY — back this up
+```
+
+**3. Create your account** — open `http://192.168.1.20:8080/` in a browser. The
+**Set up Kody** page asks for the admin token, your email and a password and
+signs you in to `/account`. (Created the first user with the admin API
+instead? `/setup` disappears once any user exists; sign in on `/signin` with the
+`kc_…` API token it returned, then set a password on `/account`.)
+
+**4. Connect an MCP client** — OAuth-capable clients only need the URL and
+open the browser for sign-in + consent on first use:
+
+```sh
+claude mcp add --transport http kody http://192.168.1.20:8080/mcp
+```
+
+Cursor / VS Code / Claude Desktop: add an HTTP MCP server with that URL. Clients
+that only take a URL + header use a static token from `/account/tokens`:
+`Authorization: Bearer kc_…`. Then ask it to "search Kody" — you should get the
+capability catalog back.
+
+**Where things live and how to keep them**
+
+| Task     | How                                                                                                                                                                                                    |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Data     | Everything (users, packages, secrets, jobs, blobs, `kody.env`) is in the `kody-data` volume. Nothing is written elsewhere; deleting the container is safe, `docker compose down -v` is not.            |
+| Back up  | `docker compose stop && docker run --rm -v <project>_kody-data:/data -v "$PWD":/backup alpine tar czf /backup/kody-data.tgz -C / data && docker compose start` — restore by untarring into the volume. |
+| Upgrade  | `docker compose pull && docker compose up -d` (from a source checkout: `git pull && docker compose up -d --build`). State and generated keys are kept.                                                 |
+| TLS      | Put your reverse proxy (Synology Reverse Proxy, Nginx Proxy Manager, Caddy, Traefik) in front of `8080` with a certificate and set `KODY_PUBLIC_URL=https://kody.example.com`. Do not expose `8080`.   |
+| Logs     | `docker compose logs -f kody`                                                                                                                                                                          |
+| Failover | Two or more nodes sharing an S3-compatible bucket (MinIO bundled): `compose.fleet.yaml` — see the guide.                                                                                               |
+
+The full walkthrough — NAS specifics, LAN/Tailscale vs. internet exposure,
+inviting people, approving secret hosts, every overlay (local AI, headless
+browser, SMTP, self-hosted npm CDN), the fleet path, and troubleshooting — is
+[docs/getting-started.md](./docs/getting-started.md).
 
 ## Run locally (no Docker)
 
@@ -89,13 +158,13 @@ BASE=http://127.0.0.1:8787
 # 1. create a user + API token (admin only)
 curl -s -X POST $BASE/admin/users -H "authorization: Bearer $ADMIN" \
   -H 'content-type: application/json' -d '{"email":"you@example.com"}'
-# -> { "user": {...}, "token": "kody_..." }
+# -> { "user": {...}, "token": "kc_..." }
 
 # 2. point any MCP client at $BASE/mcp. OAuth-capable hosts (Claude Code, Cursor,
 #    VS Code, …) need only the URL: they get sent to the built-in sign-in +
-#    consent page (docs/mcp-oauth.md). Others take `Authorization: Bearer kody_...`.
+#    consent page (docs/mcp-oauth.md). Others take `Authorization: Bearer kc_...`.
 #    Or call the tools by hand:
-curl -s $BASE/mcp -H "authorization: Bearer kody_..." -H 'content-type: application/json' \
+curl -s $BASE/mcp -H "authorization: Bearer kc_..." -H 'content-type: application/json' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search","arguments":{"query":"secrets"}}}'
 ```
 

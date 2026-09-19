@@ -200,7 +200,7 @@ result cap. Audit entries are appended to the registry cell through
 
 `authenticateBearer()` (`src/auth/authenticate.ts`) is the one entry point for
 `/mcp` and `/api`: a `mcpat_…` bearer is resolved as an OAuth access token, a
-`kody_…` bearer as a legacy API token; both yield the same `Principal`
+`kc_…` bearer as a legacy API token; both yield the same `Principal`
 (`user`, `userCell`, `via`, `clientName`). Unauthenticated `/mcp` requests get
 a `WWW-Authenticate: Bearer … resource_metadata="…"` challenge so spec-compliant
 MCP hosts discover the built-in authorization server
@@ -228,7 +228,7 @@ call originates from package/runtime code rather than a direct MCP request.
   hosts, sets quotas, forces job dispatch, reads the audit log, signs in to the
   operator console. Never accepted from the isolate (sandbox `fetch`
   to `/admin` is denied by the gateway).
-- **User token** (`kody_...`) and **OAuth access token** (`mcpat_...`): full
+- **User token** (`kc_...`) and **OAuth access token** (`mcpat_...`): full
   access to that user's cell, nothing else. OAuth tokens expire hourly and are
   refreshed by the client; either kind can be revoked from the account UI.
 - **Browser session cookie**: same authority as a user token but only over the

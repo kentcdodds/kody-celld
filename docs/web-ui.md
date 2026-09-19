@@ -47,7 +47,7 @@ Accounts are created by the operator — there is no open registration:
   the current work factor are upgraded transparently on the next successful
   sign-in. Five wrong passwords lock the email for 15 minutes (`429`), even
   for the right password.
-- **API token**: paste a `kody_…` token once to get a browser session; the
+- **API token**: paste a `kc_…` token once to get a browser session; the
   token is not stored by the browser.
 - **Magic link**: shown only when an outbound email adapter is configured
   ([email.md](./email.md)). The form answers identically whether or not the

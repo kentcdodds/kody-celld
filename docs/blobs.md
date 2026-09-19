@@ -42,9 +42,9 @@ Raw-bytes HTTP routes exist for clients that would rather stream than base64
 through `execute` (same user bearer token as `/mcp`):
 
 ```sh
-curl -X PUT $BASE/api/blobs/photos/cat.png -H "authorization: Bearer kody_..." \
+curl -X PUT $BASE/api/blobs/photos/cat.png -H "authorization: Bearer kc_..." \
   -H 'content-type: image/png' -H 'x-kody-blob-metadata: {"album":"pets"}' --data-binary @cat.png
-curl $BASE/api/blobs/photos/cat.png -H "authorization: Bearer kody_..." -o cat.png   # also HEAD, DELETE
+curl $BASE/api/blobs/photos/cat.png -H "authorization: Bearer kc_..." -o cat.png   # also HEAD, DELETE
 ```
 
 Keys are path-like (`a/b/c.ext`), ≤ 512 characters, no leading slash, no empty
