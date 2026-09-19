@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "description": "Calls an HTTP endpoint with a secret placeholder header. Demonstrates host-gated secret injection.",
   "exports": {
-    ".": "./probe.js"
+    ".": "./probe.js",
+    "./provider": "./provider-probe.js"
   },
   "kody": {}
 }

@@ -30,10 +30,49 @@ function host() {
 	return __env.KODY
 }
 
-function deferred(name) {
-	return () => {
-		throw new Error(name + ' is not available in kody-celld v1 (deferred; see docs/known-gaps.md).')
+const secretNamePattern = /^[a-zA-Z0-9._-]+$/
+
+function assertSecretName(value, label) {
+	if (typeof value !== 'string' || !secretNamePattern.test(value)) {
+		throw new TypeError(label + ' must be a secret name (letters, digits, ".", "_", "-").')
 	}
+	return value
+}
+
+/**
+ * Returns a fetch that sends \`Authorization: Bearer {{integration-token:<name>}}\`.
+ * The placeholder is swapped for the real access token by the host gateway,
+ * which also enforces the connection's host allowlist and refreshes expired
+ * tokens; sandbox code never sees a raw token.
+ */
+export function createAuthenticatedFetch(integrationName, options = {}) {
+	const name = assertSecretName(integrationName, 'createAuthenticatedFetch(name)')
+	const headerName = typeof options.headerName === 'string' && options.headerName ? options.headerName : 'authorization'
+	const scheme = options.scheme === undefined ? 'Bearer' : options.scheme
+	const placeholder = '{{integration-token:' + name + '}}'
+	const headerValue = scheme ? scheme + ' ' + placeholder : placeholder
+	return async (input, init) => {
+		const request = new Request(input, init)
+		if (!request.headers.has(headerName)) request.headers.set(headerName, headerValue)
+		return fetch(request)
+	}
+}
+
+/** Client-credentials connections are ordinary integrations; the grant type only changes how the host refreshes. */
+export const oauthClientCredentials = createAuthenticatedFetch
+
+export const secretHeaders = {
+	basic({ usernameSecret, passwordSecret, scope } = {}) {
+		const username = assertSecretName(usernameSecret, 'secretHeaders.basic({ usernameSecret })')
+		const password = assertSecretName(passwordSecret, 'secretHeaders.basic({ passwordSecret })')
+		const suffix = scope === 'package' || scope === 'user' ? '|scope=' + scope : ''
+		return { authorization: '{{secret-basic:username=' + username + ',password=' + password + suffix + '}}' }
+	},
+	bearer(secretName, scope) {
+		const name = assertSecretName(secretName, 'secretHeaders.bearer(name)')
+		const suffix = scope === 'package' || scope === 'user' ? '|scope=' + scope : ''
+		return { authorization: 'Bearer {{secret:' + name + suffix + '}}' }
+	},
 }
 
 export const kody = new Proxy(Object.create(null), {
@@ -83,9 +122,6 @@ export const packageSecrets = {
 	},
 }
 
-export const createAuthenticatedFetch = deferred('createAuthenticatedFetch')
-export const oauthClientCredentials = deferred('oauthClientCredentials')
-export const secretHeaders = undefined
 export const email = null
 export const workflows = null
 export const packages = null

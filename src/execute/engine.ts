@@ -4,6 +4,7 @@ import { sha256Hex } from '../lib/crypto.ts'
 import { KodyError } from '../lib/errors.ts'
 import { defaultLimits, limitsFromEnv } from '../lib/limits.ts'
 import { extractMcpContent, mcpContentKey, summarizeMcpContent, type McpContentBlock } from '../mcp/content.ts'
+import { normalizeModulePath, resolvePackageExport, type PackageManifest } from '../packages/manifest.ts'
 import { buildModuleGraph, type GraphEntry } from './module-graph.ts'
 
 export const defaultResponseLimitBytes = defaultLimits.responseLimitBytes
@@ -17,6 +18,13 @@ export type ExecuteInput = {
 	responseLimit?: number | undefined
 	idempotencyKey?: string | undefined
 	trigger?: string | undefined
+	/**
+	 * Sealed runs return their result only to the host caller: run history keeps
+	 * the record (kind, status, duration, gateway events) but stores no result or
+	 * console output, because the value is a secret on its way to the gateway.
+	 */
+	sealed?: boolean | undefined
+	timeoutMs?: number | undefined
 }
 
 export type ExecuteResult = {
@@ -77,6 +85,15 @@ export async function executeRun(
 	if (input.idempotencyKey !== undefined && input.idempotencyKey.length > runRecordMaxIdempotencyKeyLength) {
 		throw new KodyError('invalid_args', `idempotencyKey must be at most ${runRecordMaxIdempotencyKeyLength} chars.`)
 	}
+	const pkg = input.entry.kind === 'package' ? await userCell.packageGet(input.entry.packageName) : null
+	if (input.entry.kind === 'package' && pkg && !input.sealed && isSecretProviderEntry(pkg.manifest, input.entry)) {
+		// The provider export returns a secret value; only the gateway may run it (sealed).
+		throw new KodyError(
+			'secret_provider_entry_sealed',
+			`"${pkg.manifest.name}"'s secretProvider export is invoked by Kody only, when a {{secret/${pkg.manifest.secretProvider?.id}:...}} placeholder is resolved. It cannot be run directly.`,
+			{ status: 403 },
+		)
+	}
 	const { run, replayed } = await userCell.runStart({
 		kind: input.kind,
 		packageName,
@@ -97,25 +114,25 @@ export async function executeRun(
 		const record = await userCell.runFinish({
 			id: run.id,
 			status,
-			resultJson: fields.result === undefined ? null : JSON.stringify(fields.result),
+			resultJson: fields.result === undefined || input.sealed ? null : JSON.stringify(fields.result),
 			error: fields.error ? { name: fields.error.name, message: fields.error.message } : null,
-			logsJson: JSON.stringify((fields.logs ?? []).slice(0, limits.runLogLimit)),
+			logsJson: input.sealed ? '[]' : JSON.stringify((fields.logs ?? []).slice(0, limits.runLogLimit)),
 			warnings: fields.warnings,
 			durationMs: Date.now() - started,
 		})
-		return runToResult(record, false, fields.error)
+		const result = runToResult(record, false, fields.error)
+		return input.sealed ? { ...result, result: fields.result, logs: [] } : result
 	}
 
 	let graph
 	try {
-		graph = await buildModuleGraph({ entry: input.entry, userCell, allowNpm: true })
+		graph = await buildModuleGraph({ entry: input.entry, userCell, allowNpm: true, sealed: input.sealed === true })
 	} catch (error) {
 		return finish('error', { error: toErrorShape(error) })
 	}
 
 	const isolateName = `kody-${await graphHash(input.user.id, graph.modules)}`
-	const packageVersion =
-		input.entry.kind === 'package' ? ((await userCell.packageGet(input.entry.packageName))?.version ?? null) : null
+	const packageVersion = pkg?.version ?? null
 	const props = { userId: input.user.id, email: input.user.email, packageName }
 
 	const worker = env.LOADER.get(isolateName, () => ({
@@ -127,13 +144,11 @@ export async function executeRun(
 		globalOutbound: exports.FetchGateway({ props }),
 	}))
 
+	const timeoutMs = input.timeoutMs ?? limits.executeTimeoutMs
 	const timeout = new Promise<never>((_resolve, reject) => {
 		setTimeout(
-			() =>
-				reject(
-					new KodyError('execute_timeout', `Execution exceeded ${limits.executeTimeoutMs / 1000}s.`, { status: 504 }),
-				),
-			limits.executeTimeoutMs,
+			() => reject(new KodyError('execute_timeout', `Execution exceeded ${timeoutMs / 1000}s.`, { status: 504 })),
+			timeoutMs,
 		)
 	})
 
@@ -182,6 +197,18 @@ export async function executeRun(
 		return truncated.truncated ? { ...result, truncated: true, note: truncated.note } : result
 	} catch (error) {
 		return finish('error', { error: toErrorShape(error), warnings: graph.warnings })
+	}
+}
+
+function isSecretProviderEntry(manifest: PackageManifest, entry: GraphEntry & { kind: 'package' }) {
+	if (!manifest.secretProvider) return false
+	try {
+		const path = entry.entryPath
+			? normalizeModulePath(entry.entryPath)
+			: resolvePackageExport(manifest, entry.exportName ?? '.')
+		return path === manifest.secretProvider.entry
+	} catch {
+		return false
 	}
 }
 

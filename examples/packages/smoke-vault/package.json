@@ -1,0 +1,15 @@
+{
+  "name": "@kody-smoke/smoke-vault",
+  "version": "1.0.0",
+  "description": "Secret provider backed by the smoke suite's mock vault (smoke/secret-providers.mjs). Shows the provider contract end to end.",
+  "exports": {
+    ".": "./status.js",
+    "./secretProvider": "./provider.js"
+  },
+  "kody": {
+    "secretProvider": {
+      "id": "smokevault",
+      "description": "Resolves {{secret/smokevault:<item>}} from the mock vault at config.baseUrl using the door secret as a bearer token."
+    }
+  }
+}

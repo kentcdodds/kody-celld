@@ -52,12 +52,13 @@ injects at every step and that `rekey` becomes a no-op at the end.
 
 ## Placeholders
 
-| Form                                               | Replaced with                                                                  |
-| -------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `{{secret:name}}`                                  | the value                                                                      |
-| `{{secret:name\|scope=package}}`                   | the value, only if the package-scoped secret belongs to the running package    |
-| `{{secret-basic:username=u,password=p}}`           | `Basic base64(u_value:p_value)`; a leading `Basic ` in the header is collapsed |
-| `{{secret/provider:…}}`, `{{integration-token:…}}` | parsed, **denied** as unsupported in v1                                        |
+| Form                                     | Replaced with                                                                                |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `{{secret:name}}`                        | the value                                                                                    |
+| `{{secret:name\|scope=package}}`         | the value, only if the package-scoped secret belongs to the running package                  |
+| `{{secret-basic:username=u,password=p}}` | `Basic base64(u_value:p_value)`; a leading `Basic ` in the header is collapsed               |
+| `{{integration-token:name}}`             | the OAuth access token of a connected integration ([integrations.md](./integrations.md))     |
+| `{{secret/provider:ref}}`                | a value fetched from a bound provider package ([secret-providers.md](./secret-providers.md)) |
 
 Placeholders are recognised in the URL (path, query, also URL-encoded
 `%7B%7B…%7D%7D`), any header, and the request body (string/JSON bodies).
@@ -69,10 +70,11 @@ Every outbound `fetch` from an isolate is routed through `FetchGateway`
 
 ```
 admin surface?          → 403 admin_surface_blocked
-unsupported kind?       → 403 placeholder_kind_unsupported
 not https (and host not in KODY_ALLOW_INSECURE_SECRET_HOSTS)? → 403 insecure_scheme
-host not approved?      → 403 secret_host_not_approved  { approvalUrl }
+{{secret:…}} and host not approved? → 403 secret_host_not_approved  { approvalUrl }
 secret missing?         → 404 secret_not_found          { missing }
+{{integration-token:…}} → integration checks (allowedHosts, usage, refresh) — integrations.md
+{{secret/…}}            → provider checks (binding, grant, sealed run, item hosts) — secret-providers.md
 otherwise               → replace, forward, record 'injected'
 ```
 
@@ -106,6 +108,6 @@ test harness.
 
 ## Not in v1
 
-- Provider-scoped secrets and OAuth integration tokens.
-- Per-secret host allowlists (approval is per host, per user).
+- Per-secret host allowlists for `{{secret:…}}` (approval is per host, per
+  user; integration tokens and provider items carry their own host lists).
 - Egress allowlisting for placeholder-free requests.

@@ -1,0 +1,21 @@
+{
+  "name": "@kody-smoke/oauth-client",
+  "version": "1.0.0",
+  "description": "Calls an API with createAuthenticatedFetch(integration) and records integration.auth.* events; exercised by smoke/integrations.mjs.",
+  "exports": {
+    ".": "./status.js",
+    "./call": "./call.js"
+  },
+  "kody": {
+    "subscriptions": {
+      "integration.auth.succeeded": {
+        "handler": "./lib/on-auth.js",
+        "description": "Records every successful connect/refresh (metadata only)."
+      },
+      "integration.auth.failed": {
+        "handler": "./lib/on-auth.js",
+        "description": "Records refresh/connect failures so the owner can reconnect."
+      }
+    }
+  }
+}

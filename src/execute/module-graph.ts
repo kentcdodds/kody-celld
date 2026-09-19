@@ -13,6 +13,18 @@ import { buildWrapperModule } from './wrapper-module.ts'
 export const RUNTIME_MODULE_PATH = 'kody-runtime.js'
 export const WRAPPER_MODULE_PATH = 'wrapper.js'
 export const ADHOC_MODULE_PATH = 'main.js'
+/** Stands in for a kody.secretProvider entry wherever user code tries to import one. */
+export const SEALED_MODULE_PATH = 'kody-sealed.js'
+
+export const SEALED_ENTRY_ERROR = 'secret_provider_entry_sealed'
+const sealedEntryMessage =
+	'is a kody.secretProvider entry, which Kody runs only in a sealed run while resolving a {{secret/...}} placeholder. It cannot be imported or run directly.'
+// Linked like a real entry (default export) so the error surfaces at evaluation, not as a bare link SyntaxError.
+const SEALED_MODULE_SOURCE = `const error = new Error(${JSON.stringify(`This module ${sealedEntryMessage}`)})
+error.name = ${JSON.stringify(`KodyError:${SEALED_ENTRY_ERROR}:403`)}
+throw error
+export default undefined
+`
 
 const staticImportRegex = /(\b(?:import|export)\b[^'"`;]*?\bfrom\s*)(['"])([^'"\n]+)\2/g
 const sideEffectImportRegex = /(^|[^\w.$])(import\s*)(['"])([^'"\n]+)\3/g
@@ -109,6 +121,8 @@ export async function buildModuleGraph(input: {
 	entry: GraphEntry
 	userCell: DurableObjectStub<UserCell>
 	allowNpm: boolean
+	/** True only for the gateway's provider runs: the provider entry may then be the graph entry. */
+	sealed?: boolean | undefined
 }): Promise<ModuleGraph> {
 	const modules: Record<string, string> = {}
 	const sourceOf = (path: string) => modules[path] ?? ''
@@ -126,6 +140,18 @@ export async function buildModuleGraph(input: {
 		return pkg
 	}
 
+	// A secretProvider entry returns a secret value, so it may only ever be the
+	// entry of a sealed run. Imports of it (`kody:` or relative, from any package
+	// including its own) are pointed at a module that throws when evaluated, so
+	// the rest of the package keeps working while that one path fails closed.
+	const providerEntryPaths = new Set<string>()
+	let sealedStubNeeded = false
+	const importTarget = (fromPath: string, targetPath: string) => {
+		if (!providerEntryPaths.has(targetPath)) return relativeSpecifier(fromPath, targetPath)
+		sealedStubNeeded = true
+		return relativeSpecifier(fromPath, SEALED_MODULE_PATH)
+	}
+
 	const rewriter: Rewriter = async (specifier, fromPath) => {
 		if (specifier === 'kody:runtime') return relativeSpecifier(fromPath, RUNTIME_MODULE_PATH)
 		const kodyPackage = parseKodyPackageSpecifier(specifier)
@@ -133,7 +159,7 @@ export async function buildModuleGraph(input: {
 			const pkg = await loadPackage(kodyPackage.packageName)
 			const exportPath = resolvePackageExport(pkg.manifest, kodyPackage.exportName)
 			await includePackage(kodyPackage.packageName)
-			return relativeSpecifier(fromPath, packageModulePath(kodyPackage.packageName, exportPath))
+			return importTarget(fromPath, packageModulePath(kodyPackage.packageName, exportPath))
 		}
 		if (specifier.startsWith('kody:')) {
 			throw new KodyError('invalid_import', `Unknown kody: import "${specifier}".`)
@@ -141,9 +167,9 @@ export async function buildModuleGraph(input: {
 		if (isBuiltin(specifier)) return specifier
 		if (isRelative(specifier)) {
 			const target = resolveRelative(fromPath, specifier)
-			if (target in modules) return relativeSpecifier(fromPath, target)
-			for (const candidate of [`${target}.js`, target.replace(/\.ts$/, '.js'), `${target}/index.js`]) {
-				if (candidate in modules) return relativeSpecifier(fromPath, candidate)
+			for (const candidate of [target, `${target}.js`, target.replace(/\.ts$/, '.js'), `${target}/index.js`]) {
+				if (!(candidate in modules)) continue
+				return importTarget(fromPath, candidate)
 			}
 			return specifier
 		}
@@ -174,6 +200,7 @@ export async function buildModuleGraph(input: {
 		if (includedPackages.has(name)) return
 		includedPackages.add(name)
 		const pkg = await loadPackage(name)
+		if (pkg.manifest.secretProvider) providerEntryPaths.add(packageModulePath(name, pkg.manifest.secretProvider.entry))
 		await includeFiles(pkg.files, (file) => packageModulePath(name, file))
 		for (const file of Object.keys(pkg.files)) {
 			if (!/\.(?:m?js|ts)$/.test(file)) continue
@@ -199,7 +226,11 @@ export async function buildModuleGraph(input: {
 		}
 		await includePackage(packageName)
 		entryPath = packageModulePath(packageName, filePath)
+		if (!input.sealed && providerEntryPaths.has(entryPath)) {
+			throw new KodyError(SEALED_ENTRY_ERROR, `"${filePath}" of ${packageName} ${sealedEntryMessage}`, { status: 403 })
+		}
 	}
+	if (sealedStubNeeded) modules[SEALED_MODULE_PATH] = SEALED_MODULE_SOURCE
 
 	if (npmSpecifiers.size > 0) {
 		const resolved = await resolveNpmModules([...npmSpecifiers])

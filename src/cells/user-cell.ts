@@ -29,8 +29,24 @@ import {
 	type WebhookDefinition,
 	type WebhookVerification,
 } from '../packages/manifest.ts'
-import { normalizeSecretHost } from '../secrets/host-policy.ts'
+import type { IntegrationConfig, IntegrationUsage } from '../integrations/oauth.ts'
+import {
+	IntegrationStore,
+	integrationSchema,
+	type ConnectRecord,
+	type ConnectTicket,
+	type IntegrationRecord,
+	type TokenResolution,
+} from '../integrations/store.ts'
+import { normalizeSecretHost, parseInsecureHostAllowance } from '../secrets/host-policy.ts'
 import type { SecretScope } from '../secrets/placeholders.ts'
+import {
+	SecretProviderStore,
+	secretProviderSchema,
+	type CachedProviderValue,
+	type SecretProviderBinding,
+	type SecretProviderGrant,
+} from '../secrets/provider-store.ts'
 import { signatureMatches } from '../webhooks/verify.ts'
 
 export type SecretMetadata = {
@@ -87,7 +103,7 @@ export type JobRunRecord = {
 
 export type RunRecord = {
 	id: string
-	kind: 'execute' | 'package' | 'job' | 'webhook' | 'subscription'
+	kind: 'execute' | 'package' | 'job' | 'webhook' | 'subscription' | 'secret-provider'
 	packageName: string | null
 	idempotencyKey: string | null
 	status: 'running' | 'success' | 'error'
@@ -292,6 +308,7 @@ function storedManifest(json: string): PackageManifest {
 		jobs: manifest.jobs ?? {},
 		webhooks: manifest.webhooks ?? [],
 		subscriptions: manifest.subscriptions ?? [],
+		secretProvider: manifest.secretProvider ?? null,
 		dependencies: manifest.dependencies ?? {},
 		hidden: manifest.hidden === true,
 		keywords: manifest.keywords ?? [],
@@ -514,8 +531,18 @@ export class UserCell extends DurableObject<Env> {
 			);
 			CREATE INDEX IF NOT EXISTS email_delivery_events_message ON email_delivery_events(message_id, at DESC);
 		`)
+		this.ctx.storage.sql.exec(integrationSchema)
+		this.ctx.storage.sql.exec(secretProviderSchema)
 		this.limits = limitsFromEnv(env)
 		this.defaultQuotas = quotasFromEnv(env)
+		this.integrations = new IntegrationStore({
+			sql: this.ctx.storage.sql,
+			userId: () => this.userId,
+			keyring: () => this.keyring(),
+			insecureAllowance: parseInsecureHostAllowance(env.KODY_ALLOW_INSECURE_SECRET_HOSTS),
+			fetch: (input, init) => fetch(input, init),
+		})
+		this.secretProviders = new SecretProviderStore(this.ctx.storage.sql)
 		const secretColumns = this.ctx.storage.sql
 			.exec<{ name: string }>(`SELECT name FROM pragma_table_info('secrets')`)
 			.toArray()
@@ -537,6 +564,8 @@ export class UserCell extends DurableObject<Env> {
 
 	private readonly limits: Limits
 	private readonly defaultQuotas: Quotas
+	private readonly integrations: IntegrationStore
+	private readonly secretProviders: SecretProviderStore
 
 	private keyringPromise: Promise<MasterKeyring> | undefined
 	private keyring() {
@@ -569,7 +598,9 @@ export class UserCell extends DurableObject<Env> {
 		return effectiveQuotas(this.defaultQuotas, this.quotaOverride())
 	}
 
-	private count(table: 'packages' | 'secrets' | 'jobs' | 'runs' | 'blobs' | 'email_messages' | 'webhooks') {
+	private count(
+		table: 'packages' | 'secrets' | 'jobs' | 'runs' | 'blobs' | 'email_messages' | 'webhooks' | 'integrations',
+	) {
 		return Number(this.ctx.storage.sql.exec<{ n: number }>(`SELECT COUNT(*) AS n FROM ${table}`).toArray()[0]?.n ?? 0)
 	}
 
@@ -818,7 +849,12 @@ export class UserCell extends DurableObject<Env> {
 		const remaining = this.ctx.storage.sql
 			.exec<{ c: number }>('SELECT count(*) AS c FROM secrets WHERE key_id != ?', keyring.current.id)
 			.toArray()[0]
-		return { resealed, remaining: remaining?.c ?? 0, currentKeyId: keyring.current.id }
+		const integrations = await this.integrations.rekey()
+		return {
+			resealed: resealed + integrations.resealed,
+			remaining: (remaining?.c ?? 0) + integrations.remaining,
+			currentKeyId: keyring.current.id,
+		}
 	}
 
 	// ----------------------------------------------------------- secret hosts
@@ -906,6 +942,8 @@ export class UserCell extends DurableObject<Env> {
 		)
 		this.reconcileJobs(manifest, now)
 		this.reconcileWebhooks(manifest, now)
+		if (!manifest.secretProvider) this.secretProviders.unbindPackage(manifest.name)
+		else this.secretProviders.invalidate(manifest.secretProvider.id)
 		return {
 			name: manifest.name,
 			version: manifest.version,
@@ -1044,7 +1082,220 @@ export class UserCell extends DurableObject<Env> {
 			this.ctx.storage.sql.exec('DELETE FROM webhook_idempotency WHERE handle = ?', row.handle)
 		}
 		this.ctx.storage.sql.exec('DELETE FROM webhooks WHERE package_name = ?', name)
+		this.secretProviders.unbindPackage(name)
 		return { deleted: cursor.rowsWritten > 0 }
+	}
+
+	// ----------------------------------------------------------- integrations
+
+	async integrationSave(input: {
+		config: IntegrationConfig
+		clientSecret: string | null | undefined
+	}): Promise<IntegrationRecord> {
+		if (!this.integrations.get(input.config.name))
+			this.assertQuota('integrations', this.count('integrations'), 'Integration')
+		return this.integrations.save(input.config, input.clientSecret)
+	}
+
+	async integrationList(): Promise<Array<IntegrationRecord>> {
+		return this.integrations.list()
+	}
+
+	async integrationGet(name: string): Promise<IntegrationRecord | null> {
+		return this.integrations.get(name)
+	}
+
+	async integrationSetUsage(input: { name: string; usage: IntegrationUsage }): Promise<IntegrationRecord> {
+		return this.integrations.setUsage(input.name, input.usage)
+	}
+
+	async integrationDisconnect(name: string): Promise<IntegrationRecord> {
+		return this.integrations.disconnect(name)
+	}
+
+	async integrationDelete(name: string) {
+		return this.integrations.delete(name)
+	}
+
+	async integrationConnectStart(input: { name: string; redirectUri: string }): Promise<ConnectTicket> {
+		return this.integrations.connectStart(input.name, input.redirectUri)
+	}
+
+	async integrationConnectGet(connectId: string): Promise<ConnectRecord | null> {
+		return this.integrations.connectGet(connectId)
+	}
+
+	async integrationConnectLatest(name: string): Promise<ConnectRecord | null> {
+		return this.integrations.connectLatest(name)
+	}
+
+	async integrationConnectBegin(input: { connectId: string; ticket: string }): Promise<{ authorizeUrl: string }> {
+		return this.integrations.connectBegin(input)
+	}
+
+	async integrationConnectComplete(input: {
+		connectId: string
+		nonce: string
+		code: string | null
+		providerError: string | null
+	}): Promise<{ record: IntegrationRecord; connect: ConnectRecord }> {
+		return this.integrations.connectComplete(input)
+	}
+
+	/** Metadata-only refresh for capabilities; the token stays inside the cell. */
+	async integrationRefresh(
+		name: string,
+	): Promise<{ ok: boolean; code?: string; message?: string; record: IntegrationRecord | null }> {
+		const outcome = await this.integrations.refresh(name)
+		if (outcome.ok) return { ok: true, record: outcome.record }
+		return { ok: false, code: outcome.code, message: outcome.message, record: outcome.record }
+	}
+
+	/** Gateway-only: returns the access token for `{{integration-token:name}}` injection. */
+	async integrationTokenResolve(input: {
+		name: string
+		packageName: string | null
+		host: string
+		forceRefresh?: boolean
+	}): Promise<TokenResolution> {
+		return this.integrations.tokenResolve(input)
+	}
+
+	// -------------------------------------------------------- secret providers
+
+	async secretProviderBind(input: {
+		providerId: string
+		packageName: string
+		doorSecretName: string
+		config: Record<string, string>
+		locked: boolean | undefined
+	}): Promise<SecretProviderBinding> {
+		const pkg = await this.packageGet(input.packageName)
+		if (!pkg) throw new KodyError('package_not_found', `Package "${input.packageName}" was not found.`, { status: 404 })
+		if (!pkg.manifest.secretProvider || pkg.manifest.secretProvider.id !== input.providerId) {
+			throw new KodyError(
+				'not_a_secret_provider',
+				`Package "${input.packageName}" does not declare kody.secretProvider.id "${input.providerId}"${
+					pkg.manifest.secretProvider ? ` (it declares "${pkg.manifest.secretProvider.id}")` : ''
+				}.`,
+			)
+		}
+		const door = (await this.secretList()).find(
+			(s) =>
+				s.name === input.doorSecretName &&
+				(s.scope === 'user' || (s.scope === 'package' && s.packageName === input.packageName)),
+		)
+		if (!door) {
+			throw new KodyError(
+				'secret_not_found',
+				`Door secret "${input.doorSecretName}" was not found; save it with secretSave first (scope user, or scope package for "${input.packageName}").`,
+				{ status: 404 },
+			)
+		}
+		return this.secretProviders.bind(input)
+	}
+
+	async secretProviderUnbind(providerId: string) {
+		return this.secretProviders.unbind(providerId)
+	}
+
+	async secretProviderSetLocked(input: { providerId: string; locked: boolean }): Promise<SecretProviderBinding> {
+		return this.secretProviders.setLocked(input.providerId, input.locked)
+	}
+
+	/**
+	 * Gateway-only pre-check for `{{secret/<provider>:<ref>}}`. On a locked binding a
+	 * package that already holds some grant for the provider may resolve an
+	 * unknown alias (`provisional`) so the canonical ref can be learned; the
+	 * gateway must then re-check with `strict: true` before injecting anything.
+	 */
+	async secretProviderAuthorize(input: {
+		providerId: string
+		ref: string
+		packageName: string | null
+		strict?: boolean
+	}): Promise<
+		| { ok: true; binding: SecretProviderBinding; cached: CachedProviderValue | null; provisional: boolean }
+		| { ok: false; code: string; status: number; message: string }
+	> {
+		const binding = this.secretProviders.get(input.providerId)
+		if (!binding) {
+			return {
+				ok: false,
+				code: 'secret_provider_not_bound',
+				status: 404,
+				message: `No secret provider is bound as "${input.providerId}". Bind one with secretProviderBind.`,
+			}
+		}
+		const cached = this.secretProviders.cacheGet(input.providerId, input.ref)
+		const canonicalRef = cached?.canonicalRef ?? input.ref
+		if (!this.secretProviders.permits(binding, canonicalRef, input.packageName)) {
+			const provisional =
+				!input.strict &&
+				cached === null &&
+				input.packageName !== null &&
+				this.secretProviders.grants(input.providerId).some((g) => g.packageName === input.packageName)
+			if (provisional) return { ok: true, binding, cached: null, provisional: true }
+			return {
+				ok: false,
+				code: 'secret_provider_not_granted',
+				status: 403,
+				message: `Provider "${input.providerId}" is locked; ${
+					input.packageName ? `package "${input.packageName}" has no grant for` : 'ad hoc code may not use'
+				} ref "${input.ref}". Grant it with secretProviderGrant.`,
+			}
+		}
+		return { ok: true, binding, cached, provisional: false }
+	}
+
+	async secretProviderList(): Promise<Array<SecretProviderBinding & { grants: Array<SecretProviderGrant> }>> {
+		const grants = this.secretProviders.grants()
+		return this.secretProviders.list().map((binding) => ({
+			...binding,
+			grants: grants.filter((g) => g.providerId === binding.providerId),
+		}))
+	}
+
+	async secretProviderGet(providerId: string): Promise<SecretProviderBinding | null> {
+		return this.secretProviders.get(providerId)
+	}
+
+	async secretProviderGrant(input: {
+		providerId: string
+		canonicalRef: string
+		packageName: string
+	}): Promise<SecretProviderGrant> {
+		if (!this.secretProviders.get(input.providerId)) {
+			throw new KodyError('secret_provider_not_bound', `No provider is bound as "${input.providerId}".`, {
+				status: 404,
+			})
+		}
+		if (!(await this.packageGet(input.packageName))) {
+			throw new KodyError('package_not_found', `Package "${input.packageName}" was not found.`, { status: 404 })
+		}
+		return this.secretProviders.grant(input)
+	}
+
+	async secretProviderRevoke(input: { providerId: string; canonicalRef: string; packageName: string }) {
+		return this.secretProviders.revoke(input)
+	}
+
+	async secretProviderIsGranted(input: {
+		providerId: string
+		canonicalRef: string
+		packageName: string
+	}): Promise<boolean> {
+		return this.secretProviders.isGranted(input)
+	}
+
+	/** Gateway-only cache of resolved provider values (in memory, never persisted). */
+	async secretProviderCachePut(input: {
+		providerId: string
+		ref: string
+		entry: Omit<CachedProviderValue, 'expiresAt'>
+		ttlMs: number
+	}) {
+		this.secretProviders.cachePut(input.providerId, input.ref, input.entry, input.ttlMs)
 	}
 
 	// ------------------------------------------------------------------- jobs
