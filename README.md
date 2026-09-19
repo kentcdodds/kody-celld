@@ -7,20 +7,38 @@ with an S3-compatible bucket for durability.
 It is deliberately the _core_, not full product parity with
 [kentcdodds/kody](https://github.com/kentcdodds/kody):
 
-| Surface                                              | Status                                                             |
-| ---------------------------------------------------- | ------------------------------------------------------------------ |
-| MCP `search` + `execute` (streamable HTTP, JSON-RPC) | Working, smoke-tested                                              |
-| Packages (save local / in-memory, run, import)       | Working, smoke-tested (`kody:@scope/pkg/export`, `packageStorage`) |
-| Secrets (encrypted store + host-gated injection)     | Working, smoke-tested (`{{secret:name}}`, `{{secret-basic:...}}`)  |
-| Jobs (package-owned cron / interval / once)          | Working, smoke-tested against the real celld cron trigger          |
-| npm imports inside `execute`                         | Experimental via esm.sh (see [known gaps](./docs/known-gaps.md))   |
-| Vectorize / memories, Workers AI, Email, web UI      | Deferred — see [known gaps](./docs/known-gaps.md)                  |
+| Surface                                              | Status                                                                                                    |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| MCP `search` + `execute` (streamable HTTP, JSON-RPC) | Working, smoke-tested                                                                                     |
+| Packages (save local / in-memory, run, import)       | Working, smoke-tested (`kody:@scope/pkg/export`, `packageStorage`)                                        |
+| Secrets (encrypted store + host-gated injection)     | Working, smoke-tested (`{{secret:name}}`, `{{secret-basic:...}}`)                                         |
+| Jobs (package-owned cron / interval / once)          | Working, smoke-tested against the real celld cron trigger                                                 |
+| Docker: single node (NAS / home server) and fleet    | Working, smoke-tested (`compose.yaml`, `compose.fleet.yaml` + MinIO + Caddy)                              |
+| Master-key rotation                                  | Working, smoke-tested (`KODY_MASTER_KEY_PREVIOUS` + `POST /admin/secrets/rekey`)                          |
+| npm imports inside `execute`                         | Experimental via esm.sh (see [provision matrix](./docs/known-gaps.md))                                    |
+| AI, memories, email, webhooks, OAuth, web UI, …      | Planned as built-ins and/or adapters — status per feature in the [provision matrix](./docs/known-gaps.md) |
+
+**New here? Start with [docs/getting-started.md](./docs/getting-started.md)** —
+it goes from zero to a running Kody in one Docker container (or a two-node
+fleet) and shows how to connect an MCP client.
 
 Read [docs/architecture.md](./docs/architecture.md) for how it fits together
 and [docs/decision-standalone-vs-adapters.md](./docs/decision-standalone-vs-adapters.md)
 for why this is a standalone project rather than a fork of production Kody.
 
-## Run locally
+## Run with Docker
+
+```sh
+cp .env.example .env            # optional; empty values are generated and persisted
+docker compose up -d            # one node on http://localhost:8080, state in the kody-data volume
+docker compose exec kody cat /data/kody.env   # KODY_ADMIN_TOKEN / KODY_MASTER_KEY
+```
+
+Fleet (two nodes + MinIO + Caddy): `COMPOSE_FILE=compose.fleet.yaml:compose.minio.yaml`
+in `.env`, then `docker compose up -d`. Details, TLS, backups and swapping
+MinIO for S3/R2/GCS/Azure: [docs/getting-started.md](./docs/getting-started.md).
+
+## Run locally (no Docker)
 
 Prerequisites: Node ≥ 22.18, `celld` ≥ 0.5 on your `PATH`
 ([install](https://celld.dev/docs)), and `npm install` (provides `esbuild`,
@@ -155,9 +173,11 @@ celld --bucket $CELLD_BUCKET --listen 0.0.0.0:8080 --internal-listen 10.0.0.5:90
 
 Minimum: one node + one S3-compatible bucket with conditional writes; two or
 more nodes for `fleet` durability and failover; TLS terminated in front of
-celld; peer traffic on a private network. Full walkthrough, bucket
-requirements, and what was **not** verified here (no bucket credentials were
-available in this experiment) in [docs/run-fleet.md](./docs/run-fleet.md).
+celld; peer traffic on a private network. The Docker fleet
+(`compose.fleet.yaml` + `compose.minio.yaml`) was run for real: `npm run
+smoke:cron` through Caddy passed and stopping a node left the other serving
+all state. Bare-metal walkthrough, bucket requirements, and exactly what was
+and was not verified: [docs/run-fleet.md](./docs/run-fleet.md).
 
 ## Development
 
@@ -176,9 +196,10 @@ src/execute/              module graph → Worker Loader isolate; RuntimeHost RP
 src/secrets/              placeholders, host policy, FetchGateway (network-boundary injection)
 src/cells/                Durable Objects: RegistryCell (users/tokens), UserCell (per-user state), PackageStorageCell
 src/jobs/                 schedule parsing + dispatcher
-smoke/                    real workloads against a running node (npm run smoke)
+smoke/                    real workloads against a running node (npm run smoke; smoke/rekey.mjs for key rotation)
 examples/packages/        @kody-smoke/counter, @kody-smoke/http-probe
-docs/                     architecture, run paths, decision record, known gaps
+docker/                   entrypoint (single / deploy / node), healthcheck, Caddyfile, bucket bootstrap
+docs/                     getting started, architecture, run paths, decision record, provision matrix
 ```
 
 See [AGENTS.md](./AGENTS.md) for contributor rules.

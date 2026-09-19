@@ -1,0 +1,10 @@
+node_modules
+.celld
+.git
+.env
+.env.*
+!.env.example
+.dev.vars
+wrangler.fleet.jsonc
+*.local
+.DS_Store

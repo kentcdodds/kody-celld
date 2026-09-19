@@ -1,0 +1,34 @@
+# Single-node kody-celld for a NAS, home server, or one VPS.
+#
+#   docker compose up -d
+#   docker compose exec kody cat /data/kody.env     # admin token + master key
+#
+# Durable state (users, packages, secrets, jobs) lives in the `kody-data`
+# volume. Back it up. To upgrade: `docker compose pull && docker compose up -d`
+# (or rebuild); the state and generated operator values are kept.
+#
+# Copy .env.example to .env to set KODY_PUBLIC_URL (the URL people will use,
+# e.g. https://kody.home.example.com behind your reverse proxy) or to pin your
+# own KODY_ADMIN_TOKEN / KODY_MASTER_KEY instead of the generated ones.
+services:
+  kody:
+    build: .
+    image: ${KODY_IMAGE:-kody-celld:local}
+    command: ['single']
+    init: true
+    restart: unless-stopped
+    ports:
+      - '${KODY_PORT:-8080}:8080'
+    environment:
+      KODY_PUBLIC_URL: ${KODY_PUBLIC_URL:-http://localhost:8080}
+      KODY_ADMIN_TOKEN: ${KODY_ADMIN_TOKEN:-}
+      KODY_MASTER_KEY: ${KODY_MASTER_KEY:-}
+      KODY_MASTER_KEY_PREVIOUS: ${KODY_MASTER_KEY_PREVIOUS:-}
+      KODY_ALLOW_INSECURE_SECRET_HOSTS: ${KODY_ALLOW_INSECURE_SECRET_HOSTS:-}
+    volumes:
+      - kody-data:/data
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+
+volumes:
+  kody-data:

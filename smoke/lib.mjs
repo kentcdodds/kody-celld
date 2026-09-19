@@ -166,6 +166,11 @@ export function sha256(text) {
  * injection happened without ever seeing the secret on the wire twice.
  */
 export async function startEchoServer(port = Number(process.env.SMOKE_ECHO_PORT ?? 9797)) {
+	// SMOKE_ECHO_HOST is the name the Kody runtime uses to reach this process
+	// (host.docker.internal when Kody runs in Docker); SMOKE_ECHO_BIND is the
+	// interface to listen on (0.0.0.0 for Docker, loopback otherwise).
+	const host = process.env.SMOKE_ECHO_HOST ?? '127.0.0.1'
+	const bind = process.env.SMOKE_ECHO_BIND ?? (host === '127.0.0.1' ? '127.0.0.1' : '0.0.0.0')
 	const seen = []
 	const server = createServer(async (req, res) => {
 		let body = ''
@@ -184,10 +189,10 @@ export async function startEchoServer(port = Number(process.env.SMOKE_ECHO_PORT 
 		res.setHeader('content-type', 'application/json')
 		res.end(JSON.stringify(record))
 	})
-	await new Promise((resolve) => server.listen(port, '127.0.0.1', resolve))
+	await new Promise((resolve) => server.listen(port, bind, resolve))
 	return {
-		url: `http://127.0.0.1:${port}`,
-		host: '127.0.0.1',
+		url: `http://${host}:${port}`,
+		host,
 		seen,
 		close: () => new Promise((resolve) => server.close(resolve)),
 	}

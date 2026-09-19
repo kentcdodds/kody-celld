@@ -8,8 +8,9 @@ is the contributor contract.
 `npm run validate` (typecheck, oxlint, prettier check, `node --test` unit tests)
 must pass before a PR. `npm run smoke` (with `npm run dev` running) is the
 integration gate; run `npm run smoke:cron` when touching jobs or the dispatcher.
-CI-less by design in the experiment — run both locally and paste the summary
-line in the PR.
+GitHub Actions (`.github/workflows/ci.yml`) runs `validate` and the full
+`smoke:cron` against the single-node Docker image on every PR; run both locally
+too and paste the smoke summary line in the PR.
 
 ## Non-negotiables
 

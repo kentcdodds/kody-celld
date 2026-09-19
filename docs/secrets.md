@@ -15,9 +15,40 @@ await kody.secretDelete({ name: 'github' })
 
 Values are AES-256-GCM encrypted with a fresh 12-byte IV under a per-user key:
 `HKDF(master = KODY_MASTER_KEY, salt = "kody-celld:<userId>", info = "kody-celld-secret-values")`.
-Ciphertext lives in the user's `UserCell`; the master key lives only in the
-Worker var. `secretSave` responses and run results are checked by the smoke
-suite to never contain the plaintext.
+Ciphertext lives in the user's `UserCell` together with a 16-hex-char
+`key_id` (a hash of the sealing master key, so rows can be matched to a key
+without revealing it); the master key lives only in the Worker var.
+`secretSave` responses and run results are checked by the smoke suite to never
+contain the plaintext.
+
+## Master key rotation
+
+Rotation is a three-step, zero-downtime process:
+
+1. Generate a new key and deploy with **both**:
+   `KODY_MASTER_KEY=<new>` and `KODY_MASTER_KEY_PREVIOUS=<old>` (comma-separate
+   several retired keys if needed). New writes use the new key; reads pick the
+   key by `key_id`, so nothing breaks in between.
+2. Re-seal everything:
+   ```sh
+   curl -X POST $BASE/admin/secrets/rekey -H "authorization: Bearer $KODY_ADMIN_TOKEN"
+   # -> { currentKeyId, resealed, remaining, users: [...], next: "..." }
+   ```
+   It walks every user cell and re-encrypts rows whose `key_id` differs from
+   the current key. Rows it cannot decrypt are left in place, counted in
+   `remaining`, and logged by name (never value).
+3. When `remaining` is `0`, remove `KODY_MASTER_KEY_PREVIOUS` and redeploy.
+
+Docker single-node: set both variables in `.env`, `docker compose up -d`, run
+step 2, then remove `KODY_MASTER_KEY_PREVIOUS` from `.env`. The container
+writes the new `KODY_MASTER_KEY` back into `/data/kody.env`, so it stays in
+effect even if you later drop it from `.env`. Fleet: set both in `.env` and
+`docker compose run --rm deploy` for steps 1 and 3.
+
+The whole cycle is exercised by `smoke/rekey.mjs` in three phases around node
+restarts (`seal` → restart with both keys → `rotate` → restart with the new
+key only → `verify`); it proves a secret sealed under the old key still
+injects at every step and that `rekey` becomes a no-op at the end.
 
 ## Placeholders
 
@@ -75,7 +106,6 @@ test harness.
 
 ## Not in v1
 
-- Master key rotation / multiple key versions.
 - Provider-scoped secrets and OAuth integration tokens.
 - Per-secret host allowlists (approval is per host, per user).
 - Egress allowlisting for placeholder-free requests.

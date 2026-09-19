@@ -1,7 +1,13 @@
 import { DurableObject } from 'cloudflare:workers'
 import type { Env } from '../env.ts'
 import { computeNextRun, validateSchedule } from '../jobs/schedule.ts'
-import { decryptSecretValue, encryptSecretValue, randomId } from '../lib/crypto.ts'
+import {
+	buildMasterKeyring,
+	decryptWithKeyring,
+	encryptSecretValue,
+	randomId,
+	type MasterKeyring,
+} from '../lib/crypto.ts'
 import { KodyError } from '../lib/errors.ts'
 import { parsePackageManifest, type PackageFiles, type PackageManifest } from '../packages/manifest.ts'
 import { normalizeSecretHost } from '../secrets/host-policy.ts'
@@ -173,6 +179,19 @@ export class UserCell extends DurableObject<Env> {
 			CREATE UNIQUE INDEX IF NOT EXISTS runs_idempotency ON runs(idempotency_key) WHERE idempotency_key IS NOT NULL;
 			CREATE INDEX IF NOT EXISTS runs_created ON runs(created_at DESC);
 		`)
+		const secretColumns = this.ctx.storage.sql
+			.exec<{ name: string }>(`SELECT name FROM pragma_table_info('secrets')`)
+			.toArray()
+			.map((row) => row.name)
+		if (!secretColumns.includes('key_id')) {
+			this.ctx.storage.sql.exec(`ALTER TABLE secrets ADD COLUMN key_id TEXT NOT NULL DEFAULT ''`)
+		}
+	}
+
+	private keyringPromise: Promise<MasterKeyring> | undefined
+	private keyring() {
+		this.keyringPromise ??= buildMasterKeyring(this.env.KODY_MASTER_KEY, this.env.KODY_MASTER_KEY_PREVIOUS)
+		return this.keyringPromise
 	}
 
 	private get userId() {
@@ -211,20 +230,22 @@ export class UserCell extends DurableObject<Env> {
 		if (scope === 'package' && !packageName) {
 			throw new KodyError('invalid_secret_scope', 'Package-scoped secrets need a package name.')
 		}
-		const encrypted = await encryptSecretValue(this.env.KODY_MASTER_KEY, this.userId, input.value)
+		const { current } = await this.keyring()
+		const encrypted = await encryptSecretValue(current.key, this.userId, input.value)
 		const now = nowIso()
 		this.ctx.storage.sql.exec(
-			`INSERT INTO secrets (name, scope, package_name, description, iv, ciphertext, created_at, updated_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			`INSERT INTO secrets (name, scope, package_name, description, iv, ciphertext, key_id, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 			 ON CONFLICT(name, scope, package_name) DO UPDATE SET
 			   description = COALESCE(excluded.description, secrets.description),
-			   iv = excluded.iv, ciphertext = excluded.ciphertext, updated_at = excluded.updated_at`,
+			   iv = excluded.iv, ciphertext = excluded.ciphertext, key_id = excluded.key_id, updated_at = excluded.updated_at`,
 			name,
 			scope,
 			packageName,
 			input.description ?? null,
 			encrypted.iv,
 			encrypted.ciphertext,
+			current.id,
 			now,
 			now,
 		)
@@ -281,8 +302,8 @@ export class UserCell extends DurableObject<Env> {
 		const missing: Array<string> = []
 		for (const ref of input.names) {
 			const candidates = this.ctx.storage.sql
-				.exec<{ scope: SecretScope; package_name: string; iv: string; ciphertext: string }>(
-					'SELECT scope, package_name, iv, ciphertext FROM secrets WHERE name = ?',
+				.exec<{ scope: SecretScope; package_name: string; iv: string; ciphertext: string; key_id: string }>(
+					'SELECT scope, package_name, iv, ciphertext, key_id FROM secrets WHERE name = ?',
 					ref.name,
 				)
 				.toArray()
@@ -295,9 +316,61 @@ export class UserCell extends DurableObject<Env> {
 				missing.push(ref.name)
 				continue
 			}
-			values[ref.name] = await decryptSecretValue(this.env.KODY_MASTER_KEY, this.userId, match)
+			values[ref.name] = await decryptWithKeyring(await this.keyring(), this.userId, {
+				iv: match.iv,
+				ciphertext: match.ciphertext,
+				keyId: match.key_id || undefined,
+			})
 		}
 		return { values, missing }
+	}
+
+	/**
+	 * Re-seals every secret not already sealed with the current master key.
+	 * Run after adding a new KODY_MASTER_KEY (with the old one in
+	 * KODY_MASTER_KEY_PREVIOUS); once it reports zero remaining, the previous
+	 * key can be dropped from the configuration.
+	 */
+	async secretRekey(): Promise<{ resealed: number; remaining: number; currentKeyId: string }> {
+		const keyring = await this.keyring()
+		const rows = this.ctx.storage.sql
+			.exec<{ name: string; scope: string; package_name: string; iv: string; ciphertext: string; key_id: string }>(
+				'SELECT name, scope, package_name, iv, ciphertext, key_id FROM secrets WHERE key_id != ?',
+				keyring.current.id,
+			)
+			.toArray()
+		let resealed = 0
+		for (const row of rows) {
+			let plaintext: string
+			try {
+				plaintext = await decryptWithKeyring(keyring, this.userId, {
+					iv: row.iv,
+					ciphertext: row.ciphertext,
+					keyId: row.key_id || undefined,
+				})
+			} catch (error) {
+				console.error(
+					`secretRekey: cannot decrypt ${row.scope} secret "${row.name}" (key ${row.key_id || 'legacy'}):`,
+					error instanceof Error ? error.message : error,
+				)
+				continue
+			}
+			const sealed = await encryptSecretValue(keyring.current.key, this.userId, plaintext)
+			this.ctx.storage.sql.exec(
+				'UPDATE secrets SET iv = ?, ciphertext = ?, key_id = ? WHERE name = ? AND scope = ? AND package_name = ?',
+				sealed.iv,
+				sealed.ciphertext,
+				keyring.current.id,
+				row.name,
+				row.scope,
+				row.package_name,
+			)
+			resealed++
+		}
+		const remaining = this.ctx.storage.sql
+			.exec<{ c: number }>('SELECT count(*) AS c FROM secrets WHERE key_id != ?', keyring.current.id)
+			.toArray()[0]
+		return { resealed, remaining: remaining?.c ?? 0, currentKeyId: keyring.current.id }
 	}
 
 	// ----------------------------------------------------------- secret hosts

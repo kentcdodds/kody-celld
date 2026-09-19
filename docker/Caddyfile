@@ -1,0 +1,15 @@
+# TLS terminator + load balancer in front of the celld nodes.
+# KODY_SITE_ADDRESS examples:
+#   :80                       plain HTTP on the LAN (default; set KODY_ALLOW_HTTP_PUBLIC_URL=1)
+#   kody.example.com          public hostname -> automatic Let's Encrypt certificate
+#   https://kody.lan          LAN hostname with a Caddy-issued local CA certificate
+{$KODY_SITE_ADDRESS} {
+	encode zstd gzip
+	reverse_proxy node-a:8080 node-b:8080 {
+		lb_policy round_robin
+		lb_try_duration 10s
+		health_uri /health
+		health_interval 10s
+		fail_duration 15s
+	}
+}
