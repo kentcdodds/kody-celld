@@ -167,7 +167,10 @@ export function CommunityDetail(handle: Handle<{ data: DetailData }>) {
 			<PublicPage
 				title={
 					<>
-						<a href={routes.community.href()} mix={css(mutedLinkCss)}>
+						<a
+							href={routes.community.href()}
+							mix={css({ ...mutedLinkCss, fontSize: 'inherit' })}
+						>
 							Community
 						</a>{' '}
 						/ {pkg.name}
