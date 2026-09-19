@@ -323,6 +323,7 @@ export default async function main() { return await kody.integrationList() }`,
 		log('injection', { adHoc: adHoc.result.status, createAuthenticatedFetch: viaPackage.result.status })
 
 		// --- host allowlist: "localhost" is not in allowedHosts even though it is the same server.
+		// (When localhost is also outside KODY_ALLOW_INSECURE_SECRET_HOSTS the https gate refuses first.)
 		const otherHost = await mcp.execute(
 			`export default async function main({ url }) {
   const res = await fetch(url, { headers: { authorization: 'Bearer {{integration-token:${name}}}' } })
@@ -331,7 +332,9 @@ export default async function main() { return await kody.integrationList() }`,
 			{ url: apiUrl.replace(provider.host, 'localhost') },
 		)
 		assert(
-			otherHost.ok && otherHost.result.status === 403 && otherHost.result.body.error === 'integration_host_not_allowed',
+			otherHost.ok &&
+				otherHost.result.status === 403 &&
+				['integration_host_not_allowed', 'secret_requires_https'].includes(otherHost.result.body.error),
 			'token must not be sent to a host outside allowedHosts',
 			otherHost.result,
 		)
