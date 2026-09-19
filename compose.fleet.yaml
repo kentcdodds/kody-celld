@@ -20,7 +20,7 @@ x-bucket-env: &bucket-env
 
 x-node: &node
   build: .
-  image: ${KODY_IMAGE:-kody-celld:local}
+  image: ${KODY_IMAGE:-ghcr.io/kentcdodds/kody-celld:latest}
   init: true
   restart: unless-stopped
   environment:
@@ -36,7 +36,7 @@ x-node: &node
 services:
   deploy:
     build: .
-    image: ${KODY_IMAGE:-kody-celld:local}
+    image: ${KODY_IMAGE:-ghcr.io/kentcdodds/kody-celld:latest}
     command: ['deploy']
     restart: 'no'
     environment:

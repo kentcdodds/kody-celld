@@ -5,7 +5,7 @@ support the [MCP authorization spec](https://modelcontextprotocol.io/specificati
 (Claude Code, Claude Desktop, Cursor, VS Code, ChatGPT connectors, …) connect
 with **no token pasting**: they discover the server, register themselves,
 send the user to a sign-in + consent page, and receive tokens that they refresh
-on their own. Static API tokens (`kody_…`) keep working unchanged for clients
+on their own. Static API tokens (`kc_…`) keep working unchanged for clients
 that only take a URL + header.
 
 There is no third-party identity provider in the loop and nothing to
@@ -56,7 +56,7 @@ GET  /oauth/userinfo
   with a refresh token it kills the family. Users can revoke a client at any
   time from `/account/clients` (or `kody.mcpClientRevoke()`), and the operator
   can sign a user out of everything with `POST /admin/users/:id/signout`.
-- **Bearer tokens** are accepted wherever `kody_…` API tokens are: `/mcp` and
+- **Bearer tokens** are accepted wherever `kc_…` API tokens are: `/mcp` and
   `/api/*`. A revoked/expired token returns `401` with
   `error="invalid_token"` in the challenge so clients re-authenticate.
 - `OPTIONS /mcp` and the OAuth endpoints answer CORS preflights, so

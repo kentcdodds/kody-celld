@@ -38,6 +38,19 @@ Workers + Durable Objects runtime. No Cloudflare account is involved.
 Best for a Synology/QNAP/Unraid NAS, a Raspberry Pi 4/5 (64-bit), a home
 server, or one small VPS. State lives in one Docker volume.
 
+### 0. Requirements
+
+| What    | Minimum                                                                                                                                                                                       |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Docker  | 24+ with the `docker compose` plugin (`docker compose version`)                                                                                                                               |
+| CPU     | `linux/amd64` or `linux/arm64`; 1 core. The prebuilt image ships for both; 32-bit ARM is not supported (celld has no build for it).                                                           |
+| RAM     | 1 GB for Kody. Measured on the reference build: ~60 MB idle, ~600 MB with a dozen heavy `execute` runs in flight. Overlays add their own (the Ollama one wants several GB).                   |
+| Disk    | ~550 MB image + data. A fresh install writes 2 MB; growth is your packages, run history, memories and uploaded blobs (all SQLite/files in one volume).                                        |
+| Network | One inbound TCP port (default `8080`) reachable by your browser and MCP clients. Outbound HTTPS so `execute` code can call APIs, `npm` imports resolve and packages install from GitHub/URLs. |
+
+No domain or TLS is needed on a LAN or Tailscale network. No Cloudflare account
+is involved at any point.
+
 ### 1. Install Docker
 
 - NAS: install the **Container Manager** (Synology) / **Container Station**
@@ -47,15 +60,52 @@ server, or one small VPS. State lives in one Docker volume.
 
 You need Docker 24+ with the `docker compose` plugin (`docker compose version`).
 
-### 2. Get the project
+### 2. Get a compose file
+
+**Option 1 — prebuilt image (recommended on a NAS).** Nothing to clone or
+build. Create a folder (say `kody`), save this as `compose.yaml` in it — or
+paste it into Container Manager → Project / Container Station → Application /
+Portainer → Stacks:
+
+```yaml
+services:
+  kody:
+    image: ghcr.io/kentcdodds/kody-celld:latest
+    init: true
+    restart: unless-stopped
+    ports:
+      - '8080:8080'
+    environment:
+      KODY_PUBLIC_URL: http://<nas-ip>:8080 # what browsers/MCP clients will use
+    volumes:
+      - kody-data:/data
+volumes:
+  kody-data:
+```
+
+Replace `<nas-ip>` with the address you will type into the browser (hostname,
+Tailscale name or LAN IP). Every other setting is optional; the
+[`.env.example`](../.env.example) lists them and any of them can go under
+`environment:`.
+
+The image is published for `linux/amd64` and `linux/arm64` by
+[`publish.yml`](../.github/workflows/publish.yml) on every push to `main`
+(`:latest`, `:main`, `:sha-…`) and on version tags (`:1.2.3`). Pin a tag if you
+want to control when you upgrade.
+
+**Option 2 — build from source.** Needed for the overlays (`compose.*.yaml`)
+and the fleet, or if you want to hack on it:
 
 ```sh
 git clone https://github.com/kentcdodds/kody-celld.git
 cd kody-celld
+cp .env.example .env     # set KODY_PUBLIC_URL; leave the token/key empty
 ```
 
 (No git on the NAS? Download the ZIP from GitHub and unpack it into a shared
-folder, then open a terminal/SSH session in that folder.)
+folder, then open a terminal/SSH session in that folder.) `docker compose up -d`
+builds the image under the same `ghcr.io/kentcdodds/kody-celld` name when it is
+not present locally; `docker compose pull` swaps in the prebuilt one.
 
 ### 3. Start it
 
@@ -63,15 +113,19 @@ folder, then open a terminal/SSH session in that folder.)
 docker compose up -d
 ```
 
-The first run builds the image (a few minutes on a NAS), then prints:
+Pulling the image takes about a minute; building it from source takes a few
+minutes on a laptop and 10+ on a small NAS. `docker compose logs kody` ends
+with:
 
 ```
 kody-1  | [kody-celld] wrote operator values to /data/kody.env (admin token + master key).
-kody-1  | [kody-celld] single node: MCP at http://localhost:8080/mcp (listening on 0.0.0.0:8080)
+kody-1  | [kody-celld] single node: MCP at http://<nas-ip>:8080/mcp (listening on 0.0.0.0:8080)
 kody-1  |   ready  http://0.0.0.0:8080
 ```
 
 Check it: `curl http://<nas-ip>:8080/health` → `{"ok":true, ...}`.
+The container also has a Docker health check, so `docker compose ps` shows
+`healthy` once it is serving.
 
 ### 4. Read your admin token
 
@@ -82,10 +136,11 @@ The container generated a random **admin token** (lets you create users) and a
 docker compose exec kody cat /data/kody.env
 ```
 
-**Back this file up.** If you lose the master key, stored secrets are gone for
-good. If you would rather bring your own values, put them in `.env` (copy
-`.env.example`) _before_ the first start; environment values always win over
-the generated file.
+**Back this file up** (a password manager entry is fine). If you lose the
+master key, stored secrets are gone for good. If you would rather bring your
+own values, set `KODY_ADMIN_TOKEN` / `KODY_MASTER_KEY` in the compose
+`environment:` or in `.env` _before_ the first start; environment values always
+win over the generated file and are written back to it.
 
 ### 5. Create your user and connect an MCP client
 
@@ -106,7 +161,10 @@ from **/console → Users** (one-time invite links) — there is no open
 registration.
 
 Prefer the command line, or have a client that only takes a URL + header?
-Create a user and a static API token instead:
+Create a user and a static API token instead. Note that **`/setup` is only
+offered while the install has no users** — if you create the first user this
+way, sign in on `/signin` with the returned API token (the "API token" option)
+and set a password from `/account`.
 
 ```sh
 ADMIN=<KODY_ADMIN_TOKEN from kody.env>
@@ -115,15 +173,19 @@ BASE=http://<nas-ip>:8080
 curl -s -X POST $BASE/admin/users \
   -H "authorization: Bearer $ADMIN" -H 'content-type: application/json' \
   -d '{"email":"you@example.com"}'
-# -> {"user":{"id":"user_…"},"token":"kody_…"}
+# -> {"user":{"id":"user_…"},"token":"kc_…"}
 ```
 
 Give the client the URL `$BASE/mcp` and the header
-`Authorization: Bearer kody_…` (in Claude Code: add
-`--header "Authorization: Bearer kody_…"` to the command above). You can also
+`Authorization: Bearer kc_…` (in Claude Code: add
+`--header "Authorization: Bearer kc_…"` to the command above). You can also
 create and revoke tokens later from `/account/tokens`.
 
 Ask it to "search Kody for secrets" — you should see the capability catalog.
+Then have it run something: `execute` takes an ES module with a default
+export (`export default async () => ({ hello: 'world' })`), and any `fetch`
+that uses a `{{secret:…}}` placeholder is refused with `secret_host_not_approved`
+until you approve that host once as admin (step 7).
 
 ### 6. Make it reachable (optional but recommended)
 
@@ -144,23 +206,42 @@ itself is reached.
 
 ### 7. Day-2 operations
 
-| Task                   | Command                                                                                                                                                                   |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Upgrade                | `git pull && docker compose build && docker compose up -d` (state and operator values persist)                                                                            |
-| Back up                | Stop, then copy the `kody-data` volume (`docker run --rm -v kody-celld_kody-data:/data -v $PWD:/backup alpine tar czf /backup/kody-data.tgz /data`); restore by untarring |
-| Logs                   | `docker compose logs -f kody`                                                                                                                                             |
-| Approve a secret host  | `curl -X POST $BASE/admin/users/<id>/secret-hosts -H "authorization: Bearer $ADMIN" -d '{"host":"api.github.com"}'`                                                       |
-| Force a job dispatch   | `curl -X POST $BASE/admin/jobs -H "authorization: Bearer $ADMIN"`                                                                                                         |
-| Turn on local AI       | `echo 'COMPOSE_FILE=compose.yaml:compose.ai.yaml' >> .env && docker compose up -d && docker compose exec ollama ollama pull nomic-embed-text` ([ai.md](./ai.md))          |
-| Add a headless browser | `echo 'COMPOSE_FILE=compose.yaml:compose.browser.yaml' >> .env && docker compose up -d` (combine overlays with `:`; [browser.md](./browser.md))                           |
-| Self-host the npm CDN  | `echo 'COMPOSE_FILE=compose.yaml:compose.esm.yaml' >> .env && docker compose up -d` — bare `import ms from 'ms@2.1.3'` stops depending on esm.sh ([npm.md](./npm.md))     |
-| Install a package      | `packageInstall({ source: 'github:owner/repo/path' })` via MCP or the account Packages page; extra hosts via `KODY_PACKAGE_SOURCE_HOSTS` ([packages.md](./packages.md))   |
-| Share packages         | Users publish saved packages to the install's own catalog at `$BASE/community` ([community.md](./community.md))                                                           |
-| Verify end to end      | `KODY_URL=$BASE KODY_ADMIN_TOKEN=$ADMIN SMOKE_ECHO_HOST=host.docker.internal npm run smoke` from a checkout on the Docker host (needs Node 22)                            |
+| Task                   | Command                                                                                                                                                                  |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Upgrade                | `docker compose pull && docker compose up -d`; from a source checkout `git pull && docker compose up -d --build`. State and operator values persist across upgrades      |
+| Back up                | `docker compose stop`, then `docker run --rm -v <project>_kody-data:/data -v "$PWD":/backup alpine tar czf /backup/kody-data.tgz -C / data`, then `docker compose start` |
+| Restore                | Same command with `tar xzf /backup/kody-data.tgz -C /` into a fresh (empty) `kody-data` volume, then `docker compose up -d`. `kody.env` travels with the data            |
+| Uninstall              | `docker compose down` keeps the data; `docker compose down -v` deletes the volume — and with it every user, package, secret and the master key                           |
+| Logs                   | `docker compose logs -f kody`                                                                                                                                            |
+| Approve a secret host  | `curl -X POST $BASE/admin/users/<id>/secret-hosts -H "authorization: Bearer $ADMIN" -d '{"host":"api.github.com"}'`                                                      |
+| Force a job dispatch   | `curl -X POST $BASE/admin/jobs -H "authorization: Bearer $ADMIN"`                                                                                                        |
+| Turn on local AI       | `echo 'COMPOSE_FILE=compose.yaml:compose.ai.yaml' >> .env && docker compose up -d && docker compose exec ollama ollama pull nomic-embed-text` ([ai.md](./ai.md))         |
+| Add a headless browser | `echo 'COMPOSE_FILE=compose.yaml:compose.browser.yaml' >> .env && docker compose up -d` (combine overlays with `:`; [browser.md](./browser.md))                          |
+| Self-host the npm CDN  | `echo 'COMPOSE_FILE=compose.yaml:compose.esm.yaml' >> .env && docker compose up -d` — bare `import ms from 'ms@2.1.3'` stops depending on esm.sh ([npm.md](./npm.md))    |
+| Install a package      | `packageInstall({ source: 'github:owner/repo/path' })` via MCP or the account Packages page; extra hosts via `KODY_PACKAGE_SOURCE_HOSTS` ([packages.md](./packages.md))  |
+| Share packages         | Users publish saved packages to the install's own catalog at `$BASE/community` ([community.md](./community.md))                                                          |
+| Verify end to end      | `KODY_URL=$BASE KODY_ADMIN_TOKEN=$ADMIN SMOKE_ECHO_HOST=host.docker.internal npm run smoke` from a checkout on the Docker host (needs Node 22)                           |
+
+`<project>` in the volume name is the compose project — the folder name by
+default (`kody-celld_kody-data` for a git checkout, `kody_kody-data` for a
+folder called `kody`); `docker volume ls` shows it.
 
 The single-node mode uses celld's local object store, so there is no bucket to
 manage. If you later want failover, move to Path B — the code, users, and MCP
 contract are identical; only the storage layer changes.
+
+### What was actually run
+
+A from-zero run of this path on a clean checkout (Docker 24, x86_64): `docker
+compose up -d` → `/health` ok → `kody.env` generated → user + token via the
+admin API → `search` and `execute` through a stock MCP client
+(`@modelcontextprotocol/inspector --cli`) → `secretSave` + a `{{secret:…}}`
+fetch denied with `secret_host_not_approved`, approved, then delivered over
+https → `docker compose down && docker compose up -d` with the user, token,
+secret and approval intact → sign-in with the API token and `/account`,
+`/console` rendered. The OAuth client flow (DCR + PKCE + consent) is exercised
+by the `oauth-server` smoke scenario that CI runs against this same image on
+every PR.
 
 ---
 
@@ -270,12 +351,15 @@ workflow.
 
 ## Troubleshooting
 
-| Symptom                                                       | Cause / fix                                                                                                                                                        |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `500 insecure_configuration` on a non-loopback URL            | The dev placeholders are in effect. Path A: check `/data/kody.env` exists and was loaded. Path B: `KODY_*` missing in `.env` at deploy time.                       |
-| `deploy` exits with `KODY_PUBLIC_URL must be an https:// URL` | Set a real https URL, or `KODY_ALLOW_HTTP_PUBLIC_URL=1` for a trusted LAN.                                                                                         |
-| `/health` fails right after `up` on the fleet                 | Nodes only serve once the `deploy` job has published a version; `docker compose logs deploy`.                                                                      |
-| `secret_host_not_approved`                                    | Approve the destination host for that user with `POST /admin/users/:id/secret-hosts`.                                                                              |
-| `secret_requires_https`                                       | Secrets are only sent over https. For local testing add the host to `KODY_ALLOW_INSECURE_SECRET_HOSTS`.                                                            |
-| Raspberry Pi build is slow / OOM                              | Build on a laptop with `docker buildx build --platform linux/arm64 -t kody-celld:local .`, push to a registry and set `KODY_IMAGE` in `.env`.                      |
-| Where is the data?                                            | Path A: volume `kody-data` (`/data/celld` = celld's local object store, `/data/kody.env` = operator values). Path B: the bucket + per-node `/var/lib/celld` cache. |
+| Symptom                                                       | Cause / fix                                                                                                                                                          |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `500 insecure_configuration` on a non-loopback URL            | The dev placeholders are in effect. Path A: check `/data/kody.env` exists and was loaded. Path B: `KODY_*` missing in `.env` at deploy time.                         |
+| `deploy` exits with `KODY_PUBLIC_URL must be an https:// URL` | Set a real https URL, or `KODY_ALLOW_HTTP_PUBLIC_URL=1` for a trusted LAN.                                                                                           |
+| `/health` fails right after `up` on the fleet                 | Nodes only serve once the `deploy` job has published a version; `docker compose logs deploy`.                                                                        |
+| `secret_host_not_approved`                                    | Approve the destination host for that user with `POST /admin/users/:id/secret-hosts`.                                                                                |
+| `secret_requires_https`                                       | Secrets are only sent over https. For local testing add the host to `KODY_ALLOW_INSECURE_SECRET_HOSTS`.                                                              |
+| `/setup` redirects to `/signin`                               | A user already exists (created via the admin API or an earlier run). Sign in with that user's API token, or invite yourself from `/console`.                         |
+| Sign-in form rejected / OAuth "invalid redirect"              | `KODY_PUBLIC_URL` does not match the address in the browser. Set it to exactly what you type (scheme, host, port) and `docker compose up -d`.                        |
+| `docker compose pull` says denied / not found                 | The package on ghcr.io is not public yet or the tag does not exist; build locally with `docker compose up -d --build` from a checkout instead.                       |
+| Raspberry Pi build is slow / OOM                              | Use the prebuilt `linux/arm64` image (`docker compose pull`), or build on a laptop with `docker buildx build --platform linux/arm64` and set `KODY_IMAGE` in `.env`. |
+| Where is the data?                                            | Path A: volume `kody-data` (`/data/celld` = celld's local object store, `/data/kody.env` = operator values). Path B: the bucket + per-node `/var/lib/celld` cache.   |

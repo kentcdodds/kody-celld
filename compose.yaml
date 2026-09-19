@@ -4,8 +4,11 @@
 #   docker compose exec kody cat /data/kody.env     # admin token + master key
 #
 # Durable state (users, packages, secrets, jobs) lives in the `kody-data`
-# volume. Back it up. To upgrade: `docker compose pull && docker compose up -d`
-# (or rebuild); the state and generated operator values are kept.
+# volume. Back it up. `up` builds the image from this checkout when it is not
+# present locally; `docker compose pull` fetches the prebuilt multi-arch image
+# from ghcr.io instead. To upgrade: `docker compose pull && docker compose up -d`
+# (or `git pull && docker compose up -d --build`); state and generated operator
+# values are kept.
 #
 # Copy .env.example to .env to set KODY_PUBLIC_URL (the URL people will use,
 # e.g. https://kody.home.example.com behind your reverse proxy) or to pin your
@@ -13,7 +16,7 @@
 services:
   kody:
     build: .
-    image: ${KODY_IMAGE:-kody-celld:local}
+    image: ${KODY_IMAGE:-ghcr.io/kentcdodds/kody-celld:latest}
     command: ['single']
     init: true
     restart: unless-stopped
