@@ -3,6 +3,7 @@ import type { Env } from '../env.ts'
 import { sha256Hex } from '../lib/crypto.ts'
 import { KodyError } from '../lib/errors.ts'
 import { defaultLimits, limitsFromEnv } from '../lib/limits.ts'
+import { extractMcpContent, mcpContentKey, summarizeMcpContent, type McpContentBlock } from '../mcp/content.ts'
 import { buildModuleGraph, type GraphEntry } from './module-graph.ts'
 
 export const defaultResponseLimitBytes = defaultLimits.responseLimitBytes
@@ -23,6 +24,8 @@ export type ExecuteResult = {
 	ok: boolean
 	replayed: boolean
 	result?: unknown
+	/** Raw MCP content blocks returned via `{ __mcpContent: [...] }`; passed through as tool content. */
+	mcpContent?: Array<McpContentBlock>
 	truncated?: boolean
 	note?: string
 	error?: { name: string; message: string; stack?: string } | undefined
@@ -152,6 +155,27 @@ export async function executeRun(
 			return finish('error', { error: payload.error, logs: payload.logs, warnings })
 		}
 		const limit = input.responseLimit ?? limits.responseLimitBytes
+		const content = extractMcpContent(payload.result, limits.mcpContentLimitBytes)
+		if (content) {
+			// Media blocks are capped separately and never truncated; run history
+			// keeps a size summary instead of megabytes of base64.
+			const truncated = truncateResult(content.rest, limit)
+			if (truncated.truncated) warnings.push(truncated.note)
+			const result = await finish('success', {
+				result: {
+					...(truncated.truncated ? { rest: truncated.result } : (content.rest ?? {})),
+					[mcpContentKey]: summarizeMcpContent(content.blocks),
+				},
+				logs: payload.logs,
+				warnings,
+			})
+			return {
+				...result,
+				result: truncated.result,
+				mcpContent: content.blocks,
+				...(truncated.truncated ? { truncated: true, note: truncated.note } : {}),
+			}
+		}
 		const truncated = truncateResult(payload.result, limit)
 		if (truncated.truncated) warnings.push(truncated.note)
 		const result = await finish('success', { result: truncated.result, logs: payload.logs, warnings })

@@ -14,14 +14,16 @@ startup rather than silently falling back.
 
 ## Runtime limits
 
-| Variable                     | Default  | Range           | Effect                                                                                          |
-| ---------------------------- | -------- | --------------- | ----------------------------------------------------------------------------------------------- |
-| `KODY_EXECUTE_TIMEOUT_MS`    | `60000`  | 1 s … 15 min    | Wall-clock cap per run (`execute`, `packageRun`, jobs). Exceeding it → `execute_timeout` (504). |
-| `KODY_RUN_RETENTION_COUNT`   | `500`    | 10 … 100 000    | Newest runs kept per user; older finished rows are pruned as runs start and finish.             |
-| `KODY_RUN_RETENTION_DAYS`    | `0`      | 0 … 3650        | Also drop runs older than N days (`0` = count-only).                                            |
-| `KODY_RUN_LOG_LIMIT`         | `200`    | 0 … 10 000      | Console entries persisted per run (the run response is capped the same way).                    |
-| `KODY_RESPONSE_LIMIT_BYTES`  | `100000` | 1 KB … 10 MB    | Default `responseLimit` for `execute` results; callers may pass a smaller one.                  |
-| `KODY_AUDIT_RETENTION_COUNT` | `10000`  | 100 … 1 000 000 | Admin audit entries kept in the registry cell.                                                  |
+| Variable                       | Default    | Range           | Effect                                                                                                            |
+| ------------------------------ | ---------- | --------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `KODY_EXECUTE_TIMEOUT_MS`      | `60000`    | 1 s … 15 min    | Wall-clock cap per run (`execute`, `packageRun`, jobs). Exceeding it → `execute_timeout` (504).                   |
+| `KODY_RUN_RETENTION_COUNT`     | `500`      | 10 … 100 000    | Newest runs kept per user; older finished rows are pruned as runs start and finish.                               |
+| `KODY_RUN_RETENTION_DAYS`      | `0`        | 0 … 3650        | Also drop runs older than N days (`0` = count-only).                                                              |
+| `KODY_RUN_LOG_LIMIT`           | `200`      | 0 … 10 000      | Console entries persisted per run (the run response is capped the same way).                                      |
+| `KODY_RESPONSE_LIMIT_BYTES`    | `100000`   | 1 KB … 10 MB    | Default `responseLimit` for `execute` results; callers may pass a smaller one.                                    |
+| `KODY_AUDIT_RETENTION_COUNT`   | `10000`    | 100 … 1 000 000 | Admin audit entries kept in the registry cell.                                                                    |
+| `KODY_MCP_CONTENT_LIMIT_BYTES` | `512000`   | 10 KB … 50 MB   | Serialized cap for `__mcpContent` blocks (images/audio) an `execute` run may return ([browser.md](./browser.md)). |
+| `KODY_BLOB_MAX_BYTES`          | `26214400` | 1 KB … 1 GiB    | Per-object size cap for blob uploads ([blobs.md](./blobs.md)).                                                    |
 
 `GET /admin/limits` returns the effective limits and quota defaults so you can
 confirm what a node actually loaded.
@@ -39,6 +41,8 @@ unlimited everywhere.
 | `KODY_QUOTA_PACKAGES`           | Saved packages                                               |
 | `KODY_QUOTA_SECRETS`            | Stored secrets (updating an existing secret never counts)    |
 | `KODY_QUOTA_JOBS`               | Jobs registered from package manifests                       |
+| `KODY_QUOTA_BLOBS`              | Stored blobs (objects) per user                              |
+| `KODY_QUOTA_BLOB_BYTES`         | Total blob bytes per user (overwrites count the size delta)  |
 
 Enforcement happens in the user's Durable Object, before the work starts:
 
@@ -46,6 +50,8 @@ Enforcement happens in the user's Durable Object, before the work starts:
   `quota_exceeded` (HTTP 429) and is **not** recorded or counted;
 - `packageSave`, `secretSave` (new name) and manifest jobs over their count are
   rejected the same way, leaving existing data untouched;
+- `blobPut` (capability or `PUT /api/blobs/…`) over `blobs` / `blobBytes` is
+  rejected before anything is written to the bucket;
 - `executeMsPerDay` is checked against usage accumulated _before_ the run, so
   the last run of the day may finish past the line — the cap is a budget, not a
   hard kill (the timeout is the hard kill).

@@ -126,15 +126,16 @@ itself is reached.
 
 ### 7. Day-2 operations
 
-| Task                  | Command                                                                                                                                                                   |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Upgrade               | `git pull && docker compose build && docker compose up -d` (state and operator values persist)                                                                            |
-| Back up               | Stop, then copy the `kody-data` volume (`docker run --rm -v kody-celld_kody-data:/data -v $PWD:/backup alpine tar czf /backup/kody-data.tgz /data`); restore by untarring |
-| Logs                  | `docker compose logs -f kody`                                                                                                                                             |
-| Approve a secret host | `curl -X POST $BASE/admin/users/<id>/secret-hosts -H "authorization: Bearer $ADMIN" -d '{"host":"api.github.com"}'`                                                       |
-| Force a job dispatch  | `curl -X POST $BASE/admin/jobs -H "authorization: Bearer $ADMIN"`                                                                                                         |
-| Turn on local AI      | `echo 'COMPOSE_FILE=compose.yaml:compose.ai.yaml' >> .env && docker compose up -d && docker compose exec ollama ollama pull nomic-embed-text` ([ai.md](./ai.md))          |
-| Verify end to end     | `KODY_URL=$BASE KODY_ADMIN_TOKEN=$ADMIN SMOKE_ECHO_HOST=host.docker.internal npm run smoke` from a checkout on the Docker host (needs Node 22)                            |
+| Task                   | Command                                                                                                                                                                   |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Upgrade                | `git pull && docker compose build && docker compose up -d` (state and operator values persist)                                                                            |
+| Back up                | Stop, then copy the `kody-data` volume (`docker run --rm -v kody-celld_kody-data:/data -v $PWD:/backup alpine tar czf /backup/kody-data.tgz /data`); restore by untarring |
+| Logs                   | `docker compose logs -f kody`                                                                                                                                             |
+| Approve a secret host  | `curl -X POST $BASE/admin/users/<id>/secret-hosts -H "authorization: Bearer $ADMIN" -d '{"host":"api.github.com"}'`                                                       |
+| Force a job dispatch   | `curl -X POST $BASE/admin/jobs -H "authorization: Bearer $ADMIN"`                                                                                                         |
+| Turn on local AI       | `echo 'COMPOSE_FILE=compose.yaml:compose.ai.yaml' >> .env && docker compose up -d && docker compose exec ollama ollama pull nomic-embed-text` ([ai.md](./ai.md))          |
+| Add a headless browser | `echo 'COMPOSE_FILE=compose.yaml:compose.browser.yaml' >> .env && docker compose up -d` (combine overlays with `:`; [browser.md](./browser.md))                           |
+| Verify end to end      | `KODY_URL=$BASE KODY_ADMIN_TOKEN=$ADMIN SMOKE_ECHO_HOST=host.docker.internal npm run smoke` from a checkout on the Docker host (needs Node 22)                            |
 
 The single-node mode uses celld's local object store, so there is no bucket to
 manage. If you later want failover, move to Path B — the code, users, and MCP

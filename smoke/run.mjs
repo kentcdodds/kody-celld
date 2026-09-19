@@ -3,11 +3,14 @@
 //
 //   node smoke/run.mjs                 # all scenarios, skips the ~1-2 minute real-cron wait
 //   node smoke/run.mjs --wait-cron     # also waits for celld's cron trigger to fire a job
-//   node smoke/run.mjs --only secrets  # one scenario (mcp | packages | secrets | jobs | limits | memory)
+//   node smoke/run.mjs --only secrets  # one scenario (mcp | packages | secrets | jobs | limits | memory | blobs | browser)
 //   SMOKE_AI_MOCK=1 node smoke/run.mjs --only memory  # with smoke/ai-mock-server.mjs + KODY_AI_* set
 //
-// Env: KODY_URL, KODY_ADMIN_TOKEN, SMOKE_ECHO_PORT, SMOKE_EXPECT_TIMEOUT_MS, SMOKE_AI_MOCK
+// Env: KODY_URL, KODY_ADMIN_TOKEN, SMOKE_ECHO_PORT, SMOKE_EXPECT_TIMEOUT_MS, SMOKE_AI_MOCK,
+//      SMOKE_BROWSER_TARGET_HOST (browser scenario skips itself when no provider is configured)
 import { baseUrl, bootstrapUser, log, SmokeError } from './lib.mjs'
+import { smokeBlobs } from './blobs.mjs'
+import { smokeBrowser } from './browser.mjs'
 import { smokeJobs } from './jobs.mjs'
 import { smokeLimits } from './limits.mjs'
 import { smokeMcp } from './mcp.mjs'
@@ -28,10 +31,14 @@ const scenarios = [
 	['jobs', smokeJobs],
 	['limits', smokeLimits],
 	['memory', smokeMemory],
+	['blobs', smokeBlobs],
+	['browser', smokeBrowser],
 ].filter(([name]) => !only || only === name)
 
 if (scenarios.length === 0) {
-	console.error(`Unknown scenario "${only}". Choose one of: mcp, packages, secrets, jobs, limits, memory`)
+	console.error(
+		`Unknown scenario "${only}". Choose one of: mcp, packages, secrets, jobs, limits, memory, blobs, browser`,
+	)
 	process.exit(2)
 }
 

@@ -86,15 +86,36 @@ before running so a crash cannot double-fire), then executes the entry via
 
 ## Durable Objects
 
-| Class                | Key                      | Holds                                                                                                                                      |
-| -------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `RegistryCell`       | `"registry"` (singleton) | users, SHA-256 token hashes → user id, admin audit log                                                                                     |
-| `UserCell`           | user id                  | packages (files + manifest), secrets (ciphertext), approved hosts, jobs, job runs, runs, gateway events, per-UTC-day usage, quota override |
-| `PackageStorageCell` | `${userId}:${package}`   | `__kody_kv` table + whatever tables package `sql()` creates                                                                                |
-| `MemoryCell`         | user id                  | memories, `memories_fts` (FTS5), suppressions, embedding cache, `memory_vectors` (sqlite-vec, local provider)                              |
+| Class                | Key                      | Holds                                                                                                                                                  |
+| -------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `RegistryCell`       | `"registry"` (singleton) | users, SHA-256 token hashes → user id, admin audit log                                                                                                 |
+| `UserCell`           | user id                  | packages (files + manifest), secrets (ciphertext), approved hosts, jobs, job runs, runs, gateway events, per-UTC-day usage, quota override, blob index |
+| `PackageStorageCell` | `${userId}:${package}`   | `__kody_kv` table + whatever tables package `sql()` creates                                                                                            |
+| `MemoryCell`         | user id                  | memories, `memories_fts` (FTS5), suppressions, embedding cache, `memory_vectors` (sqlite-vec, local provider)                                          |
 
-All state is SQLite inside the DO; celld replicates it to the bucket. There is
-no KV/D1/R2 usage yet, which keeps the fleet footprint to "DOs + bucket".
+All state is SQLite inside the DO; celld replicates it to the bucket. The only
+other binding is the R2-compatible `BLOBS` bucket for blob bytes (stored under
+`r2/kody-blobs/` in the same fleet bucket), so the footprint stays "DOs +
+bucket"; no KV/D1/Queues are used.
+
+## Blobs and browser rendering
+
+`src/blobs/store.ts` defines a small `BlobStore` interface (put/get/head/
+delete/list) with two implementations: the celld R2 binding (default) and a
+SigV4 S3 client over `fetch` (`src/blobs/s3.ts`). `BlobService` sits on top:
+key normalization (`src/blobs/keys.ts`), the per-user `users/<id>/` prefix,
+SHA-256 hashing, quota reservation and the index in `UserCell`, and HMAC-signed
+download links (HKDF from the master key + user id) served by the Worker at
+`/blobs/:userId/:key`. Capabilities (`blob*`) and the raw routes under
+`/api/blobs/` share the service; sandbox code never receives a bucket client or
+credentials. [blobs.md](./blobs.md).
+
+`src/browser/providers.ts` wraps browserless and Cloudflare Browser Rendering
+behind one `BrowserRenderer` (content/screenshot/pdf) and hosts `assertRenderableUrl`,
+the SSRF guard. Screenshots become MCP `image` blocks through the
+`__mcpContent` convention in `src/mcp/content.ts`: `executeRun` extracts and
+validates the blocks, the MCP server emits them ahead of the JSON text block,
+and run history keeps only a size summary. [browser.md](./browser.md).
 
 ## AI, memories, semantic search
 

@@ -7,6 +7,10 @@
   "compatibility_date": "2026-01-01",
   "compatibility_flags": ["nodejs_compat", "sqlite_vec"],
   "worker_loaders": [{ "binding": "LOADER" }],
+  // R2-compatible bucket binding. celld stores objects under r2/<bucket_name>/ in
+  // the fleet bucket (or .celld/dev locally). Optional: KODY_BLOB_PROVIDER=s3
+  // talks to any S3-compatible bucket directly instead (docs/blobs.md).
+  "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "kody-blobs" }],
   "triggers": { "crons": ["* * * * *"] },
   "durable_objects": {
     "bindings": [
@@ -30,5 +34,7 @@
     "KODY_MASTER_KEY": "dev-master-key-only-for-celld-dev",
     "KODY_PUBLIC_URL": "http://127.0.0.1:8787",
     "KODY_ALLOW_INSECURE_SECRET_HOSTS": "127.0.0.1,localhost",
+    // Lets local smoke render the loopback fixture server; production leaves this unset.
+    "KODY_BROWSER_ALLOW_PRIVATE_HOSTS": "127.0.0.1,localhost,host.docker.internal",
   },
 }

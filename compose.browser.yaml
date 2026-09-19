@@ -1,0 +1,48 @@
+# Overlay: self-hosted headless browser for browserContent / browserScreenshot /
+# browserPdf, no external account.
+#
+#   COMPOSE_FILE=compose.yaml:compose.browser.yaml     # in .env
+#   docker compose up -d
+#
+# Runs browserless (Chromium behind an HTTP API) beside the single-node
+# compose.yaml and points Kody at it. For a fleet, run the same container
+# wherever you like and set KODY_BROWSER_PROVIDER=browserless +
+# KODY_BROWSER_URL in .env before running the deploy service.
+#
+# The browser fetches pages from *inside* the compose network, so Kody refuses
+# loopback/private hostnames unless you list them in
+# KODY_BROWSER_ALLOW_PRIVATE_HOSTS. Keep it that way unless you understand what
+# else the browser can reach. See docs/browser.md.
+services:
+  browserless:
+    image: ghcr.io/browserless/chromium:${BROWSERLESS_VERSION:-v2.35.0}
+    restart: unless-stopped
+    environment:
+      # Set BROWSERLESS_TOKEN in .env to require a token; Kody forwards it as
+      # KODY_BROWSER_TOKEN. Not published on a host port, so the compose
+      # network is the only way in either way.
+      TOKEN: ${BROWSERLESS_TOKEN:-}
+      CONCURRENT: ${BROWSERLESS_CONCURRENT:-3}
+      QUEUED: ${BROWSERLESS_QUEUED:-10}
+      TIMEOUT: ${BROWSERLESS_TIMEOUT:-60000}
+    shm_size: 1gb
+    # Lets the browser reach services on the Docker host when you allowlist
+    # host.docker.internal (same as the kody service).
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    healthcheck:
+      # /active answers 204 once Chromium can take a session; 401 without the
+      # configured token, hence the query string.
+      test: ['CMD-SHELL', 'curl -fsS -o /dev/null "http://127.0.0.1:3000/active?token=$${TOKEN}"']
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  kody:
+    environment:
+      KODY_BROWSER_PROVIDER: ${KODY_BROWSER_PROVIDER:-browserless}
+      KODY_BROWSER_URL: ${KODY_BROWSER_URL:-http://browserless:3000}
+      KODY_BROWSER_TOKEN: ${KODY_BROWSER_TOKEN:-${BROWSERLESS_TOKEN:-}}
+    depends_on:
+      browserless:
+        condition: service_healthy

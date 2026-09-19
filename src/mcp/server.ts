@@ -104,6 +104,14 @@ async function callTool(name: string, args: Record<string, unknown>, ctx: Capabi
 			responseLimit: typeof args.responseLimit === 'number' ? args.responseLimit : undefined,
 			idempotencyKey: typeof args.idempotencyKey === 'string' ? args.idempotencyKey : undefined,
 		})
+		if (result.mcpContent) {
+			const { mcpContent, ...structured } = result
+			return {
+				content: [...mcpContent, { type: 'text', text: JSON.stringify(structured) }],
+				structuredContent: structured,
+				isError: false,
+			}
+		}
 		return toolResult(result, !result.ok)
 	}
 	throw new KodyError('unknown_tool', `Unknown tool "${name}".`, { status: 404 })

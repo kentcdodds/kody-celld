@@ -1,6 +1,8 @@
 import { KodyError } from '../lib/errors.ts'
 import { validateArgs, type CapabilityContext, type CapabilityDefinition, type DomainDefinition } from './define.ts'
 import { aiCapabilities, aiDomain } from './ai.ts'
+import { blobCapabilities, blobsDomain } from './blobs.ts'
+import { browserCapabilities, browserDomain } from './browser.ts'
 import { jobCapabilities, jobsDomain } from './jobs.ts'
 import { memoryCapabilities, memoryDomain } from './memory.ts'
 import { packageCapabilities, packagesDomain } from './packages.ts'
@@ -18,6 +20,8 @@ export const domains: Array<DomainDefinition> = [
 	runsDomain,
 	memoryDomain,
 	aiDomain,
+	blobsDomain,
+	browserDomain,
 ]
 
 export const capabilities: Array<CapabilityDefinition> = [
@@ -29,6 +33,8 @@ export const capabilities: Array<CapabilityDefinition> = [
 	...runCapabilities,
 	...memoryCapabilities,
 	...aiCapabilities,
+	...blobCapabilities,
+	...browserCapabilities,
 ]
 
 const byName = new Map(capabilities.map((c) => [c.name, c]))
