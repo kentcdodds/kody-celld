@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: validate (typecheck, lint, format, unit tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run validate
+
+  smoke:
+    name: smoke (docker compose single node)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      KODY_PORT: 8080
+      KODY_PUBLIC_URL: http://localhost:8080
+      # CI-only values for a throwaway container on the runner's loopback.
+      KODY_ADMIN_TOKEN: ci-admin-token-${{ github.run_id }}
+      KODY_MASTER_KEY: ci-master-key-${{ github.run_id }}-${{ github.run_attempt }}
+      # The secrets scenario's echo server runs on the runner; the container
+      # reaches it over http as host.docker.internal.
+      KODY_ALLOW_INSECURE_SECRET_HOSTS: host.docker.internal
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build and start
+        run: docker compose up -d --build --wait --wait-timeout 180
+      - name: Wait for /health
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS "$KODY_PUBLIC_URL/health" >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          docker compose logs kody
+          exit 1
+      - name: Smoke
+        run: KODY_URL=$KODY_PUBLIC_URL SMOKE_ECHO_HOST=host.docker.internal npm run smoke:cron
+      - name: Container logs
+        if: failure()
+        run: docker compose logs kody
+      - name: Stop
+        if: always()
+        run: docker compose down -v
