@@ -106,7 +106,7 @@ for `celld dev`) lets the smoke suite inject into a plain-HTTP loopback echo
 server. Do not render it into a fleet config unless you are port-forwarding a
 test harness.
 
-## Not in v1
+## Current limitations
 
 - Per-secret host allowlists for `{{secret:…}}` (approval is per host, per
   user; integration tokens and provider items carry their own host lists).
