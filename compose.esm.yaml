@@ -5,9 +5,11 @@
 #   docker compose up -d
 #
 # Runs the official esm.sh server (npm -> ES modules, built on demand) beside
-# the single-node compose.yaml and points Kody at it. Built modules are stored
-# in the `esm-data` volume (ESM_STORAGE_ENDPOINT); set ESM_STORAGE_TYPE=s3 + the STORAGE_* variables to
-# put them in the same bucket MinIO serves for the fleet. For a fleet, run the
+# the single-node compose.yaml and points Kody at it. Built modules (and the
+# server's npm cache) live in the `esm-data` volume, mounted at the image's
+# ESMDIR so it stays writable by the unprivileged `esm` user; set
+# ESM_STORAGE_TYPE=s3 + the STORAGE_* variables to put built modules in the
+# same bucket MinIO serves for the fleet. For a fleet, run the
 # container wherever you like and set KODY_ESM_CDN_URL in .env before running
 # the deploy service. Kody still keeps its own durable module cache
 # (KODY_NPM_CACHE_MAX_MB), so the CDN is only asked once per module per fleet.
@@ -28,7 +30,7 @@ services:
       STORAGE_SECRET_ACCESS_KEY: ${ESM_STORAGE_SECRET_ACCESS_KEY:-}
       LOG_LEVEL: ${ESM_LOG_LEVEL:-warn}
     volumes:
-      - esm-data:/esm/storage
+      - esm-data:/esm
     healthcheck:
       test: ['CMD-SHELL', 'wget -q -O /dev/null http://127.0.0.1:80/ || exit 1']
       interval: 10s
