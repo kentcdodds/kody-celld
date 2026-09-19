@@ -4,6 +4,7 @@ import { constantTimeEqualString } from '../auth/password.ts'
 import { blobConfigFromEnv, describeBlobConfig } from '../blobs/config.ts'
 import { browserConfigFromEnv, describeBrowserConfig } from '../browser/config.ts'
 import { describeEmailConfig } from '../email/config.ts'
+import { describeNpmConfig, npmConfigFromEnv } from '../execute/npm-config.ts'
 import { loadEmailConfig } from '../email/service.ts'
 import type { AuditEntry } from '../cells/registry-cell.ts'
 import { KODY_CELLD_VERSION, type Env } from '../env.ts'
@@ -344,6 +345,7 @@ export async function handleConsole(request: Request, env: Env, ctx: ExecutionCo
 			['blobs', { ...describeBlobConfig(blobConfigFromEnv(env)), bucketBound: env.BLOBS !== undefined }],
 			['browser', describeBrowserConfig(browserConfigFromEnv(env))],
 			['email', describeEmailConfig(loadEmailConfig(env))],
+			['npm', describeNpmConfig(npmConfigFromEnv(env))],
 		]
 		return view(session, {
 			title: 'Configuration',

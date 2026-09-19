@@ -74,6 +74,12 @@ services:
       KODY_BROWSER_CF_ACCOUNT_ID: ${KODY_BROWSER_CF_ACCOUNT_ID:-}
       KODY_BROWSER_TIMEOUT_MS: ${KODY_BROWSER_TIMEOUT_MS:-}
       KODY_BROWSER_ALLOW_PRIVATE_HOSTS: ${KODY_BROWSER_ALLOW_PRIVATE_HOSTS:-}
+      # npm imports + package installs (docs/packages.md); empty = esm.sh, durable cache on. compose.esm.yaml adds a self-hosted CDN.
+      KODY_NPM_IMPORTS: ${KODY_NPM_IMPORTS:-}
+      KODY_ESM_CDN_URL: ${KODY_ESM_CDN_URL:-}
+      KODY_NPM_CACHE_MAX_MB: ${KODY_NPM_CACHE_MAX_MB:-}
+      KODY_NPM_CACHE_TTL_DAYS: ${KODY_NPM_CACHE_TTL_DAYS:-}
+      KODY_PACKAGE_SOURCE_HOSTS: ${KODY_PACKAGE_SOURCE_HOSTS:-}
       # Webhooks + email (docs/webhooks.md, docs/email.md); empty = email off. compose.mail.yaml adds the SMTP bridge.
       KODY_WEBHOOK_MAX_BODY_BYTES: ${KODY_WEBHOOK_MAX_BODY_BYTES:-}
       KODY_EMAIL_DOMAIN: ${KODY_EMAIL_DOMAIN:-}

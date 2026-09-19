@@ -6,6 +6,7 @@ import { defaultLimits, limitsFromEnv } from '../lib/limits.ts'
 import { extractMcpContent, mcpContentKey, summarizeMcpContent, type McpContentBlock } from '../mcp/content.ts'
 import { normalizeModulePath, resolvePackageExport, type PackageManifest } from '../packages/manifest.ts'
 import { buildModuleGraph, type GraphEntry } from './module-graph.ts'
+import { npmConfigFromEnv } from './npm-config.ts'
 
 export const defaultResponseLimitBytes = defaultLimits.responseLimitBytes
 export const runRecordMaxIdempotencyKeyLength = 200
@@ -126,7 +127,14 @@ export async function executeRun(
 
 	let graph
 	try {
-		graph = await buildModuleGraph({ entry: input.entry, userCell, allowNpm: true, sealed: input.sealed === true })
+		const npm = npmConfigFromEnv(env)
+		graph = await buildModuleGraph({
+			entry: input.entry,
+			userCell,
+			allowNpm: npm.enabled,
+			npm: { config: npm, cache: env.NPM_CACHE.get(env.NPM_CACHE.idFromName('npm-cache')) },
+			sealed: input.sealed === true,
+		})
 	} catch (error) {
 		return finish('error', { error: toErrorShape(error) })
 	}

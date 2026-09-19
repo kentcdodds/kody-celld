@@ -147,6 +147,58 @@ export async function smokeWeb({ user, mcp }) {
 	}
 	log('pages', 'packages, jobs, runs, integrations, inbox, clients, sessions render')
 
+	// Packages page: install form enforces the source-host policy; publish /
+	// unpublish toggles a community listing for a saved package.
+	const refused = await browser.post('/account/packages', {
+		action: 'install',
+		source: 'https://10.0.0.7/pkg.tgz',
+		csrf,
+	})
+	assert(
+		refused.status === 200 && refused.text.includes('private host'),
+		'install form surfaces the refusal',
+		refused.status,
+	)
+	const pkgName = `@kody-smoke/web-${randomBytes(3).toString('hex')}`
+	await mcp.call('packageSave', {
+		files: {
+			'package.json': JSON.stringify({
+				name: pkgName,
+				version: '1.0.0',
+				description: 'web smoke',
+				exports: './main.js',
+			}),
+			'README.md': `# ${pkgName}`,
+			'AGENTS.md': 'Returns ok.',
+			'main.js': 'export default async () => "ok"',
+		},
+		source: 'smoke/web.mjs',
+	})
+	const published = await browser.post('/account/packages', { action: 'publish', name: pkgName, csrf })
+	assert(
+		published.status === 303 && published.location?.includes('flash=published'),
+		'publish from the form',
+		published,
+	)
+	const publicPage = await fetch(`${baseUrl}/community/${encodeURIComponent(pkgName)}`)
+	assert(publicPage.status === 200, 'published package has a public page', publicPage.status)
+	const packagesPage = await browser.get('/account/packages')
+	assert(
+		packagesPage.text.includes('Unpublish') && packagesPage.text.includes(`/community/${encodeURIComponent(pkgName)}`),
+		'packages page links the listing',
+	)
+	const unpublished = await browser.post('/account/packages', { action: 'unpublish', name: pkgName, csrf })
+	assert(
+		unpublished.status === 303 && unpublished.location?.includes('flash=unpublished'),
+		'unpublish from the form',
+		unpublished,
+	)
+	assert(
+		(await fetch(`${baseUrl}/community/${encodeURIComponent(pkgName)}`)).status === 404,
+		'listing gone after unpublish',
+	)
+	log('packages form', 'install refusal shown; publish/unpublish toggle the public listing')
+
 	// Password sign-in on a second browser, wrong password, lockout after 5 failures.
 	const second = new Browser()
 	const wrong = await second.post('/signin', {

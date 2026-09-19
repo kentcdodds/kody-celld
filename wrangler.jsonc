@@ -18,6 +18,7 @@
       { "name": "USER", "class_name": "UserCell" },
       { "name": "MEMORY", "class_name": "MemoryCell" },
       { "name": "PACKAGE_STORAGE", "class_name": "PackageStorageCell" },
+      { "name": "NPM_CACHE", "class_name": "NpmCacheCell" },
     ],
   },
   "migrations": [
@@ -26,6 +27,7 @@
       "new_sqlite_classes": ["RegistryCell", "UserCell", "PackageStorageCell"],
     },
     { "tag": "v2", "new_sqlite_classes": ["MemoryCell"] },
+    { "tag": "v3", "new_sqlite_classes": ["NpmCacheCell"] },
   ],
   "vars": {
     // Dev-only values. They are not secrets and only work against `celld dev`.

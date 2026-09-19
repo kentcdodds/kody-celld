@@ -6,7 +6,7 @@ import {
 	resolvePackageExport,
 	type PackageFiles,
 } from '../packages/manifest.ts'
-import { resolveNpmModules } from './npm-resolver.ts'
+import { resolveNpmModules, type NpmResolverOptions } from './npm-resolver.ts'
 import { RUNTIME_MODULE_SOURCE } from './runtime-module.ts'
 import { buildWrapperModule } from './wrapper-module.ts'
 
@@ -115,12 +115,14 @@ async function rewriteImports(source: string, fromPath: string, rewrite: Rewrite
  *  - `kody-runtime.js` (host-owned `kody:runtime`)
  *  - the ad hoc module or the saved package files under `packages/<name>/`
  *  - transitively imported saved packages (`kody:@scope/pkg/export`)
- *  - npm modules fetched through esm.sh (experimental)
+ *  - npm modules fetched through an esm.sh-compatible CDN (durable fleet cache)
  */
 export async function buildModuleGraph(input: {
 	entry: GraphEntry
 	userCell: DurableObjectStub<UserCell>
 	allowNpm: boolean
+	/** CDN origin + durable cache for bare npm specifiers (defaults to esm.sh without a durable cache). */
+	npm?: NpmResolverOptions | undefined
 	/** True only for the gateway's provider runs: the provider entry may then be the graph entry. */
 	sealed?: boolean | undefined
 }): Promise<ModuleGraph> {
@@ -233,7 +235,7 @@ export async function buildModuleGraph(input: {
 	if (sealedStubNeeded) modules[SEALED_MODULE_PATH] = SEALED_MODULE_SOURCE
 
 	if (npmSpecifiers.size > 0) {
-		const resolved = await resolveNpmModules([...npmSpecifiers])
+		const resolved = await resolveNpmModules([...npmSpecifiers], input.npm)
 		for (const [path, source] of Object.entries(resolved.modules)) modules[path] = source
 		warnings.push(...resolved.warnings)
 		for (const [specifier, path] of resolved.entryPaths) {

@@ -1,4 +1,5 @@
 import { KodyError } from '../lib/errors.ts'
+import { isPrivateHostname } from '../lib/private-hosts.ts'
 import { hostMatchesApproval } from '../secrets/host-policy.ts'
 import type { BrowserConfig } from './config.ts'
 
@@ -41,40 +42,6 @@ export const waitUntilValues: ReadonlyArray<WaitUntil> = ['load', 'domcontentloa
 export const screenshotFormats: ReadonlyArray<ScreenshotFormat> = ['png', 'jpeg', 'webp']
 export const pdfFormats = ['A4', 'Letter', 'Legal'] as const
 
-const ipv4Pattern = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/
-
-function isPrivateIpv4(host: string) {
-	const match = ipv4Pattern.exec(host)
-	if (!match) return false
-	const [a = 0, b = 0] = match.slice(1).map(Number)
-	return (
-		a === 0 ||
-		a === 10 ||
-		a === 127 ||
-		(a === 169 && b === 254) ||
-		(a === 172 && b >= 16 && b <= 31) ||
-		(a === 192 && b === 168) ||
-		(a === 100 && b >= 64 && b <= 127) ||
-		a >= 224
-	)
-}
-
-function isPrivateIpv6(host: string) {
-	const inner = host.replace(/^\[|\]$/g, '').toLowerCase()
-	if (inner === '::1' || inner === '::') return true
-	if (inner.startsWith('fe80:') || inner.startsWith('fc') || inner.startsWith('fd')) return true
-	// IPv4-mapped: the URL parser normalizes ::ffff:a.b.c.d to ::ffff:hhhh:hhhh.
-	const dotted = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(inner)
-	if (dotted) return isPrivateIpv4(dotted[1] ?? '')
-	const hex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(inner)
-	if (hex) {
-		const hi = parseInt(hex[1] ?? '0', 16)
-		const lo = parseInt(hex[2] ?? '0', 16)
-		return isPrivateIpv4(`${hi >> 8}.${hi & 0xff}.${lo >> 8}.${lo & 0xff}`)
-	}
-	return false
-}
-
 /**
  * The rendering browser fetches the target from *its* network position, which
  * for a self-hosted sidecar is inside the compose network next to Kody, MinIO
@@ -100,15 +67,7 @@ export function assertRenderableUrl(raw: unknown, config: NonNullable<BrowserCon
 	const host = url.hostname.toLowerCase()
 	const allowed = config.allowPrivateHosts.some((entry) => hostMatchesApproval(host, entry))
 	if (allowed) return url.toString()
-	const isPrivate = host.includes(':')
-		? isPrivateIpv6(host)
-		: host === 'localhost' ||
-			host.endsWith('.localhost') ||
-			host.endsWith('.internal') ||
-			host.endsWith('.local') ||
-			!host.includes('.') ||
-			isPrivateIpv4(host)
-	if (isPrivate) {
+	if (isPrivateHostname(host)) {
 		throw new KodyError(
 			'browser_private_host',
 			`"${host}" is a loopback/private host. Add it to KODY_BROWSER_ALLOW_PRIVATE_HOSTS on the server to render it.`,

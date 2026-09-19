@@ -62,18 +62,18 @@ Accounts are created by the operator — there is no open registration:
 
 ## Account pages (`/account`)
 
-| Page             | You can                                                                                                  |
-| ---------------- | -------------------------------------------------------------------------------------------------------- |
-| Overview         | see today's usage vs quotas, change your password                                                        |
-| MCP clients      | see every OAuth client you authorized (name, scope, last use), revoke one or all                         |
-| API tokens       | list (label, created, last used — never the value), create (value shown **once**), revoke                |
-| Secrets          | list names + approved hosts, add/replace a value (paste form; the value is never rendered again), delete |
-| Packages         | list saved packages with their exports/jobs/webhooks, delete                                             |
-| Jobs             | list schedules, last run, enable/disable                                                                 |
-| Runs             | recent run history (status, duration, error names — never secret values)                                 |
-| Integrations     | connected OAuth integrations and their status, disconnect                                                |
-| Inbox            | email inboxes and recent messages                                                                        |
-| Browser sessions | list and revoke (this one or all others)                                                                 |
+| Page             | You can                                                                                                                                            |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Overview         | see today's usage vs quotas, change your password                                                                                                  |
+| MCP clients      | see every OAuth client you authorized (name, scope, last use), revoke one or all                                                                   |
+| API tokens       | list (label, created, last used — never the value), create (value shown **once**), revoke                                                          |
+| Secrets          | list names + approved hosts, add/replace a value (paste form; the value is never rendered again), delete                                           |
+| Packages         | list saved packages with their exports/jobs/webhooks/source, install from GitHub or a URL, publish / republish / unpublish to `/community`, delete |
+| Jobs             | list schedules, last run, enable/disable                                                                                                           |
+| Runs             | recent run history (status, duration, error names — never secret values)                                                                           |
+| Integrations     | connected OAuth integrations and their status, disconnect                                                                                          |
+| Inbox            | email inboxes and recent messages                                                                                                                  |
+| Browser sessions | list and revoke (this one or all others)                                                                                                           |
 
 Host approvals are intentionally **not** on the account pages — they stay an
 operator decision (see [secrets.md](./secrets.md)); the Secrets page shows the
