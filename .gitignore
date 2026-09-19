@@ -1,0 +1,8 @@
+node_modules/
+.celld/
+.env
+.env.*
+!.env.example
+*.local
+.DS_Store
+wrangler.fleet.jsonc

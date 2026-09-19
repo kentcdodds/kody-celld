@@ -1,0 +1,30 @@
+{
+  "name": "@kody-smoke/counter",
+  "version": "1.0.0",
+  "description": "Durable counter backed by packageStorage(), with a recurring tick job.",
+  "exports": {
+    ".": "./status.js",
+    "./increment": "./increment.js",
+    "./tick": "./tick.js"
+  },
+  "kody": {
+    "jobs": {
+      "tick": {
+        "entry": "./tick.js",
+        "schedule": {
+          "type": "interval",
+          "every": "1m"
+        },
+        "description": "Increments the tick counter every minute."
+      },
+      "backfill": {
+        "entry": "./tick.js",
+        "schedule": {
+          "type": "once",
+          "runAt": "2020-01-01T00:00:00Z"
+        },
+        "description": "One-shot job whose runAt is already in the past; runs on the next dispatch."
+      }
+    }
+  }
+}

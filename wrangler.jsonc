@@ -1,0 +1,32 @@
+// Local development configuration for `celld dev .`
+// Fleet deployments render wrangler.fleet.jsonc (git-ignored) from this file via
+// `npm run fleet:render` so operator values never live in git. See docs/run-fleet.md.
+{
+  "name": "kody-celld",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-01-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "worker_loaders": [{ "binding": "LOADER" }],
+  "triggers": { "crons": ["* * * * *"] },
+  "durable_objects": {
+    "bindings": [
+      { "name": "REGISTRY", "class_name": "RegistryCell" },
+      { "name": "USER", "class_name": "UserCell" },
+      { "name": "PACKAGE_STORAGE", "class_name": "PackageStorageCell" },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["RegistryCell", "UserCell", "PackageStorageCell"],
+    },
+  ],
+  "vars": {
+    // Dev-only values. They are not secrets and only work against `celld dev`.
+    // Fleet values come from KODY_ADMIN_TOKEN / KODY_MASTER_KEY env at render time.
+    "KODY_ADMIN_TOKEN": "dev-admin-token",
+    "KODY_MASTER_KEY": "dev-master-key-only-for-celld-dev",
+    "KODY_PUBLIC_URL": "http://127.0.0.1:8787",
+    "KODY_ALLOW_INSECURE_SECRET_HOSTS": "127.0.0.1,localhost",
+  },
+}
