@@ -66,16 +66,22 @@ services:
     ports:
       - '8080:8080'
     environment:
-      # The address browsers and MCP clients will actually use — change it when
-      # you put Kody behind a hostname or reverse proxy (sign-in and OAuth
-      # depend on it). Empty admin token / master key are generated on first
-      # start and persisted in the volume.
-      KODY_PUBLIC_URL: http://192.168.1.20:8080
+      # The exact address you will type into the browser / give MCP clients.
+      # Sign-in cookies and OAuth redirects are bound to it, so it must match:
+      #   trying it on this machine  -> http://localhost:8080  (as below)
+      #   NAS / VPS on your LAN      -> http://192.168.1.20:8080 or http://nas.local:8080
+      #   behind a reverse proxy     -> https://kody.example.com
+      # Admin token / master key are generated on first start and kept in the volume.
+      KODY_PUBLIC_URL: http://localhost:8080
     volumes:
       - kody-data:/data
 volumes:
   kody-data:
 ```
+
+The commands below use `http://localhost:8080`; if you set a different
+`KODY_PUBLIC_URL`, use that instead (`localhost` only works from the machine
+running Docker).
 
 Prefer to build from source (or want the AI / browser / mail / fleet overlays)?
 `git clone https://github.com/kentcdodds/kody-celld && cd kody-celld && docker compose up -d`
@@ -84,11 +90,11 @@ uses the same image name and builds it locally when it is not present.
 **2. Check it and read your admin token**
 
 ```sh
-curl http://192.168.1.20:8080/health           # {"ok":true, ...}
+curl http://localhost:8080/health              # {"ok":true, ...}
 docker compose exec kody cat /data/kody.env    # KODY_ADMIN_TOKEN + KODY_MASTER_KEY — back this up
 ```
 
-**3. Create your account** — open `http://192.168.1.20:8080/` in a browser. The
+**3. Create your account** — open `http://localhost:8080/` in a browser. The
 **Set up Kody** page asks for the admin token, your email and a password and
 signs you in to `/account`. (Created the first user with the admin API
 instead? `/setup` disappears once any user exists; sign in on `/signin` with the
@@ -98,7 +104,7 @@ instead? `/setup` disappears once any user exists; sign in on `/signin` with the
 open the browser for sign-in + consent on first use:
 
 ```sh
-claude mcp add --transport http kody http://192.168.1.20:8080/mcp
+claude mcp add --transport http kody http://localhost:8080/mcp
 ```
 
 Cursor / VS Code / Claude Desktop: add an HTTP MCP server with that URL. Clients

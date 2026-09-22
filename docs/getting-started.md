@@ -76,15 +76,27 @@ services:
     ports:
       - '8080:8080'
     environment:
-      KODY_PUBLIC_URL: http://<nas-ip>:8080 # what browsers/MCP clients will use
+      KODY_PUBLIC_URL: http://<kody-host>:8080 # see below
     volumes:
       - kody-data:/data
 volumes:
   kody-data:
 ```
 
-Replace `<nas-ip>` with the address you will type into the browser (hostname,
-Tailscale name or LAN IP). Every other setting is optional; the
+**Pick `KODY_PUBLIC_URL` first.** It is the exact address you will type into
+the browser and give MCP clients — scheme, host and port. Sign-in cookies, the
+OAuth issuer and redirect URIs are bound to it, so a mismatch shows up as a
+rejected sign-in form or "invalid redirect":
+
+| Where you run it                                    | `KODY_PUBLIC_URL`                                                                     |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Trying it on this machine (Docker Desktop, laptop)  | `http://localhost:8080`                                                               |
+| NAS / home server / VPS reached from other machines | `http://192.168.1.20:8080`, `http://nas.local:8080`, `http://nas.tailnet.ts.net:8080` |
+| Behind a reverse proxy with TLS (step 6)            | `https://kody.example.com` (no port)                                                  |
+
+`localhost` only works from the machine running Docker — for a NAS use its LAN
+IP or hostname. The rest of this guide writes `<kody-host>:8080` wherever that
+value goes. Every other setting is optional; the
 [`.env.example`](../.env.example) lists them and any of them can go under
 `environment:`.
 
@@ -99,7 +111,7 @@ and the fleet, or if you want to hack on it:
 ```sh
 git clone https://github.com/kentcdodds/kody-celld.git
 cd kody-celld
-cp .env.example .env     # set KODY_PUBLIC_URL; leave the token/key empty
+cp .env.example .env     # KODY_PUBLIC_URL defaults to http://localhost:8080; change it per the table above
 ```
 
 (No git on the NAS? Download the ZIP from GitHub and unpack it into a shared
@@ -119,11 +131,11 @@ with:
 
 ```
 kody-1  | [kody-celld] wrote operator values to /data/kody.env (admin token + master key).
-kody-1  | [kody-celld] single node: MCP at http://<nas-ip>:8080/mcp (listening on 0.0.0.0:8080)
+kody-1  | [kody-celld] single node: MCP at http://<kody-host>:8080/mcp (listening on 0.0.0.0:8080)
 kody-1  |   ready  http://0.0.0.0:8080
 ```
 
-Check it: `curl http://<nas-ip>:8080/health` → `{"ok":true, ...}`.
+Check it: `curl http://<kody-host>:8080/health` → `{"ok":true, ...}`.
 The container also has a Docker health check, so `docker compose ps` shows
 `healthy` once it is serving.
 
@@ -144,14 +156,14 @@ win over the generated file and are written back to it.
 
 ### 5. Create your user and connect an MCP client
 
-Open `http://<nas-ip>:8080/` in a browser. With no accounts yet it shows
+Open `http://<kody-host>:8080/` (your `KODY_PUBLIC_URL`) in a browser. With no accounts yet it shows
 **Set up Kody**: paste the admin token, enter your email and a password
 (12+ characters) — that creates your account and signs you in to `/account`
 ([web-ui.md](./web-ui.md)). Then point an OAuth-capable MCP client at the URL
 only:
 
 ```sh
-claude mcp add --transport http kody http://<nas-ip>:8080/mcp
+claude mcp add --transport http kody http://<kody-host>:8080/mcp
 # first use opens the browser: sign in, click Approve
 ```
 
@@ -168,7 +180,7 @@ and set a password from `/account`.
 
 ```sh
 ADMIN=<KODY_ADMIN_TOKEN from kody.env>
-BASE=http://<nas-ip>:8080
+BASE=http://<kody-host>:8080   # your KODY_PUBLIC_URL
 
 curl -s -X POST $BASE/admin/users \
   -H "authorization: Bearer $ADMIN" -H 'content-type: application/json' \
@@ -191,12 +203,13 @@ until you approve that host once as admin (step 7).
 
 ### 6. Make it reachable (optional but recommended)
 
-- **On your LAN / Tailscale only:** you are done. Set
-  `KODY_PUBLIC_URL=http://<hostname>:8080` in `.env` so `/health`, the OAuth
-  discovery metadata and the sign-in forms use the address your browser and
-  MCP clients actually see, then `docker compose up -d`. (OAuth issuer and
-  cookie origin are derived from this value — a mismatch shows up as
-  "invalid redirect" or a rejected sign-in form.)
+- **On your LAN / Tailscale only:** you are done, as long as
+  `KODY_PUBLIC_URL` is the address other machines use (`http://<lan-ip>:8080`
+  or `http://<hostname>:8080`, not `localhost`). Changing it later is fine:
+  edit the compose `environment:` / `.env` and `docker compose up -d`; `/health`,
+  the OAuth discovery metadata and the sign-in forms pick up the new origin.
+  (OAuth issuer and cookie origin are derived from this value — a mismatch
+  shows up as "invalid redirect" or a rejected sign-in form.)
 - **From the internet:** put your NAS reverse proxy (Synology "Reverse Proxy",
   Nginx Proxy Manager, Caddy, Traefik) in front of port 8080 with a TLS
   certificate, set `KODY_PUBLIC_URL=https://kody.your-domain.example` in `.env`,
@@ -353,15 +366,15 @@ workflow.
 
 ## Troubleshooting
 
-| Symptom                                                       | Cause / fix                                                                                                                                                          |
-| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `500 insecure_configuration` on a non-loopback URL            | The dev placeholders are in effect. Path A: check `/data/kody.env` exists and was loaded. Path B: `KODY_*` missing in `.env` at deploy time.                         |
-| `deploy` exits with `KODY_PUBLIC_URL must be an https:// URL` | Set a real https URL, or `KODY_ALLOW_HTTP_PUBLIC_URL=1` for a trusted LAN.                                                                                           |
-| `/health` fails right after `up` on the fleet                 | Nodes only serve once the `deploy` job has published a version; `docker compose logs deploy`.                                                                        |
-| `secret_host_not_approved`                                    | Approve the destination host for that user with `POST /admin/users/:id/secret-hosts`.                                                                                |
-| `secret_requires_https`                                       | Secrets are only sent over https. For local testing add the host to `KODY_ALLOW_INSECURE_SECRET_HOSTS`.                                                              |
-| `/setup` redirects to `/signin`                               | A user already exists (created via the admin API or an earlier run). Sign in with that user's API token, or invite yourself from `/console`.                         |
-| Sign-in form rejected / OAuth "invalid redirect"              | `KODY_PUBLIC_URL` does not match the address in the browser. Set it to exactly what you type (scheme, host, port) and `docker compose up -d`.                        |
-| `docker compose pull` says denied / not found                 | The package on ghcr.io is not public yet or the tag does not exist; build locally with `docker compose up -d --build` from a checkout instead.                       |
-| Raspberry Pi build is slow / OOM                              | Use the prebuilt `linux/arm64` image (`docker compose pull`), or build on a laptop with `docker buildx build --platform linux/arm64` and set `KODY_IMAGE` in `.env`. |
-| Where is the data?                                            | Path A: volume `kody-data` (`/data/celld` = celld's local object store, `/data/kody.env` = operator values). Path B: the bucket + per-node `/var/lib/celld` cache.   |
+| Symptom                                                       | Cause / fix                                                                                                                                                                                          |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `500 insecure_configuration` on a non-loopback URL            | The dev placeholders are in effect. Path A: check `/data/kody.env` exists and was loaded. Path B: `KODY_*` missing in `.env` at deploy time.                                                         |
+| `deploy` exits with `KODY_PUBLIC_URL must be an https:// URL` | Set a real https URL, or `KODY_ALLOW_HTTP_PUBLIC_URL=1` for a trusted LAN.                                                                                                                           |
+| `/health` fails right after `up` on the fleet                 | Nodes only serve once the `deploy` job has published a version; `docker compose logs deploy`.                                                                                                        |
+| `secret_host_not_approved`                                    | Approve the destination host for that user with `POST /admin/users/:id/secret-hosts`.                                                                                                                |
+| `secret_requires_https`                                       | Secrets are only sent over https. For local testing add the host to `KODY_ALLOW_INSECURE_SECRET_HOSTS`.                                                                                              |
+| `/setup` redirects to `/signin`                               | A user already exists (created via the admin API or an earlier run). Sign in with that user's API token, or invite yourself from `/console`.                                                         |
+| Sign-in form rejected / OAuth "invalid redirect"              | `KODY_PUBLIC_URL` does not match the address in the browser (e.g. it says `localhost` but you opened the NAS's IP). Set it to exactly what you type (scheme, host, port) and `docker compose up -d`. |
+| `docker compose pull` says denied / not found                 | The package on ghcr.io is not public yet or the tag does not exist; build locally with `docker compose up -d --build` from a checkout instead.                                                       |
+| Raspberry Pi build is slow / OOM                              | Use the prebuilt `linux/arm64` image (`docker compose pull`), or build on a laptop with `docker buildx build --platform linux/arm64` and set `KODY_IMAGE` in `.env`.                                 |
+| Where is the data?                                            | Path A: volume `kody-data` (`/data/celld` = celld's local object store, `/data/kody.env` = operator values). Path B: the bucket + per-node `/var/lib/celld` cache.                                   |
