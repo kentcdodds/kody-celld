@@ -13,10 +13,10 @@ import {
 import {
 	getAuthInputCss,
 	hoverMq,
-	layoutMaxWidths,
 	pageGutter,
 } from '#universal/styles/style-primitives.ts'
 import { type IconName } from '#universal/icon.tsx'
+import { getPageShellCss } from '#client/page-layout.ts'
 import {
 	AccountManagementLinkNav,
 	accountManagementNarrowMq,
@@ -175,40 +175,29 @@ export function AccountManagementShell(
 			data-account-shell
 			aria-busy={handle.props.busy ? 'true' : undefined}
 			mix={css({
-				maxWidth: layoutMaxWidths.extended,
-				margin: '0 auto',
-				// Prototype `.account` padding. The inline gutter is the one every
-				// other page container carries, so the content column lines up
-				// with the header's 72rem content box instead of running wider
-				// than the nav above it; the bottom clamp keeps the last section
-				// off the footer hairline. `<main>`'s generic padding is zeroed
-				// for this shell in public/styles.css so the two don't stack.
-				padding: `clamp(2rem, 5vw, 3.5rem) ${pageGutter} clamp(3rem, 7vw, 5rem)`,
-				boxSizing: 'border-box' as const,
+				// The shared page box (width, gutter, vertical rhythm), so the
+				// rail and content column line up with the header brand on every
+				// account and console page regardless of how much each renders.
+				...getPageShellCss('app'),
 				display: 'grid',
 				gap: spacing.xl,
 				alignItems: 'start',
-				// Prototype `.account` layout: 200px sticky nav rail beside the
-				// content column, 72rem total. The rail is an absolutely
-				// positioned full-height track (so the content keeps its normal
-				// single-column flow and gap) and only exists when the section
-				// nav is present — nav-less shell users (onboarding, pending
-				// verification) keep the plain column. The rail starts at the
-				// gutter so it lines up with the header's brand. Note: `css()` classes
-				// each live in their own cascade sub-layer, so child spacing
-				// must stay on the shell's `gap`, never on per-child margins a
-				// child's own class would silently beat.
+				// Prototype `.account` layout: 200px rail beside the content
+				// column, 72rem total. The rail is absolutely positioned in a
+				// left track and only exists when the section nav is present —
+				// nav-less shell users (onboarding, pending verification) keep
+				// the plain column. The rail starts at the gutter so it lines
+				// up with the header's brand. Its box is the shell (top and
+				// bottom), and the link column scrolls inside that box, so a
+				// short page stays as tall as its content. A fixed min-height
+				// here leaves a blank band above the footer. Note: `css()`
+				// classes each live in their own cascade sub-layer, so child
+				// spacing must stay on the shell's `gap`, never on per-child
+				// margins a child's own class would silently beat.
 				'&:has(> [data-account-nav])': {
 					position: 'relative',
 					gap: accountSectionGap,
 					paddingLeft: `calc(${pageGutter} + 200px + clamp(2rem, 5vw, 4.5rem))`,
-					// The absolute rail contributes no height; keep room so a
-					// short page never lets the nav spill over the footer.
-					minHeight: '40rem',
-					// …and keep that reserved height out of the rows. `align-content`
-					// defaults to `stretch`, which hands the leftover space to the
-					// auto-sized tracks, so a page shorter than the floor grew a gap
-					// between every section instead of ending early.
 					alignContent: 'start',
 					...(handle.props.maxWidth
 						? {
@@ -219,7 +208,6 @@ export function AccountManagementShell(
 						: {}),
 					[accountManagementNarrowMq]: {
 						paddingLeft: pageGutter,
-						minHeight: 0,
 						gap: spacing.xl,
 					},
 				},

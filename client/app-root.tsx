@@ -8,11 +8,10 @@ import { isAuthShellPage } from '#universal/loader-data.ts'
 import { routes } from '#universal/routes.ts'
 import {
 	getAlertCardCss,
-	layoutMaxWidths,
-	pageGutter,
 	visuallyHiddenUntilFocusedCss,
 } from '#universal/styles/style-primitives.ts'
 import { spacing } from '#universal/styles/tokens.ts'
+import { getPageContainerCss } from '#client/page-layout.ts'
 
 export type { AppRootProps }
 
@@ -77,24 +76,19 @@ const rootCss = {
 	minHeight: '100vh',
 }
 
+/** Every route renders one page box from `#client/page-layout.ts` in here. */
 const mainCss = {
 	flex: 1,
-	display: 'flex',
-	flexDirection: 'column' as const,
+	width: '100%',
+	boxSizing: 'border-box' as const,
 }
 
 const flashWrapCss = {
-	width: '100%',
-	maxWidth: layoutMaxWidths.extended,
-	margin: '0 auto',
-	padding: `${spacing.lg} ${pageGutter} 0`,
-	boxSizing: 'border-box' as const,
+	...getPageContainerCss('app'),
+	paddingTop: spacing.lg,
 }
 
 const authFlashWrapCss = {
-	width: '100%',
-	maxWidth: '28rem',
-	margin: '0 auto',
-	padding: `${spacing.xl} ${pageGutter} 0`,
-	boxSizing: 'border-box' as const,
+	...getPageContainerCss('auth'),
+	paddingTop: spacing.xl,
 }

@@ -1,10 +1,8 @@
 import { css, type Handle, type RemixNode } from 'remix/ui'
 import { routes } from '#universal/routes.ts'
-import {
-	getSurfaceCardCss,
-	pageGutter,
-} from '#universal/styles/style-primitives.ts'
+import { getSurfaceCardCss } from '#universal/styles/style-primitives.ts'
 import { colors, spacing } from '#universal/styles/tokens.ts'
+import { getPageShellCss } from '#client/page-layout.ts'
 
 /**
  * Centred single-card layout for the stand-alone pages (sign-in, setup,
@@ -22,11 +20,9 @@ export function AuthShell(
 	return () => (
 		<section
 			mix={css({
-				width: '100%',
-				maxWidth: handle.props.wide ? '40rem' : '28rem',
-				margin: '0 auto',
-				padding: `clamp(2rem, 6vw, 4rem) ${pageGutter} clamp(3rem, 7vw, 5rem)`,
-				boxSizing: 'border-box',
+				...getPageShellCss(handle.props.wide ? 'authWide' : 'auth'),
+				// No site header above these pages, so the card sits lower.
+				paddingTop: 'clamp(2rem, 6vw, 4rem)',
 				display: 'grid',
 				gap: spacing.lg,
 			})}
