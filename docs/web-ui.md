@@ -81,6 +81,10 @@ Accounts are created by the operator — there is no open registration:
 | Inbox            | email inboxes and recent messages                                                                                                                  |
 | Browser sessions | list and revoke (this one or all others)                                                                                                           |
 
+The hosted product's paths for three of these (`/account/email`,
+`/account/activity`, `/account/mcp-oauth-clients`) redirect to the local ones
+(`/account/inbox`, `/account/runs`, `/account/clients`).
+
 Host approvals are intentionally **not** on the account pages — they stay an
 operator decision (see [secrets.md](./secrets.md)); the Secrets page shows the
 approved list and tells the user to ask.
@@ -123,7 +127,8 @@ Import aliases are the same as upstream: `#client/*`, `#universal/*`,
 (`universal/styles/tokens.ts`), style primitives
 (`universal/styles/style-primitives.ts`), `public/styles.css`, the self-hosted
 fonts and the icon glyphs are copied from kody verbatim; keep them that way
-and put kody-celld-specific styling in the page components.
+and put kody-celld-specific styling in the page components (page widths and
+gutters live in `client/page-layout.ts`, see [Page layout](#page-layout)).
 
 Rendering flow for a page:
 
@@ -159,6 +164,48 @@ the real components for SSR.
 Build: `npm run build:client` (Vite → `public/build/`). `npm run dev`,
 `npm run fleet:deploy` and the Dockerfile run it for you; celld serves
 `public/` through `assets.directory` in `wrangler.jsonc`.
+
+## Page layout
+
+Every route renders exactly one page box inside `<main>`, and every page box
+comes from `client/page-layout.ts`. That is what keeps the header brand, the
+account rail, and the content column in the same place as you move between
+pages.
+
+| Width (`pageWidths`) | Max      | Used by                                                                 |
+| -------------------- | -------- | ----------------------------------------------------------------------- |
+| `app`                | 72rem    | header, footer, `AccountManagementShell` (account + console), community |
+| `article`            | 46rem    | one thing to read: a community package, a package miss                  |
+| `message`            | 48rem    | illustrated 404 / 500 (`client/routes/error-page.tsx`)                  |
+| `auth` / `authWide`  | 28/40rem | `AuthShell`: sign-in, setup, invite links / consent, connect            |
+
+- **Use a shell, not a container.** Account and console pages render
+  `AccountManagementShell` → `AccountPageHeader` / `AdminPageHeader` (title,
+  lede, optional compact actions, the section rail) → `AccountManagementPanel`
+  sections. Stand-alone pages use `AuthShell`. Anything else starts from
+  `getPageShellCss(width)` (box + the standard top/bottom rhythm) or
+  `getPageContainerCss(width)` (box only, for bands like the flash row).
+- **Never hand-roll `maxWidth` + `margin: 0 auto`.** Without `width: 100%` a
+  box inside a flex or grid parent shrinks to its content, which is exactly
+  how the account pages ended up different widths
+  ([#14](https://github.com/kentcdodds/kody-celld/issues/14)). The helpers
+  carry `width: 100%`, the shared `pageGutter`, and `box-sizing`.
+- **Sections, not cards.** Inside a shell, blocks are hairline-topped
+  `AccountManagementPanel`s spaced by the shell's `gap` (per-child margins
+  lose to each child's own `css()` layer). Tables are `RecordTable`; empty
+  states are its `emptyLabel`, or a muted `Lede` naming the MCP capability
+  that fills the section.
+- **Buttons.** `SubmitButton` / `ActionForm` / `DangerForm` only: `primary`
+  (green pill) for the section's one main action, `secondary` (ghost) for
+  row and header actions such as Sign out, `danger` (red ring, two-step
+  confirm) for anything destructive. `size="sm"` is the default; `md` is for
+  the decisive action on an auth card.
+- **Badges.** `ok` (green) healthy, `warn` (amber) needs attention, `danger`
+  (red) failed, `neutral` everything else.
+
+Before sending a layout change, compare two sibling pages at the same
+viewport (e.g. Integrations and Email at 1440px and 390px): the rail, the
+heading and the header brand should not move.
 
 ## Porting UI changes from kody
 

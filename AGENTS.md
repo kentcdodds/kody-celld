@@ -64,6 +64,9 @@ them without re-testing on celld:
 celld static assets). Design tokens, style primitives, `styles.css`, fonts,
 icons and the shared components are verbatim copies — port upstream diffs
 instead of restyling; page components adapt to our `AppLoaderData` shapes.
+Every page takes its width, gutter and centring from `client/page-layout.ts`
+(via `AccountManagementShell`, `AuthShell` or `getPageShellCss`) — never a
+hand-rolled `maxWidth` + auto margin ([conventions](./docs/web-ui.md#page-layout)).
 Pages must keep working with JavaScript off (forms round-trip; the browser
 bundle only hydrates islands registered in `client/entry.tsx`). The recipe is
 in [docs/web-ui.md](./docs/web-ui.md#porting-ui-changes-from-kody). Run
