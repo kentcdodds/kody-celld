@@ -22,7 +22,11 @@ export function ErrorPage(handle: Handle<{ data: Data; signedIn: boolean }>) {
 	return () => {
 		const { data, signedIn } = handle.props
 		const kind =
-			data.status === 404 ? 'notFound' : data.status >= 500 ? 'server' : 'request'
+			data.status === 404
+				? 'notFound'
+				: data.status >= 500
+					? 'server'
+					: 'request'
 		const copy = errorCopy[kind]
 		const homeHref = signedIn ? routes.account.href() : routes.home.href()
 		return (
