@@ -73,6 +73,10 @@ in [docs/web-ui.md](./docs/web-ui.md#porting-ui-changes-from-kody). Run
 `npm run build:client` before `celld dev`/`deploy` (`npm run dev` and the
 Dockerfile do).
 
+Remix API docs ship with the installed version: search
+`node_modules/remix/INDEX.md` (guides + per-package READMEs) before reaching
+for remembered or online Remix APIs.
+
 ## Style
 
 TypeScript strict, tabs, no semicolons, single quotes (prettier is the

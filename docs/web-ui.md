@@ -232,7 +232,10 @@ landing page and marketing sections, Cloudflare Turnstile, OG image rendering.
 - Responses set `Content-Security-Policy: default-src 'none'; …`,
   `X-Frame-Options: DENY`, `Referrer-Policy: same-origin`, `Cache-Control:
 no-store` (`src/app/security-headers.ts`). `remix/ui` escapes all
-  interpolated text; there is no raw-HTML escape hatch in the page components.
+  interpolated text and neutralises `javascript:` URLs in `href`, `src`,
+  `action` and `formaction`.
+  Raw HTML (`innerHTML`, `srcdoc`) only renders through an explicit
+  `unsafeHTML()`; the page components never call it.
 - Secrets, token values, master keys and admin tokens never appear on a page
   except the one-time token reveal after creation.
 - Failed sign-ins (password, token, console) are audited with the method but

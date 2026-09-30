@@ -43,6 +43,6 @@
   },
   "dependencies": {
     "postal-mime": "3.0.0",
-    "remix": "3.0.0-rc.2"
+    "remix": "3.0.0-rc.4"
   }
 }
