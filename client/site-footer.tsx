@@ -139,7 +139,7 @@ const footerNavCss = {
 		justifyContent: 'center',
 		columnGap: '1.25rem',
 		rowGap: '0.15rem',
-		'& a': {
+		'& a, & span': {
 			display: 'flex',
 			alignItems: 'center',
 			minHeight: '44px',

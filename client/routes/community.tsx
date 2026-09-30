@@ -2,20 +2,26 @@ import { css, type Handle, type RemixNode } from 'remix/ui'
 import { type AppLoaderData } from '#universal/loader-data.ts'
 import { routes } from '#universal/routes.ts'
 import {
-	getPrimaryButtonCss,
-	layoutMaxWidths,
-	mutedLinkCss,
-	pageGutter,
+	getGhostButtonCss,
+	getPillButtonCss,
+	mergeCss,
 	pageHeadCss,
+	visuallyHiddenCss,
 } from '#universal/styles/style-primitives.ts'
-import { spacing } from '#universal/styles/tokens.ts'
 import {
+	colors,
+	spacing,
+	transitions,
+	typography,
+} from '#universal/styles/tokens.ts'
+import { getPageShellCss } from '#client/page-layout.ts'
+import {
+	AccountManagementHeader,
 	AccountManagementPanel,
 	MetadataGrid,
 	TimestampValue,
-	accountInputCss,
 } from './account-management-components.tsx'
-import { Badge, Code, Lede, Muted, PreBlock } from './form-controls.tsx'
+import { Badge, Code, Muted, PreBlock } from './form-controls.tsx'
 import { RecordTable } from './record-table.tsx'
 
 type IndexData = Extract<AppLoaderData, { page: 'community' }>
@@ -26,31 +32,28 @@ function plural(n: number, word: string) {
 	return `${n} ${word}${n === 1 ? '' : 's'}`
 }
 
-/** Public page column: centred head, hairline sections, no account nav. */
-function PublicPage(
+/**
+ * One package or a miss: the reading column with a way back to the catalog,
+ * the account-page heading, and hairline sections below.
+ */
+function CommunityArticle(
 	handle: Handle<{
-		title: RemixNode
-		description?: RemixNode
+		title: string
+		description?: string
 		children: RemixNode
 	}>,
 ) {
 	return () => (
-		<section
-			mix={css({
-				maxWidth: layoutMaxWidths.extended,
-				margin: '0 auto',
-				padding: `clamp(2rem, 5vw, 3.5rem) ${pageGutter} clamp(3rem, 7vw, 5rem)`,
-				boxSizing: 'border-box',
-				display: 'grid',
-				gap: 'clamp(2rem, 4vw, 2.75rem)',
-			})}
-		>
-			<div mix={css(pageHeadCss)}>
-				<h1>{handle.props.title}</h1>
-				{handle.props.description ? <p>{handle.props.description}</p> : null}
-			</div>
+		<article mix={css(communityArticleCss)}>
+			<a href={routes.community.href()} mix={css(backLinkCss)}>
+				<span aria-hidden="true">←</span> Community
+			</a>
+			<AccountManagementHeader
+				title={handle.props.title}
+				description={handle.props.description ?? ''}
+			/>
 			{handle.props.children}
-		</section>
+		</article>
 	)
 }
 
@@ -59,47 +62,56 @@ export function Community(handle: Handle<{ data: IndexData }>) {
 	return () => {
 		const d = handle.props.data
 		return (
-			<PublicPage
-				title={
-					<>
-						Community <em>packages</em>
-					</>
-				}
-				description={`${plural(d.stats.packages, 'package')} from ${plural(d.stats.publishers, 'publisher')}, ${plural(d.stats.installs, 'install')}.`}
-			>
-				<AccountManagementPanel ariaLabel="Search">
-					<form
-						method="get"
-						action={routes.community.href()}
-						mix={css({
-							display: 'flex',
-							gap: spacing.sm,
-							flexWrap: 'wrap',
-							alignItems: 'center',
-						})}
-					>
-						<input
-							name="q"
-							type="search"
-							aria-label="Search packages"
-							placeholder="Search name, description, keywords"
-							value={d.query}
-							mix={css({
-								...accountInputCss,
-								flex: '1 1 18rem',
-								maxWidth: '32rem',
-							})}
-						/>
-						<button type="submit" mix={css(getPrimaryButtonCss())}>
-							Search
-						</button>
-					</form>
-					<Lede>
-						Publish your own with <Code>communityPublish</Code> or from{' '}
-						<a href={routes.accountPackages.href()}>your packages</a>.
-					</Lede>
-				</AccountManagementPanel>
-				<AccountManagementPanel ariaLabel="Catalog">
+			<section mix={css(communityPageCss)}>
+				<header mix={css(communityHeadCss)}>
+					<div>
+						<h1 mix={css(headTitleCss)}>
+							Take what others
+							<br />
+							built. <em>Make it yours.</em>
+						</h1>
+						<p mix={css(headSubCss)}>
+							Packages people on this server have published. Install one from
+							any connected MCP client, then adapt it to your goals.
+						</p>
+						<form
+							data-focus-container
+							role="search"
+							method="get"
+							action={routes.community.href()}
+							mix={css(searchPillCss)}
+						>
+							<label for="community-q" mix={css(visuallyHiddenCss)}>
+								Search packages
+							</label>
+							<input
+								id="community-q"
+								name="q"
+								type="search"
+								placeholder="Search by name, description, or keywords"
+								value={d.query}
+								mix={css(searchInputCss)}
+							/>
+							<button type="submit" mix={css(getPillButtonCss())}>
+								Search
+							</button>
+						</form>
+						<p mix={css(headStatsCss)}>
+							{`${plural(d.stats.packages, 'package')} from ${plural(d.stats.publishers, 'publisher')}, ${plural(d.stats.installs, 'install')}.`}
+						</p>
+					</div>
+					<img
+						src="/images/kody-community-packages-480.webp"
+						srcset="/images/kody-community-packages-480.webp 480w, /images/kody-community-packages.webp 627w"
+						sizes="(max-width: 720px) 52vw, 230px"
+						width={627}
+						height={627}
+						decoding="async"
+						alt="Kody handing a wrapped package across a counter of neatly sorted parcels"
+						mix={css(communityArtCss)}
+					/>
+				</header>
+				<section aria-label="Catalog">
 					<RecordTable
 						mode="none"
 						ariaLabel="Community packages"
@@ -136,26 +148,34 @@ export function Community(handle: Handle<{ data: IndexData }>) {
 							},
 						}))}
 					/>
-				</AccountManagementPanel>
-			</PublicPage>
+				</section>
+				<div mix={css(communityCloseCss)}>
+					<p>
+						Built something useful? Publish it back with{' '}
+						<Code>communityPublish</Code> from an MCP client, or from your
+						packages page — everyone on this server can install it.
+					</p>
+					<a href={routes.accountPackages.href()} mix={css(closeButtonCss)}>
+						Your packages
+					</a>
+				</div>
+			</section>
 		)
 	}
 }
 
 export function CommunityNotFound(handle: Handle<{ data: NotFoundData }>) {
 	return () => (
-		<PublicPage title="Not found">
+		<CommunityArticle
+			title="Not found"
+			description="Nothing in this server's catalog goes by that name. It may have been unpublished."
+		>
 			<AccountManagementPanel ariaLabel="Not found">
-				<p>
+				<p mix={css({ margin: 0 })}>
 					No community package named <Code>{handle.props.data.name}</Code>.
 				</p>
-				<p>
-					<a href={routes.community.href()} mix={css(mutedLinkCss)}>
-						Back to the catalog
-					</a>
-				</p>
 			</AccountManagementPanel>
-		</PublicPage>
+		</CommunityArticle>
 	)
 }
 
@@ -164,18 +184,8 @@ export function CommunityDetail(handle: Handle<{ data: DetailData }>) {
 	return () => {
 		const { pkg, publicUrl } = handle.props.data
 		return (
-			<PublicPage
-				title={
-					<>
-						<a
-							href={routes.community.href()}
-							mix={css({ ...mutedLinkCss, fontSize: 'inherit' })}
-						>
-							Community
-						</a>{' '}
-						/ {pkg.name}
-					</>
-				}
+			<CommunityArticle
+				title={pkg.name}
 				description={pkg.description ?? undefined}
 			>
 				<AccountManagementPanel ariaLabel="Package">
@@ -272,7 +282,154 @@ export default () => kody.communityInstall({ name: ${JSON.stringify(pkg.name)} }
 						<PreBlock>{pkg.agents}</PreBlock>
 					</AccountManagementPanel>
 				) : null}
-			</PublicPage>
+			</CommunityArticle>
 		)
 	}
+}
+
+/* Browse page: the app-width box, sections spaced like the account shell. */
+const communityPageCss = {
+	...getPageShellCss('app'),
+	display: 'grid',
+	gap: 'clamp(2rem, 4vw, 2.75rem)',
+}
+
+const communityArticleCss = {
+	...getPageShellCss('article'),
+	display: 'grid',
+	gap: 'clamp(2rem, 4vw, 2.75rem)',
+	alignContent: 'start',
+}
+
+/* Split head from kody's `/community`: Kody at the side, not overhead. The
+   shirt-pattern whisper drifts toward the mascot. */
+const communityHeadCss = {
+	display: 'grid',
+	gridTemplateColumns: 'minmax(0, 1fr) clamp(150px, 22vw, 230px)',
+	gap: 'clamp(1.5rem, 4vw, 3.5rem)',
+	alignItems: 'center',
+	position: 'relative' as const,
+	// See `pageHeadCss`: the fabric is a backdrop, so it paints under the head.
+	isolation: 'isolate' as const,
+	'&::before': {
+		...pageHeadCss['&::before'],
+		inset: '-55% -14% -35%',
+		background: `radial-gradient(ellipse 40% 65% at 82% 45%, oklch(from ${colors.text} l c h / 0.055), transparent 72%)`,
+	},
+	'@media (max-width: 720px)': {
+		gridTemplateColumns: '1fr',
+		textAlign: 'center' as const,
+	},
+}
+
+const headTitleCss = {
+	margin: 0,
+	fontSize: 'clamp(2.4rem, 5vw, 3.4rem)',
+	fontWeight: 760,
+	letterSpacing: '-0.028em',
+	lineHeight: 1.04,
+	'& em': {
+		fontStyle: 'normal',
+		color: colors.primaryText,
+	},
+}
+
+const headSubCss = {
+	margin: '1rem 0 0',
+	color: colors.textMuted,
+	fontSize: '1.08rem',
+	maxWidth: '46ch',
+	textWrap: 'balance' as const,
+	'@media (max-width: 720px)': {
+		marginInline: 'auto',
+	},
+}
+
+const headStatsCss = {
+	margin: `${spacing.md} 0 0`,
+	color: colors.textMuted,
+	fontSize: typography.fontSize.sm,
+	fontVariantNumeric: 'tabular-nums',
+}
+
+/* Search: connected-pill grammar, one field + one verb. */
+const searchPillCss = {
+	marginTop: '1.8rem',
+	display: 'grid',
+	gridTemplateColumns: 'minmax(0, 1fr) auto',
+	alignItems: 'stretch',
+	width: 'min(100%, 34rem)',
+	boxSizing: 'border-box' as const,
+	backgroundColor: colors.surface,
+	border: `1.5px solid ${colors.border}`,
+	borderRadius: '999px',
+	padding: '0.3rem',
+	transition: `border-color 160ms ${transitions.easeOut}, box-shadow 160ms ${transitions.easeOut}`,
+	'&:focus-within': {
+		borderColor: colors.primary,
+		boxShadow: `0 0 0 3px oklch(from ${colors.primary} l c h / 0.25)`,
+	},
+	'@media (max-width: 720px)': {
+		marginInline: 'auto',
+	},
+}
+
+const searchInputCss = {
+	font: `400 1rem/1.2 ${typography.fontFamilyBody}`,
+	color: colors.text,
+	backgroundColor: 'transparent',
+	border: 'none',
+	borderRadius: '999px',
+	padding: '0.7rem 1.1rem',
+	minWidth: 0,
+	'&::placeholder': { color: colors.textMuted, opacity: 1 },
+	'&:focus': { outline: 'none' },
+	'&::-webkit-search-cancel-button': { WebkitAppearance: 'none' },
+}
+
+const communityArtCss = {
+	width: '100%',
+	height: 'auto',
+	'@media (max-width: 720px)': {
+		width: 'min(52%, 210px)',
+		marginInline: 'auto',
+		order: -1,
+	},
+}
+
+/* Publish close: the catalog grows when people publish back. */
+const communityCloseCss = {
+	paddingTop: 'clamp(1.8rem, 4vw, 2.5rem)',
+	borderTop: `1px solid ${colors.border}`,
+	display: 'flex',
+	alignItems: 'center',
+	gap: '1.2rem',
+	flexWrap: 'wrap' as const,
+	'& > p': {
+		// Wraps above the button on a phone instead of squeezing beside it.
+		flex: '1 1 20rem',
+		minWidth: 0,
+		margin: 0,
+		color: colors.textMuted,
+		fontSize: '0.98rem',
+	},
+}
+
+const closeButtonCss = mergeCss(getGhostButtonCss(), {
+	fontSize: '0.95rem',
+	padding: '0.8rem 1.35rem',
+})
+
+const backLinkCss = {
+	display: 'inline-flex',
+	alignItems: 'center',
+	gap: '0.4rem',
+	justifySelf: 'start',
+	fontSize: '0.95rem',
+	fontWeight: 550,
+	color: colors.primaryText,
+	textDecoration: 'none',
+	'&:hover': {
+		color: colors.text,
+	},
 }
