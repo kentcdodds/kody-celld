@@ -7,6 +7,7 @@ import { defaultPublisher } from '../capabilities/community.ts'
 import { fetchPackageSource, packageSourceHostsFromEnv, parsePackageSource } from '../packages/install.ts'
 import { renderPage } from '#app/render.tsx'
 import { type AppLoaderData, type PageFlash } from '#universal/loader-data.ts'
+import { accountAliasLocation } from './account-aliases.ts'
 import { appSessionOf, readForm, redirect } from './http.ts'
 import { assertCsrf, readWebSession, type WebSession } from './session.ts'
 import { passwordFormView } from './signin.ts'
@@ -44,6 +45,8 @@ export function isAccountRoute(pathname: string) {
 }
 
 export async function handleAccount(request: Request, env: Env, url: URL): Promise<Response> {
+	const alias = request.method === 'GET' ? accountAliasLocation(url) : null
+	if (alias) return redirect(alias)
 	const session = await readWebSession(request, env)
 	if (!session) return redirect(`/signin?flash=signin_required&next=${encodeURIComponent(url.pathname)}`)
 	const userCell = getUserCell(env, session.user.id)
