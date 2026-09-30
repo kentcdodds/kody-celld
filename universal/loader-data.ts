@@ -219,7 +219,25 @@ export type AppLoaderData =
 			packages: Array<PackageView>
 			sourceHosts: Array<string>
 			installError: string | null
-			installDraft: { source: string; subdir: string }
+			installDraft: { source: string; subdir: string; as: string }
+			preview: {
+				source: string
+				fetchedFrom: string
+				commit: string | null
+				name: string
+				version: string
+				description: string
+				readme: string
+				fileList: Array<string>
+				permissions: {
+					jobs: Array<string>
+					webhooks: Array<string>
+					subscriptions: Array<string>
+					secretProvider: string | null
+					dependencies: Array<string>
+				}
+				warnings: Array<string>
+			} | null
 	  }
 	| { page: 'accountJobs'; csrf: string; jobs: Array<JobView> }
 	| { page: 'accountActivity'; runs: Array<RunView> }

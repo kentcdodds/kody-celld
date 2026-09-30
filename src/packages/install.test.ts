@@ -100,6 +100,54 @@ describe('parsePackageSource', () => {
 		assert.equal(parsePackageSource('https://github.com/a/b/releases/download/v1/pkg.tgz').kind, 'url')
 	})
 
+	it('parses public kody.codes listing and .git URLs', () => {
+		assert.deepEqual(parsePackageSource('https://kody.codes/@kody/cloudflare'), {
+			kind: 'kody',
+			origin: 'https://kody.codes',
+			owner: 'kody',
+			name: 'cloudflare',
+			ref: null,
+			subdir: null,
+			gitUrl: 'https://kody.codes/@kody/cloudflare.git',
+		})
+		assert.deepEqual(parsePackageSource('https://kody.codes/@kody/cloudflare.git#main'), {
+			kind: 'kody',
+			origin: 'https://kody.codes',
+			owner: 'kody',
+			name: 'cloudflare',
+			ref: 'main',
+			subdir: null,
+			gitUrl: 'https://kody.codes/@kody/cloudflare.git',
+		})
+		assert.deepEqual(parsePackageSource('kody:@kody/cloudflare#v1'), {
+			kind: 'kody',
+			origin: 'https://kody.codes',
+			owner: 'kody',
+			name: 'cloudflare',
+			ref: 'v1',
+			subdir: null,
+			gitUrl: 'https://kody.codes/@kody/cloudflare.git',
+		})
+		assert.deepEqual(parsePackageSource('https://kody.codes/@kody/cloudflare/tree/main/packages/hello'), {
+			kind: 'kody',
+			origin: 'https://kody.codes',
+			owner: 'kody',
+			name: 'cloudflare',
+			ref: 'main',
+			subdir: 'packages/hello',
+			gitUrl: 'https://kody.codes/@kody/cloudflare.git',
+		})
+		assert.equal(
+			describePackageSource(parsePackageSource('https://kody.codes/@kody/cloudflare')),
+			'https://kody.codes/@kody/cloudflare.git',
+		)
+		assert.equal(
+			describePackageSource(parsePackageSource('https://kody.codes/@kody/cloudflare/tree/main/packages/hello')),
+			'https://kody.codes/@kody/cloudflare/tree/main/packages/hello',
+		)
+		assert.equal(defaultPackageSourceHosts.includes('kody.codes'), true)
+	})
+
 	it('treats everything else as a URL source and strips the fragment', () => {
 		const source = parsePackageSource('https://example.com/pkg.json#frag', 'sub/')
 		assert.deepEqual(source, { kind: 'url', url: 'https://example.com/pkg.json', subdir: 'sub' })
@@ -116,6 +164,7 @@ describe('parsePackageSource', () => {
 		assert.throws(() => parsePackageSource('ftp://example.com/x.tgz'), /Only http\(s\)/)
 		assert.throws(() => parsePackageSource('https://user:pw@example.com/x.tgz'), /credentials/)
 		assert.throws(() => parsePackageSource('not a url'), /not a URL/)
+		assert.throws(() => parsePackageSource('kody:@only'), /kody:@owner\/leaf/)
 	})
 })
 

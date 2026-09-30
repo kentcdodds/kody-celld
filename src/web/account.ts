@@ -3,8 +3,15 @@ import { getUserCell } from '../execute/engine.ts'
 import { recordAudit } from '../lib/audit.ts'
 import { KodyError } from '../lib/errors.ts'
 import { loadEmailConfig } from '../email/service.ts'
-import { defaultPublisher } from '../capabilities/community.ts'
-import { fetchPackageSource, packageSourceHostsFromEnv, parsePackageSource } from '../packages/install.ts'
+import { defaultPublisher, renamePackageFiles } from '../capabilities/community.ts'
+import {
+	fetchPackageSource,
+	packageSourceHostsFromEnv,
+	parsePackageSource,
+	previewPackageSource,
+	type PackagePreview,
+} from '../packages/install.ts'
+import { parsePackageManifest } from '../packages/manifest.ts'
 import { renderPage } from '#app/render.tsx'
 import { type AppLoaderData, type PageFlash } from '#universal/loader-data.ts'
 import { appSessionOf, readForm, redirect } from './http.ts'
@@ -21,6 +28,7 @@ const flashes: Record<string, PageFlash> = {
 	password_set: { kind: 'ok', text: 'Password updated.' },
 	disconnected: { kind: 'ok', text: 'Disconnected.' },
 	installed: { kind: 'ok', text: 'Package installed.' },
+	forked: { kind: 'ok', text: 'Package forked into your catalog.' },
 	published: { kind: 'ok', text: 'Published to the community catalog.' },
 	unpublished: { kind: 'ok', text: 'Removed from the community catalog.' },
 }
@@ -214,6 +222,7 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 
 		case 'packages': {
 			let installError: string | null = null
+			let preview: PackagePreview | null = null
 			if (post) {
 				if (form.action === 'delete' && form.name) {
 					await userCell.packageDelete(form.name)
@@ -243,13 +252,39 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 					if (removed) await audit('community.unpublish', form.name, { via: 'web' })
 					return redirect('/account/packages?flash=unpublished')
 				}
-				if (form.action === 'install' && form.source) {
+				if ((form.action === 'preview' || form.action === 'install' || form.action === 'fork') && form.source) {
 					try {
 						const source = parsePackageSource(form.source, form.subdir || null)
-						const fetched = await fetchPackageSource(source, { allowedHosts: packageSourceHostsFromEnv(env) })
-						const saved = await userCell.packageSave({ files: fetched.files, source: fetched.source })
-						await audit('package.install', saved.name, { version: saved.version, source: fetched.source, via: 'web' })
-						return redirect('/account/packages?flash=installed')
+						if (form.action === 'preview') {
+							preview = await previewPackageSource(source, { allowedHosts: packageSourceHostsFromEnv(env) })
+						} else {
+							const fetched = await fetchPackageSource(source, { allowedHosts: packageSourceHostsFromEnv(env) })
+							const forkAs = form.action === 'fork' ? (form.as || '').trim() : ''
+							if (form.action === 'fork' && !forkAs) {
+								throw new KodyError('invalid_args', 'Fork requires a new package name in "as".')
+							}
+							let files = fetched.files
+							let savedSource = fetched.source
+							if (forkAs) {
+								const manifestName = parsePackageManifest(fetched.files).name
+								if (forkAs !== manifestName) {
+									files = renamePackageFiles(fetched.files, forkAs)
+									parsePackageManifest(files)
+									savedSource = `${fetched.source} (fork)`
+								}
+							}
+							const saved = await userCell.packageSave({ files, source: savedSource })
+							await audit('package.install', saved.name, {
+								version: saved.version,
+								source: savedSource,
+								commit: fetched.commit ?? null,
+								fork: savedSource.endsWith('(fork)'),
+								via: 'web',
+							})
+							return redirect(
+								savedSource.endsWith('(fork)') ? '/account/packages?flash=forked' : '/account/packages?flash=installed',
+							)
+						}
 					} catch (error) {
 						installError = KodyError.fromUnknown(error)?.message ?? 'Install failed.'
 					}
@@ -269,9 +304,25 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 					csrf: session.csrf,
 					sourceHosts: packageSourceHostsFromEnv(env),
 					installError,
-					installDraft: installError
-						? { source: form.source ?? '', subdir: form.subdir ?? '' }
-						: { source: '', subdir: '' },
+					installDraft: {
+						source: form.source ?? preview?.source ?? '',
+						subdir: form.subdir ?? '',
+						as: form.as ?? '',
+					},
+					preview: preview
+						? {
+								source: preview.source,
+								fetchedFrom: preview.fetchedFrom,
+								commit: preview.commit,
+								name: preview.name,
+								version: preview.version,
+								description: preview.description,
+								readme: preview.readme,
+								fileList: preview.fileList,
+								permissions: preview.permissions,
+								warnings: preview.warnings,
+							}
+						: null,
 					packages: packages.map((pkg) => {
 						const listing = publishedByName.get(pkg.name)
 						return {

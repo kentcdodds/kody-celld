@@ -6,10 +6,12 @@ import {
 	fetchPackageSource,
 	packageSourceHostsFromEnv,
 	parsePackageSource,
+	previewPackageSource,
 } from '../packages/install.ts'
 import type { PackageFiles } from '../packages/manifest.ts'
+import { parsePackageManifest } from '../packages/manifest.ts'
 import type { SavedPackage } from '../cells/user-cell.ts'
-import { communitySourcePrefix } from './community.ts'
+import { communitySourcePrefix, renamePackageFiles } from './community.ts'
 import { defineCapability, defineDomain, type CapabilityContext } from './define.ts'
 
 export const packagesDomain = defineDomain({
@@ -179,31 +181,44 @@ export default async function main() {
 	},
 })
 
-export const packageInstall = defineCapability<{ source: string; subdir?: string }>({
+export const packageInstall = defineCapability<{ source: string; subdir?: string; as?: string }>({
 	domain: 'packages',
 	name: 'packageInstall',
 	description:
-		'Install (or update) a package from a remote source: github:owner/repo[/subdir][#ref], a github.com URL, a .tar.gz/.tgz URL, or a JSON file-map URL. The server downloads it (hosts limited by KODY_PACKAGE_SOURCE_HOSTS) and saves it like packageSave.',
+		'Install (or update) a package from a remote source: github:owner/repo[/subdir][#ref], a github.com URL, a public kody.codes/@owner/leaf[.git] listing (read-only smart-HTTP clone), a .tar.gz/.tgz URL, or a JSON file-map URL. Pass "as" to fork under a new package.json name. The server downloads it (hosts limited by KODY_PACKAGE_SOURCE_HOSTS) and saves it like packageSave. Secrets are never transferred.',
 	tags: ['packages', 'write'],
-	keywords: ['install from github', 'install from url', 'add package from repo', 'download package', 'update package'],
+	keywords: [
+		'install from github',
+		'install from url',
+		'install from kody.codes',
+		'add package from repo',
+		'download package',
+		'update package',
+		'fork package',
+	],
 	inputSchema: {
 		type: 'object',
 		properties: {
 			source: {
 				type: 'string',
 				description:
-					'github:owner/repo[/sub/dir][#ref], https://github.com/owner/repo[/tree/ref/sub/dir], or an http(s) URL to a tarball / JSON file map.',
+					'github:owner/repo[/sub/dir][#ref], https://github.com/owner/repo[/tree/ref/sub/dir], https://kody.codes/@owner/leaf[.git], kody:@owner/leaf[#ref], or an http(s) URL to a tarball / JSON file map.',
 			},
 			subdir: {
 				type: 'string',
-				description: 'Directory inside the archive holding package.json (overrides the one in source).',
+				description: 'Directory inside the archive/repo holding package.json (overrides the one in source).',
+			},
+			as: {
+				type: 'string',
+				description: 'New package.json name for a fork (e.g. @me/hello). Secrets are still not transferred.',
 			},
 		},
 		required: ['source'],
 	},
 	example: `import { kody } from 'kody:runtime'
 export default async function main() {
-  return await kody.packageInstall({ source: 'github:kentcdodds/kody-celld/examples/packages/http-probe' })
+  await kody.packagePreview({ source: 'https://kody.codes/@kody/cloudflare' })
+  return await kody.packageInstall({ source: 'https://kody.codes/@kody/cloudflare.git', as: '@me/cloudflare' })
 }`,
 	async handler(args, ctx) {
 		if (ctx.fromRuntime && ctx.packageName) {
@@ -212,18 +227,89 @@ export default async function main() {
 		if (typeof args.source !== 'string') throw new KodyError('invalid_args', '"source" is required.')
 		const source = parsePackageSource(args.source, typeof args.subdir === 'string' ? args.subdir : undefined)
 		const fetched = await fetchPackageSource(source, { allowedHosts: packageSourceHostsFromEnv(ctx.env) })
-		const saved = await ctx.userCell.packageSave({ files: fetched.files, source: fetched.source })
+		const fork = typeof args.as === 'string' && args.as.trim() !== '' ? args.as.trim() : null
+		let files = fetched.files
+		let savedSource = fetched.source
+		if (fork) {
+			const manifestName = parsePackageManifest(fetched.files).name
+			if (fork !== manifestName) {
+				files = renamePackageFiles(fetched.files, fork)
+				parsePackageManifest(files)
+				savedSource = `${fetched.source} (fork)`
+			}
+		}
+		const saved = await ctx.userCell.packageSave({ files, source: savedSource })
 		await recordAudit(ctx.env, {
 			actor: `user:${ctx.user.id}`,
 			action: 'package.install',
 			target: saved.name,
-			details: { version: saved.version, source: fetched.source, fetchedFrom: fetched.fetchedFrom },
+			details: {
+				version: saved.version,
+				source: savedSource,
+				fetchedFrom: fetched.fetchedFrom,
+				commit: fetched.commit ?? null,
+				fork: fork !== null && savedSource.endsWith('(fork)'),
+			},
 		})
 		return {
 			...saved,
 			fetchedFrom: fetched.fetchedFrom,
-			files: Object.keys(fetched.files).length,
+			commit: fetched.commit ?? null,
+			files: Object.keys(files).length,
 			warnings: fetched.warnings,
+			fork: savedSource.endsWith('(fork)'),
+		}
+	},
+})
+
+export const packagePreview = defineCapability<{ source: string; subdir?: string }>({
+	domain: 'packages',
+	name: 'packagePreview',
+	description:
+		'Fetch a remote package source without saving it: returns manifest, README, AGENTS, file list, declared permissions (jobs/webhooks/subscriptions/secretProvider/dependencies), provenance, and commit SHA for git clones. Use packageInstall to save or fork afterward. Does not transfer secrets.',
+	tags: ['packages', 'read'],
+	keywords: [
+		'preview package',
+		'inspect package source',
+		'kody.codes package',
+		'package readme before install',
+		'dry run install',
+	],
+	inputSchema: {
+		type: 'object',
+		properties: {
+			source: {
+				type: 'string',
+				description:
+					'Same source grammar as packageInstall (github:, kody.codes/@owner/leaf[.git], tarball, JSON map).',
+			},
+			subdir: { type: 'string' },
+		},
+		required: ['source'],
+	},
+	readOnly: true,
+	example: `import { kody } from 'kody:runtime'
+export default async function main() {
+  return await kody.packagePreview({ source: 'https://kody.codes/@kody/cloudflare' })
+}`,
+	async handler(args, ctx) {
+		if (typeof args.source !== 'string') throw new KodyError('invalid_args', '"source" is required.')
+		const source = parsePackageSource(args.source, typeof args.subdir === 'string' ? args.subdir : undefined)
+		const preview = await previewPackageSource(source, { allowedHosts: packageSourceHostsFromEnv(ctx.env) })
+		return {
+			source: preview.source,
+			fetchedFrom: preview.fetchedFrom,
+			commit: preview.commit,
+			name: preview.name,
+			version: preview.version,
+			description: preview.description,
+			readme: preview.readme,
+			agents: preview.agents,
+			fileList: preview.fileList,
+			fileCount: preview.fileCount,
+			permissions: preview.permissions,
+			manifest: preview.manifest,
+			warnings: preview.warnings,
 		}
 	},
 })
@@ -306,6 +392,7 @@ export const packageUpdate = defineCapability<{ name: string }>({
 
 export const packageCapabilities = [
 	packageSave,
+	packagePreview,
 	packageInstall,
 	packageUpdate,
 	packageList,

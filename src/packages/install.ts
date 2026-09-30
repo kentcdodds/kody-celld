@@ -1,16 +1,18 @@
 import { KodyError } from '../lib/errors.ts'
 import { isPrivateHostname } from '../lib/private-hosts.ts'
 import { hostMatchesApproval } from '../secrets/host-policy.ts'
-import type { PackageFiles } from './manifest.ts'
+import { cloneGitSmartHttp, normalizeGitUrl } from './git-smart-http.ts'
+import { parsePackageManifest, type PackageFiles, type PackageManifest } from './manifest.ts'
 import { gunzip, isGzip, readTar, type TarEntry } from './tar.ts'
 
 /**
  * Installing a package from somewhere else: a GitHub repository (tarball via
- * codeload), a `.tar.gz` / `.tgz` URL, or a JSON file map. The server fetches
- * the source itself, so every hop is checked against KODY_PACKAGE_SOURCE_HOSTS
- * and refused for loopback/private hosts (SSRF guard). The result is a plain
- * file map handed to `UserCell.packageSave`, so provenance, quotas and manifest
- * validation are exactly the same as for a hand-written package.
+ * codeload), a public kody.codes package (read-only smart-HTTP `.git` clone), a
+ * `.tar.gz` / `.tgz` URL, or a JSON file map. The server fetches the source
+ * itself, so every hop is checked against KODY_PACKAGE_SOURCE_HOSTS and refused
+ * for loopback/private hosts (SSRF guard). The result is a plain file map handed
+ * to `UserCell.packageSave`, so provenance, quotas and manifest validation are
+ * exactly the same as for a hand-written package. Secrets are never transferred.
  */
 
 export type PackageSourceEnv = {
@@ -24,6 +26,7 @@ export const defaultPackageSourceHosts = [
 	'raw.githubusercontent.com',
 	'gist.githubusercontent.com',
 	'objects.githubusercontent.com',
+	'kody.codes',
 ]
 
 export const packageSourceLimits = {
@@ -58,11 +61,25 @@ export type GithubSource = {
 	ref: string | null
 	subdir: string | null
 }
+/** Public hosted package cloned read-only via smart-HTTP (`…/@owner/leaf.git`). */
+export type KodySource = {
+	kind: 'kody'
+	/** Origin without trailing slash, e.g. `https://kody.codes`. */
+	origin: string
+	owner: string
+	name: string
+	ref: string | null
+	subdir: string | null
+	/** Canonical clone URL (`…/@owner/name.git`). */
+	gitUrl: string
+}
 export type UrlSource = { kind: 'url'; url: string; subdir: string | null }
-export type PackageSource = GithubSource | UrlSource
+export type PackageSource = GithubSource | KodySource | UrlSource
 
 const githubName = /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/
 const githubRepo = /^[A-Za-z0-9._-]+$/
+const kodyOwner = /^[a-z0-9][a-z0-9._-]{0,38}$/i
+const kodyLeaf = /^[a-z0-9][a-z0-9._-]{0,63}$/i
 
 function normalizeSubdir(raw: string | null | undefined) {
 	if (raw === null || raw === undefined) return null
@@ -75,22 +92,82 @@ function normalizeSubdir(raw: string | null | undefined) {
 	return parts.join('/')
 }
 
+function assertGitRef(ref: string | null) {
+	if (ref !== null && (ref === '' || /[\s\\:?*[\]~^]|\.\.|^-|\/$|^\//.test(ref))) {
+		throw new KodyError('invalid_args', `"${ref}" is not a valid git ref.`)
+	}
+}
+
 function githubSource(owner: string, repo: string, ref: string | null, subdir: string | null): GithubSource {
 	if (!githubName.test(owner)) throw new KodyError('invalid_args', `"${owner}" is not a GitHub owner name.`)
 	const cleanRepo = repo.replace(/\.git$/, '')
 	if (!githubRepo.test(cleanRepo) || cleanRepo === '.' || cleanRepo === '..') {
 		throw new KodyError('invalid_args', `"${repo}" is not a GitHub repository name.`)
 	}
-	if (ref !== null && (ref === '' || /[\s\\:?*[\]~^]|\.\.|^-|\/$|^\//.test(ref))) {
-		throw new KodyError('invalid_args', `"${ref}" is not a valid git ref.`)
-	}
+	assertGitRef(ref)
 	return { kind: 'github', owner, repo: cleanRepo, ref, subdir: normalizeSubdir(subdir) }
+}
+
+function kodySource(
+	origin: string,
+	owner: string,
+	name: string,
+	ref: string | null,
+	subdir: string | null,
+): KodySource {
+	if (!kodyOwner.test(owner)) throw new KodyError('invalid_args', `"${owner}" is not a Kody package owner.`)
+	const leaf = name.replace(/\.git$/i, '')
+	if (!kodyLeaf.test(leaf)) throw new KodyError('invalid_args', `"${name}" is not a Kody package name.`)
+	assertGitRef(ref)
+	const base = origin.replace(/\/+$/, '')
+	return {
+		kind: 'kody',
+		origin: base,
+		owner,
+		name: leaf,
+		ref,
+		subdir: normalizeSubdir(subdir),
+		gitUrl: normalizeGitUrl(`${base}/@${owner}/${leaf}.git`),
+	}
+}
+
+/** True when the path looks like a public package listing / `.git` URL (`/@owner/leaf`). */
+export function isKodyPackagePath(pathname: string) {
+	const segments = pathname.split('/').filter(Boolean)
+	if (segments.length < 2) return false
+	const owner = segments[0]!
+	if (!owner.startsWith('@')) return false
+	return kodyOwner.test(owner.slice(1)) && kodyLeaf.test(segments[1]!.replace(/\.git$/i, ''))
+}
+
+function parseKodyPath(url: URL, subdir?: string | null): KodySource | null {
+	const segments = url.pathname.split('/').filter(Boolean)
+	if (segments.length < 2) return null
+	const ownerSeg = segments[0]!
+	if (!ownerSeg.startsWith('@')) return null
+	const owner = ownerSeg.slice(1)
+	const leafSeg = segments[1]!
+	const leaf = leafSeg.replace(/\.git$/i, '')
+	if (!kodyOwner.test(owner) || !kodyLeaf.test(leaf)) return null
+	const mode = segments[2]
+	const hashRef = url.hash ? url.hash.replace(/^#/, '') : null
+	if (mode === 'tree') {
+		const ref = segments[3] ?? null
+		const pathSubdir = segments.length > 4 ? segments.slice(4).join('/') : null
+		return kodySource(url.origin, owner, leaf, ref, subdir ?? pathSubdir)
+	}
+	if (mode === 'blob') {
+		return kodySource(url.origin, owner, leaf, hashRef, subdir ?? null)
+	}
+	if (mode !== undefined) return null
+	return kodySource(url.origin, owner, leaf, hashRef, subdir ?? null)
 }
 
 /**
  * Accepts `github:owner/repo[/sub/dir][#ref]`, `https://github.com/owner/repo[.git]`,
- * `https://github.com/owner/repo/tree/<ref>/<sub/dir>`, or any other http(s) URL
- * (tarball or JSON file map).
+ * `https://github.com/owner/repo/tree/<ref>/<sub/dir>`, public Kody package URLs
+ * (`https://kody.codes/@owner/leaf[.git]`, `kody:@owner/leaf[#ref]`), or any other
+ * http(s) URL (tarball or JSON file map).
  */
 export function parsePackageSource(spec: string, subdir?: string | null): PackageSource {
 	const text = spec.trim()
@@ -102,14 +179,23 @@ export function parsePackageSource(spec: string, subdir?: string | null): Packag
 		if (!owner || !repo) throw new KodyError('invalid_args', 'Use github:owner/repo[/subdir][#ref].')
 		return githubSource(owner, repo, ref, subdir ?? (rest.length > 0 ? rest.join('/') : null))
 	}
+	if (text.startsWith('kody:')) {
+		const [pathPart = '', ...refParts] = text.slice('kody:'.length).split('#')
+		const ref = refParts.length > 0 ? refParts.join('#') : null
+		const cleaned = pathPart.replace(/^\/+/, '')
+		const [ownerRaw = '', name = '', ...rest] = cleaned.split('/')
+		const owner = ownerRaw.startsWith('@') ? ownerRaw.slice(1) : ownerRaw
+		if (!owner || !name) throw new KodyError('invalid_args', 'Use kody:@owner/leaf[#ref].')
+		return kodySource('https://kody.codes', owner, name, ref, subdir ?? (rest.length > 0 ? rest.join('/') : null))
+	}
 	let url: URL
 	try {
 		url = new URL(text)
 	} catch {
-		throw new KodyError('invalid_args', `"${text}" is not a URL or github:owner/repo source.`)
+		throw new KodyError('invalid_args', `"${text}" is not a URL, github:owner/repo, or kody:@owner/leaf source.`)
 	}
 	if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-		throw new KodyError('invalid_args', 'Only http(s) and github: sources are supported.')
+		throw new KodyError('invalid_args', 'Only http(s), github:, and kody: sources are supported.')
 	}
 	if (url.username || url.password) throw new KodyError('invalid_args', 'Sources may not embed credentials.')
 	if (url.hostname.toLowerCase() === 'github.com' || url.hostname.toLowerCase() === 'www.github.com') {
@@ -124,6 +210,8 @@ export function parsePackageSource(spec: string, subdir?: string | null): Packag
 			)
 		}
 	}
+	const kody = parseKodyPath(url, subdir)
+	if (kody) return kody
 	url.hash = ''
 	return { kind: 'url', url: url.toString(), subdir: normalizeSubdir(subdir) }
 }
@@ -132,6 +220,12 @@ export function describePackageSource(source: PackageSource) {
 	if (source.kind === 'github') {
 		const path = source.subdir ? `/${source.subdir}` : ''
 		return `github:${source.owner}/${source.repo}${path}${source.ref ? `#${source.ref}` : ''}`
+	}
+	if (source.kind === 'kody') {
+		if (source.subdir) {
+			return `${source.origin}/@${source.owner}/${source.name}/tree/${source.ref ?? 'HEAD'}/${source.subdir}`
+		}
+		return `${source.gitUrl}${source.ref ? `#${source.ref}` : ''}`
 	}
 	return source.subdir ? `${source.url}#${source.subdir}` : source.url
 }
@@ -324,12 +418,87 @@ export type FetchedPackage = {
 	/** Provenance string stored as the package `source`. */
 	source: string
 	fetchedFrom: string
+	/** Immutable commit SHA when the source was a git clone. */
+	commit?: string
+}
+
+export type PackagePreview = {
+	source: string
+	fetchedFrom: string
+	commit: string | null
+	name: string
+	version: string
+	description: string
+	readme: string
+	agents: string
+	fileList: Array<string>
+	fileCount: number
+	/** Declared package surfaces (jobs / webhooks / subscriptions / secret provider / deps) — not runtime host approvals. */
+	permissions: {
+		jobs: Array<string>
+		webhooks: Array<string>
+		subscriptions: Array<string>
+		secretProvider: string | null
+		dependencies: Array<string>
+	}
+	manifest: PackageManifest
+	warnings: Array<string>
+	/** Full file map for an explicit follow-up install/fork (not persisted until then). */
+	files: PackageFiles
+}
+
+export function packagePreviewFromFetched(fetched: FetchedPackage): PackagePreview {
+	const manifest = parsePackageManifest(fetched.files)
+	return {
+		source: fetched.source,
+		fetchedFrom: fetched.fetchedFrom,
+		commit: fetched.commit ?? null,
+		name: manifest.name,
+		version: manifest.version,
+		description: manifest.description,
+		readme: fetched.files['README.md'] ?? '',
+		agents: fetched.files['AGENTS.md'] ?? '',
+		fileList: Object.keys(fetched.files).sort(),
+		fileCount: Object.keys(fetched.files).length,
+		permissions: {
+			jobs: Object.keys(manifest.jobs),
+			webhooks: manifest.webhooks.map((w) => w.name),
+			subscriptions: manifest.subscriptions.map((s) => s.topic),
+			secretProvider: manifest.secretProvider?.id ?? null,
+			dependencies: Object.keys(manifest.dependencies),
+		},
+		manifest,
+		warnings: fetched.warnings,
+		files: fetched.files,
+	}
 }
 
 export async function fetchPackageSource(
 	source: PackageSource,
 	options: { allowedHosts: Array<string>; fetch?: FetchLike | undefined },
 ): Promise<FetchedPackage> {
+	if (source.kind === 'kody') {
+		const cloned = await cloneGitSmartHttp(source.gitUrl, {
+			ref: source.ref,
+			subdir: source.subdir,
+			fetch: options.fetch,
+			limits: {
+				maxDownloadBytes: packageSourceLimits.maxDownloadBytes,
+				maxFiles: packageSourceLimits.maxFiles,
+				maxTotalBytes: packageSourceLimits.maxArchiveBytes,
+				timeoutMs: packageSourceLimits.timeoutMs,
+				maxRedirects: packageSourceLimits.maxRedirects,
+			},
+			assertAllowed: (raw) => assertAllowedSourceUrl(raw, options.allowedHosts).toString(),
+		})
+		return {
+			files: cloned.files,
+			warnings: cloned.warnings,
+			source: describePackageSource(source),
+			fetchedFrom: cloned.fetchedFrom,
+			commit: cloned.commit,
+		}
+	}
 	const url = source.kind === 'github' ? githubTarballUrl(source) : source.url
 	const downloaded = await fetchAllowed(url, options.allowedHosts, options.fetch)
 	let result: { files: PackageFiles; warnings: Array<string> }
@@ -356,4 +525,12 @@ export async function fetchPackageSource(
 		result = filesFromJson(text, source.subdir)
 	}
 	return { ...result, source: describePackageSource(source), fetchedFrom: downloaded.url }
+}
+
+export async function previewPackageSource(
+	source: PackageSource,
+	options: { allowedHosts: Array<string>; fetch?: FetchLike | undefined },
+): Promise<PackagePreview> {
+	const fetched = await fetchPackageSource(source, options)
+	return packagePreviewFromFetched(fetched)
 }

@@ -26,21 +26,22 @@ import { RecordTable } from './record-table.tsx'
 
 type Data = Extract<AppLoaderData, { page: 'accountPackages' }>
 
-/** `/account/packages`: saved packages, install from GitHub/URL, community publish. */
+/** `/account/packages`: saved packages, preview/install from GitHub/URL/kody.codes, community publish. */
 export function AccountPackages(
 	handle: Handle<{ data: Data; pathname: string }>,
 ) {
 	return () => {
 		const d = handle.props.data
 		const action = routes.accountPackages.href()
+		const preview = d.preview
 		return (
 			<AccountManagementShell>
 				<AccountPageHeader
 					title="Packages"
-					description="Code your assistant can run: saved from an MCP client with packageSave, installed from a repository, or forked from the community catalog."
+					description="Code your assistant can run: saved from an MCP client with packageSave, previewed and installed from a repository or public kody.codes package, or forked from the community catalog."
 					currentHref={handle.props.pathname}
 				/>
-				<AccountManagementPanel title="Install from GitHub or URL">
+				<AccountManagementPanel title="Preview or install from a source">
 					{d.installError ? (
 						<AccountManagementMessage tone="error">
 							{d.installError}
@@ -48,12 +49,11 @@ export function AccountPackages(
 					) : null}
 					<StackedForm action={action}>
 						<CsrfInput token={d.csrf} />
-						<Hidden name="action" value="install" />
 						<Field
 							label="Source"
 							name="source"
 							required
-							placeholder="github:owner/repo/sub/dir#ref or https://…/package.tgz"
+							placeholder="https://kody.codes/@owner/pkg.git or github:owner/repo/sub/dir#ref"
 							value={d.installDraft.source}
 						/>
 						<Field
@@ -62,15 +62,104 @@ export function AccountPackages(
 							placeholder="examples/hello"
 							value={d.installDraft.subdir}
 						/>
-						<div>
-							<SubmitButton variant="secondary">Install</SubmitButton>
-						</div>
+						<Actions>
+							<SubmitButton name="action" value="preview" variant="secondary">
+								Preview
+							</SubmitButton>
+							<SubmitButton name="action" value="install" variant="secondary">
+								Install
+							</SubmitButton>
+						</Actions>
 					</StackedForm>
 					<Lede>
 						Allowed source hosts: <Code>{d.sourceHosts.join(', ')}</Code> (
-						<Code>KODY_PACKAGE_SOURCE_HOSTS</Code>).
+						<Code>KODY_PACKAGE_SOURCE_HOSTS</Code>). Public kody.codes listing
+						URLs clone read-only via <Code>.git</Code>; secrets are never
+						transferred.
 					</Lede>
 				</AccountManagementPanel>
+				{preview ? (
+					<AccountManagementPanel
+						title={`Preview: ${preview.name}@${preview.version}`}
+					>
+						<Lede>
+							{preview.description || 'No description.'}
+							<br />
+							<Muted small>
+								Source <Code>{preview.source}</Code>
+								{preview.commit ? (
+									<>
+										{' '}
+										· commit <Code>{preview.commit.slice(0, 12)}</Code>
+									</>
+								) : null}{' '}
+								· {preview.fileList.length} files
+							</Muted>
+						</Lede>
+						{preview.warnings.length > 0 ? (
+							<AccountManagementMessage tone="error">
+								{preview.warnings.join(' ')}
+							</AccountManagementMessage>
+						) : null}
+						<Lede>
+							<strong>Declared surfaces</strong>
+							<br />
+							<Muted small>
+								jobs: {preview.permissions.jobs.join(', ') || 'none'} ·
+								webhooks: {preview.permissions.webhooks.join(', ') || 'none'} ·
+								subscriptions:{' '}
+								{preview.permissions.subscriptions.join(', ') || 'none'} ·
+								secretProvider: {preview.permissions.secretProvider ?? 'none'} ·
+								dependencies:{' '}
+								{preview.permissions.dependencies.join(', ') || 'none'}
+							</Muted>
+						</Lede>
+						<pre
+							mix={css({
+								margin: 0,
+								maxHeight: '12rem',
+								overflow: 'auto',
+								whiteSpace: 'pre-wrap',
+								fontSize: '0.85rem',
+							})}
+						>
+							{preview.readme.slice(0, 4000)}
+							{preview.readme.length > 4000 ? '\n…' : ''}
+						</pre>
+						<details>
+							<summary>Files ({preview.fileList.length})</summary>
+							<ul>
+								{preview.fileList.map((path) => (
+									<li key={path}>
+										<Code>{path}</Code>
+									</li>
+								))}
+							</ul>
+						</details>
+						<StackedForm action={action}>
+							<CsrfInput token={d.csrf} />
+							<Hidden
+								name="source"
+								value={d.installDraft.source || preview.source}
+							/>
+							<Hidden name="subdir" value={d.installDraft.subdir} />
+							<Field
+								label="Fork as (optional)"
+								name="as"
+								placeholder="@me/package-name"
+								value={d.installDraft.as}
+							/>
+							<Actions>
+								<SubmitButton name="action" value="install" variant="secondary">
+									Install as {preview.name}
+								</SubmitButton>
+								<SubmitButton name="action" value="fork" variant="secondary">
+									Fork
+								</SubmitButton>
+							</Actions>
+						</StackedForm>
+					</AccountManagementPanel>
+				) : null}
 				<AccountManagementPanel ariaLabel="Saved packages">
 					<RecordTable
 						mode="none"

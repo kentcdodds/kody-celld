@@ -88,11 +88,14 @@ storage handle; ad hoc `execute` code calling `packageStorage()` gets a clear
 error. Deleting a package does **not** clear its storage (call
 `packageStorageClear` first if that is what you want).
 
-## Install from GitHub or a URL
+## Install from GitHub, kody.codes, or a URL
 
 `packageInstall` downloads a package on the server and saves it exactly like
 `packageSave` (same manifest validation, same 4 MiB cap), recording where it
 came from in `source` so `packageUpdate` can pull it again later.
+`packagePreview` fetches the same way **without** saving — use it to inspect
+manifest, README, files, and declared surfaces before an explicit install or
+fork. Secrets are never transferred from the remote.
 
 ```ts
 import { kody } from 'kody:runtime'
@@ -100,41 +103,57 @@ export default async function main() {
   // GitHub: github:owner/repo[/sub/dir][#ref] or a github.com URL
   await kody.packageInstall({ source: 'github:kentcdodds/kody-celld/examples/packages/http-probe#main' })
   await kody.packageInstall({ source: 'https://github.com/owner/repo/tree/v1.2.0/packages/hello' })
+  // Public kody.codes package: listing URL or `.git` (read-only smart-HTTP clone)
+  const preview = await kody.packagePreview({ source: 'https://kody.codes/@kody/cloudflare' })
+  await kody.packageInstall({ source: 'https://kody.codes/@kody/cloudflare.git' })
+  await kody.packageInstall({ source: 'kody:@kody/cloudflare', as: '@me/cloudflare' }) // fork
   // Any http(s) tarball (.tar.gz / .tgz) or JSON file map ({ "package.json": "...", ... } or { files: {...} })
   await kody.packageInstall({ source: 'https://example-cdn.test/hello-1.0.0.tgz', subdir: 'package' })
   // Later: re-fetch from the recorded source
-  return await kody.packageUpdate({ name: '@kody-smoke/http-probe' })
+  return await kody.packageUpdate({ name: preview.name })
 }
 ```
 
-The same form is on the account **Packages** page. Rules:
+The same preview → install / fork flow is on the account **Packages** page. Rules:
 
 - GitHub sources become `https://codeload.github.com/<owner>/<repo>/tar.gz/<ref>`
   (`HEAD` when no ref is given); the archive's common root directory is
   stripped and `subdir` (or the path in the source) selects the package root.
   When `package.json` is missing there, the error lists directories that do
   have one.
+- Public **kody.codes** listing URLs (`https://kody.codes/@owner/leaf`) and
+  `.git` URLs are cloned read-only over Git smart-HTTP (`…/@owner/leaf.git`).
+  Shorthand: `kody:@owner/leaf[#ref]`. Provenance is stored as the `.git` URL
+  (or `/tree/<ref>/<subdir>` when a subdir was selected). Hosted Kody must
+  expose the upload-pack route; until that ships, preview/install fails with a
+  clear remote error — Celld does not scrape the HTML listing page.
 - Only `http(s)` URLs without embedded credentials, on a host in
-  `KODY_PACKAGE_SOURCE_HOSTS` (default: GitHub's hosts; `*.suffix` patterns and
-  `*` are accepted). Loopback/private/link-local addresses and `.local` /
-  `.internal` / single-label names are refused unless the operator lists that
-  exact host — do that for a Gitea/Forgejo/GitLab on your LAN. Every redirect
-  hop is re-checked (max 3).
-- Limits: 8 MiB download, 24 MiB after gunzip, 400 files, 20 s. `.git/` and
-  `node_modules/` are skipped, non-UTF-8 files are skipped with a warning.
+  `KODY_PACKAGE_SOURCE_HOSTS` (default: GitHub's hosts **and** `kody.codes`;
+  `*.suffix` patterns and `*` are accepted). Loopback/private/link-local
+  addresses and `.local` / `.internal` / single-label names are refused unless
+  the operator lists that exact host — do that for a Gitea/Forgejo/GitLab on
+  your LAN. Every redirect hop is re-checked (max 3).
+- Limits: 8 MiB download, 24 MiB after gunzip / unpacked git tree, 400 files,
+  20 s. `.git/` and `node_modules/` are skipped, non-UTF-8 files are skipped
+  with a warning.
+- `packagePreview` returns declared surfaces (jobs, webhooks, subscriptions,
+  secretProvider, dependencies) as "permissions" for human review — these are
+  not a separate ACL, and installing still does not copy secrets.
+- Pass `as` on `packageInstall` (or Fork on the web form) to rewrite
+  `package.json#name` like a community fork; `packageUpdate` refuses forks.
 - Package code cannot call `packageInstall`/`packageUpdate` (403); only the
   user (via MCP `execute`, the REST call surface or the web UI) can.
-- `packageUpdate` works for `github:`/URL sources and for community installs
-  (`community:<name>@<version>`); packages saved from an in-memory file map or
-  forks have nothing to update from.
+- `packageUpdate` works for `github:`/kody/URL sources and for community
+  installs (`community:<name>@<version>`); packages saved from an in-memory
+  file map or forks have nothing to update from.
 
 ## Sharing packages
 
 The node has a public **community catalog** where users publish their saved
 packages and others install or fork them — see [community.md](./community.md).
-To run a package published to kody.codes, fetch its files and `packageSave`
-them (or point `packageInstall` at the repository); the manifest and runtime
-contracts are the same.
+Public packages on kody.codes import via the `.git` / listing URL path above
+(preview, then explicit install); the deployment-local catalog stays intentional
+and is not a live federation of the hosted registry.
 
 ## npm dependencies
 

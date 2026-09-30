@@ -221,21 +221,21 @@ itself is reached.
 
 ### 7. Day-2 operations
 
-| Task                   | Command                                                                                                                                                                  |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Upgrade                | `docker compose pull && docker compose up -d`; from a source checkout `git pull && docker compose up -d --build`. State and operator values persist across upgrades      |
-| Back up                | `docker compose stop`, then `docker run --rm -v <project>_kody-data:/data -v "$PWD":/backup alpine tar czf /backup/kody-data.tgz -C / data`, then `docker compose start` |
-| Restore                | Same command with `tar xzf /backup/kody-data.tgz -C /` into a fresh (empty) `kody-data` volume, then `docker compose up -d`. `kody.env` travels with the data            |
-| Uninstall              | `docker compose down` keeps the data; `docker compose down -v` deletes the volume — and with it every user, package, secret and the master key                           |
-| Logs                   | `docker compose logs -f kody`                                                                                                                                            |
-| Approve a secret host  | `curl -X POST $BASE/admin/users/<id>/secret-hosts -H "authorization: Bearer $ADMIN" -d '{"host":"api.github.com"}'`                                                      |
-| Force a job dispatch   | `curl -X POST $BASE/admin/jobs -H "authorization: Bearer $ADMIN"`                                                                                                        |
-| Turn on local AI       | `echo 'COMPOSE_FILE=compose.yaml:compose.ai.yaml' >> .env && docker compose up -d && docker compose exec ollama ollama pull nomic-embed-text` ([ai.md](./ai.md))         |
-| Add a headless browser | `echo 'COMPOSE_FILE=compose.yaml:compose.browser.yaml' >> .env && docker compose up -d` (combine overlays with `:`; [browser.md](./browser.md))                          |
-| Self-host the npm CDN  | `echo 'COMPOSE_FILE=compose.yaml:compose.esm.yaml' >> .env && docker compose up -d` — bare `import ms from 'ms@2.1.3'` stops depending on esm.sh ([npm.md](./npm.md))    |
-| Install a package      | `packageInstall({ source: 'github:owner/repo/path' })` via MCP or the account Packages page; extra hosts via `KODY_PACKAGE_SOURCE_HOSTS` ([packages.md](./packages.md))  |
-| Share packages         | Users publish saved packages to the install's own catalog at `$BASE/community` ([community.md](./community.md))                                                          |
-| Verify end to end      | `KODY_URL=$BASE KODY_ADMIN_TOKEN=$ADMIN SMOKE_ECHO_HOST=host.docker.internal npm run smoke` from a checkout on the Docker host (needs Node 22)                           |
+| Task                   | Command                                                                                                                                                                                                                           |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Upgrade                | `docker compose pull && docker compose up -d`; from a source checkout `git pull && docker compose up -d --build`. State and operator values persist across upgrades                                                               |
+| Back up                | `docker compose stop`, then `docker run --rm -v <project>_kody-data:/data -v "$PWD":/backup alpine tar czf /backup/kody-data.tgz -C / data`, then `docker compose start`                                                          |
+| Restore                | Same command with `tar xzf /backup/kody-data.tgz -C /` into a fresh (empty) `kody-data` volume, then `docker compose up -d`. `kody.env` travels with the data                                                                     |
+| Uninstall              | `docker compose down` keeps the data; `docker compose down -v` deletes the volume — and with it every user, package, secret and the master key                                                                                    |
+| Logs                   | `docker compose logs -f kody`                                                                                                                                                                                                     |
+| Approve a secret host  | `curl -X POST $BASE/admin/users/<id>/secret-hosts -H "authorization: Bearer $ADMIN" -d '{"host":"api.github.com"}'`                                                                                                               |
+| Force a job dispatch   | `curl -X POST $BASE/admin/jobs -H "authorization: Bearer $ADMIN"`                                                                                                                                                                 |
+| Turn on local AI       | `echo 'COMPOSE_FILE=compose.yaml:compose.ai.yaml' >> .env && docker compose up -d && docker compose exec ollama ollama pull nomic-embed-text` ([ai.md](./ai.md))                                                                  |
+| Add a headless browser | `echo 'COMPOSE_FILE=compose.yaml:compose.browser.yaml' >> .env && docker compose up -d` (combine overlays with `:`; [browser.md](./browser.md))                                                                                   |
+| Self-host the npm CDN  | `echo 'COMPOSE_FILE=compose.yaml:compose.esm.yaml' >> .env && docker compose up -d` — bare `import ms from 'ms@2.1.3'` stops depending on esm.sh ([npm.md](./npm.md))                                                             |
+| Install a package      | `packagePreview` / `packageInstall({ source: 'https://kody.codes/@owner/pkg.git' })` or `github:owner/repo/path` via MCP or the account Packages page; extra hosts via `KODY_PACKAGE_SOURCE_HOSTS` ([packages.md](./packages.md)) |
+| Share packages         | Users publish saved packages to the install's own catalog at `$BASE/community` ([community.md](./community.md))                                                                                                                   |
+| Verify end to end      | `KODY_URL=$BASE KODY_ADMIN_TOKEN=$ADMIN SMOKE_ECHO_HOST=host.docker.internal npm run smoke` from a checkout on the Docker host (needs Node 22)                                                                                    |
 
 `<project>` in the volume name is the compose project — the folder name by
 default (`kody-celld_kody-data` for a git checkout, `kody_kody-data` for a

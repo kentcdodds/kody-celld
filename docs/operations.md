@@ -150,13 +150,13 @@ Per-webhook rate limits come from the package manifest
 
 ## npm imports, package sources, community catalog
 
-| Variable                    | Default          | Notes                                                                                                                                                                                               |
-| --------------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `KODY_NPM_IMPORTS`          | `on`             | `off` rejects bare npm specifiers in runs and packages ([npm.md](./npm.md)).                                                                                                                        |
-| `KODY_ESM_CDN_URL`          | `https://esm.sh` | esm.sh-compatible CDN origin; point at the `compose.esm.yaml` service to self-host.                                                                                                                 |
-| `KODY_NPM_CACHE_MAX_MB`     | `256`            | Durable module cache size (LRU); `0` disables the durable layer.                                                                                                                                    |
-| `KODY_NPM_CACHE_TTL_DAYS`   | `30`             | Re-fetch cached modules after this long.                                                                                                                                                            |
-| `KODY_PACKAGE_SOURCE_HOSTS` | GitHub hosts     | Comma-separated hosts `packageInstall` may download from; `*.example.com` wildcards allowed, `*` = any public host. Private/loopback hosts only when listed exactly ([packages.md](./packages.md)). |
+| Variable                    | Default                     | Notes                                                                                                                                                                                                                               |
+| --------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `KODY_NPM_IMPORTS`          | `on`                        | `off` rejects bare npm specifiers in runs and packages ([npm.md](./npm.md)).                                                                                                                                                        |
+| `KODY_ESM_CDN_URL`          | `https://esm.sh`            | esm.sh-compatible CDN origin; point at the `compose.esm.yaml` service to self-host.                                                                                                                                                 |
+| `KODY_NPM_CACHE_MAX_MB`     | `256`                       | Durable module cache size (LRU); `0` disables the durable layer.                                                                                                                                                                    |
+| `KODY_NPM_CACHE_TTL_DAYS`   | `30`                        | Re-fetch cached modules after this long.                                                                                                                                                                                            |
+| `KODY_PACKAGE_SOURCE_HOSTS` | GitHub hosts + `kody.codes` | Comma-separated hosts `packageInstall` / `packagePreview` may download or git-clone from; `*.example.com` wildcards allowed, `*` = any public host. Private/loopback hosts only when listed exactly ([packages.md](./packages.md)). |
 
 ```sh
 curl -s $BASE/admin/npm-cache -H "authorization: Bearer $ADMIN"             # config + cache stats
