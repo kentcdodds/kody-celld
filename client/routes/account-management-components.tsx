@@ -16,11 +16,13 @@ import {
 	pageGutter,
 } from '#universal/styles/style-primitives.ts'
 import { type IconName } from '#universal/icon.tsx'
-import { getPageShellCss } from '#client/page-layout.ts'
+import { getPageShellCss, pageBlockPadding } from '#client/page-layout.ts'
 import {
 	AccountManagementLinkNav,
 	accountManagementNarrowMq,
 } from './account-management-link-nav.tsx'
+
+type CssObject = Parameters<typeof css>[0]
 
 export {
 	AccountManagementInlineLinkNav,
@@ -167,6 +169,27 @@ type AccountManagementShellProps = {
 /** Prototype `.account` section rhythm: margin between blocks in the content column. */
 const accountSectionGap = 'clamp(2rem, 4vw, 2.75rem)'
 
+/** One rail link (0.5rem padding × 2, a 0.98rem line, the 0.15rem gap). */
+const accountRailLinkBlock = '2.6rem'
+const accountRailMaxLinks = 16
+
+/**
+ * The absolute rail adds no height, so a page shorter than its rail (Activity
+ * with no runs) would scroll the last links out of view. The floor is sized
+ * to the links actually rendered — never the fixed height that left a blank
+ * band under the three-link console rail — and only applies while the rail
+ * is beside the content.
+ */
+const accountRailFloors: CssObject = {}
+for (let links = 1; links <= accountRailMaxLinks; links++) {
+	accountRailFloors[
+		`&:has(> [data-account-nav] a:nth-child(${links}):last-child)`
+	] = {
+		minHeight: `calc(${links} * ${accountRailLinkBlock} + ${pageBlockPadding.top})`,
+	}
+}
+const accountRailFloorCss = { '@media (width > 860px)': accountRailFloors }
+
 export function AccountManagementShell(
 	handle: Handle<AccountManagementShellProps>,
 ) {
@@ -188,12 +211,12 @@ export function AccountManagementShell(
 				// nav-less shell users (onboarding, pending verification) keep
 				// the plain column. The rail starts at the gutter so it lines
 				// up with the header's brand. Its box is the shell (top and
-				// bottom), and the link column scrolls inside that box, so a
-				// short page stays as tall as its content. A fixed min-height
-				// here leaves a blank band above the footer. Note: `css()`
-				// classes each live in their own cascade sub-layer, so child
-				// spacing must stay on the shell's `gap`, never on per-child
-				// margins a child's own class would silently beat.
+				// bottom), floored at the rail's own height, and the link
+				// column scrolls inside that box on a short viewport. Note:
+				// `css()` classes each live in their own cascade sub-layer, so
+				// child spacing must stay on the shell's `gap`, never on
+				// per-child margins a child's own class would silently beat.
+				...accountRailFloorCss,
 				'&:has(> [data-account-nav])': {
 					position: 'relative',
 					gap: accountSectionGap,
