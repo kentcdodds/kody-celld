@@ -1,14 +1,16 @@
 import { css, type Handle } from 'remix/ui'
 import { type AppLoaderData } from '#universal/loader-data.ts'
 import { routes } from '#universal/routes.ts'
-import {
-	getPrimaryButtonCss,
-	getSecondaryButtonCss,
-	mutedLinkCss,
-} from '#universal/styles/style-primitives.ts'
+import { mutedLinkCss } from '#universal/styles/style-primitives.ts'
 import { colors, spacing } from '#universal/styles/tokens.ts'
 import { AuthShell } from './auth-shell.tsx'
-import { Code, CsrfInput, Hidden, Muted } from './form-controls.tsx'
+import {
+	Code,
+	CsrfInput,
+	Hidden,
+	Muted,
+	SubmitButton,
+} from './form-controls.tsx'
 
 type ConsentData = Extract<AppLoaderData, { page: 'oauthAuthorize' }>
 type ErrorData = Extract<AppLoaderData, { page: 'oauthAuthorizeError' }>
@@ -57,22 +59,17 @@ export function OauthAuthorize(handle: Handle<{ data: ConsentData }>) {
 					<CsrfInput token={d.csrf} />
 					<Hidden name="q" value={d.q} />
 					<Hidden name="sig" value={d.sig} />
-					<button
-						type="submit"
-						name="decision"
-						value="approve"
-						mix={css(getPrimaryButtonCss())}
-					>
+					<SubmitButton name="decision" value="approve" size="md">
 						Approve
-					</button>
-					<button
-						type="submit"
+					</SubmitButton>
+					<SubmitButton
 						name="decision"
 						value="deny"
-						mix={css(getSecondaryButtonCss())}
+						variant="secondary"
+						size="md"
 					>
 						Deny
-					</button>
+					</SubmitButton>
 				</form>
 			</AuthShell>
 		)

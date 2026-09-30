@@ -1,10 +1,9 @@
 import { css, type Handle } from 'remix/ui'
 import { type AppLoaderData } from '#universal/loader-data.ts'
-import { getPrimaryButtonCss } from '#universal/styles/style-primitives.ts'
 import { colors, spacing } from '#universal/styles/tokens.ts'
 import { TimestampValue } from './account-management-components.tsx'
 import { AuthShell } from './auth-shell.tsx'
-import { Code, Hidden, Muted } from './form-controls.tsx'
+import { Code, Hidden, Muted, SubmitButton } from './form-controls.tsx'
 
 type ConnectData = Extract<AppLoaderData, { page: 'connectOauth' }>
 type DoneData = Extract<AppLoaderData, { page: 'connectOauthDone' }>
@@ -68,9 +67,7 @@ export function ConnectOauth(handle: Handle<{ data: ConnectData }>) {
 				) : null}
 				<form method="post">
 					<Hidden name="ticket" value={d.ticket} />
-					<button type="submit" mix={css(getPrimaryButtonCss())}>
-						Continue to {d.provider}
-					</button>
+					<SubmitButton size="md">Continue to {d.provider}</SubmitButton>
 				</form>
 				<Muted small>
 					This link expires <TimestampValue value={d.expiresAt} /> and works

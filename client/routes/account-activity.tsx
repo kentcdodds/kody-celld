@@ -50,7 +50,7 @@ export function AccountActivity(
 											run.status === 'success'
 												? 'ok'
 												: run.status === 'error'
-													? 'warn'
+													? 'danger'
 													: 'neutral'
 										}
 									>

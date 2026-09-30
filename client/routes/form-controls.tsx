@@ -3,9 +3,8 @@ import { ConfirmSubmitButton } from '#client/confirm-submit-button.tsx'
 import { CopyTextButton } from '#client/copy-text-button.tsx'
 import {
 	getDangerPillCss,
+	getGhostButtonCss,
 	getPillButtonCss,
-	getPrimaryButtonCss,
-	getSecondaryButtonCss,
 } from '#universal/styles/style-primitives.ts'
 import {
 	colors,
@@ -112,24 +111,34 @@ export function Field(handle: Handle<FieldProps>) {
 	}
 }
 
+type ButtonVariant = 'primary' | 'secondary' | 'danger'
+
 type ButtonProps = {
 	children: Slot
-	variant?: 'primary' | 'secondary' | 'pill' | 'danger'
+	/** Green pill, ghost ring, or red ring — kody's redesign button family. */
+	variant?: ButtonVariant
+	/**
+	 * `sm` (default) is what kody's account and admin areas use for in-page
+	 * actions. `md` is for the one decisive action on an auth card.
+	 */
+	size?: 'sm' | 'md'
 	name?: string
 	value?: string
 	disabled?: boolean
 }
 
-function buttonCss(variant: ButtonProps['variant']) {
+function buttonCss(variant: ButtonVariant, size: 'sm' | 'md') {
 	switch (variant) {
+		case 'primary':
+			return getPillButtonCss({ size })
 		case 'secondary':
-			return getSecondaryButtonCss()
-		case 'pill':
-			return getPillButtonCss()
+			return getGhostButtonCss({ size })
 		case 'danger':
-			return getDangerPillCss()
-		default:
-			return getPrimaryButtonCss()
+			return getDangerPillCss({ size })
+		default: {
+			const unhandled: never = variant
+			throw new Error(`Unknown button variant: ${String(unhandled)}`)
+		}
 	}
 }
 
@@ -140,7 +149,9 @@ export function SubmitButton(handle: Handle<ButtonProps>) {
 			name={handle.props.name}
 			value={handle.props.value}
 			disabled={handle.props.disabled}
-			mix={css(buttonCss(handle.props.variant))}
+			mix={css(
+				buttonCss(handle.props.variant ?? 'primary', handle.props.size ?? 'sm'),
+			)}
 		>
 			{handle.props.children}
 		</button>
@@ -194,7 +205,7 @@ export function ActionForm(
 			{Object.entries(handle.props.fields).map(([name, value]) => (
 				<Hidden key={name} name={name} value={value} />
 			))}
-			<SubmitButton variant="pill" disabled={handle.props.disabled}>
+			<SubmitButton variant="secondary" disabled={handle.props.disabled}>
 				{handle.props.label}
 			</SubmitButton>
 		</form>
@@ -208,7 +219,7 @@ export function SignOutForm(handle: Handle<{ action: string; csrf: string }>) {
 	return () => (
 		<form method="post" action={handle.props.action} mix={css(inlineFormCss)}>
 			<CsrfInput token={handle.props.csrf} />
-			<SubmitButton variant="pill">Sign out</SubmitButton>
+			<SubmitButton variant="secondary">Sign out</SubmitButton>
 		</form>
 	)
 }
@@ -276,47 +287,52 @@ export function SecretReveal(handle: Handle<{ value: string; label: string }>) {
 			<CopyTextButton
 				value={handle.props.value}
 				variant="pill"
+				size="sm"
 				ariaLabel={`Copy ${handle.props.label}`}
 			/>
 		</div>
 	)
 }
 
-export function Badge(
-	handle: Handle<{ children: Slot; tone?: 'neutral' | 'ok' | 'warn' }>,
-) {
-	return () => {
-		const tone = handle.props.tone ?? 'neutral'
-		return (
-			<span
-				class="badge"
-				mix={css({
-					display: 'inline-block',
-					padding: '0.15rem 0.6rem',
-					borderRadius: radius.full,
-					fontSize: typography.fontSize.sm,
-					fontWeight: 600,
-					whiteSpace: 'nowrap',
-					border: `1px solid ${
-						tone === 'ok'
-							? colors.primary
-							: tone === 'warn'
-								? colors.error
-								: colors.border
-					}`,
-					color:
-						tone === 'ok'
-							? colors.primary
-							: tone === 'warn'
-								? colors.error
-								: colors.textMuted,
-					backgroundColor: colors.surface,
-				})}
-			>
-				{handle.props.children}
-			</span>
-		)
+type BadgeTone = 'neutral' | 'ok' | 'warn' | 'danger'
+
+/** `warn` needs attention (no password, not connected); `danger` failed. */
+function badgeToneCss(tone: BadgeTone) {
+	switch (tone) {
+		case 'neutral':
+			return { borderColor: colors.border, color: colors.textMuted }
+		case 'ok':
+			return { borderColor: colors.primary, color: colors.primaryText }
+		case 'warn':
+			return { borderColor: colors.warning, color: colors.warningText }
+		case 'danger':
+			return { borderColor: colors.error, color: colors.error }
+		default: {
+			const unhandled: never = tone
+			throw new Error(`Unknown badge tone: ${String(unhandled)}`)
+		}
 	}
+}
+
+export function Badge(handle: Handle<{ children: Slot; tone?: BadgeTone }>) {
+	return () => (
+		<span
+			class="badge"
+			mix={css({
+				display: 'inline-block',
+				padding: '0.15rem 0.6rem',
+				borderRadius: radius.full,
+				fontSize: typography.fontSize.sm,
+				fontWeight: 600,
+				whiteSpace: 'nowrap',
+				border: '1px solid',
+				backgroundColor: colors.surface,
+				...badgeToneCss(handle.props.tone ?? 'neutral'),
+			})}
+		>
+			{handle.props.children}
+		</span>
+	)
 }
 
 export function Code(handle: Handle<{ children: Slot }>) {

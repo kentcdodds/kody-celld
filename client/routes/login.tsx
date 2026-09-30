@@ -52,7 +52,7 @@ export function Login(handle: Handle<{ data: LoginData }>) {
 							required
 						/>
 						<div>
-							<SubmitButton>Sign in</SubmitButton>
+							<SubmitButton size="md">Sign in</SubmitButton>
 						</div>
 					</StackedForm>
 				</AuthSection>
@@ -69,7 +69,7 @@ export function Login(handle: Handle<{ data: LoginData }>) {
 								required
 							/>
 							<div>
-								<SubmitButton variant="secondary">
+								<SubmitButton variant="secondary" size="md">
 									Send sign-in link
 								</SubmitButton>
 							</div>
@@ -92,7 +92,7 @@ export function Login(handle: Handle<{ data: LoginData }>) {
 							required
 						/>
 						<div>
-							<SubmitButton variant="secondary">
+							<SubmitButton variant="secondary" size="md">
 								Sign in with token
 							</SubmitButton>
 						</div>
@@ -161,7 +161,7 @@ export function Setup(handle: Handle<{ data: SetupData }>) {
 						required
 					/>
 					<div>
-						<SubmitButton>Create account</SubmitButton>
+						<SubmitButton size="md">Create account</SubmitButton>
 					</div>
 				</StackedForm>
 			</AuthShell>
@@ -171,10 +171,15 @@ export function Setup(handle: Handle<{ data: SetupData }>) {
 
 /** Shared by `/account` (change) and one-time links (set/reset). */
 export function PasswordForm(
-	handle: Handle<{ form: PasswordFormView; csrf?: string }>,
+	handle: Handle<{
+		form: PasswordFormView
+		csrf?: string
+		/** `md` on the auth card, `sm` (default) on the account page. */
+		size?: 'sm' | 'md'
+	}>,
 ) {
 	return () => {
-		const { form, csrf } = handle.props
+		const { form, csrf, size } = handle.props
 		return (
 			<StackedForm action={form.action}>
 				{csrf ? <CsrfInput token={csrf} /> : null}
@@ -203,7 +208,7 @@ export function PasswordForm(
 					required
 				/>
 				<div>
-					<SubmitButton>{form.submit}</SubmitButton>
+					<SubmitButton size={size}>{form.submit}</SubmitButton>
 				</div>
 			</StackedForm>
 		)
@@ -227,7 +232,7 @@ export function SigninLinkPassword(handle: Handle<{ data: LinkPasswordData }>) {
 					</>
 				}
 			>
-				<PasswordForm form={passwordForm} />
+				<PasswordForm form={passwordForm} size="md" />
 			</AuthShell>
 		)
 	}
@@ -271,7 +276,7 @@ export function AdminLogin() {
 					required
 				/>
 				<div>
-					<SubmitButton>Sign in</SubmitButton>
+					<SubmitButton size="md">Sign in</SubmitButton>
 				</div>
 			</StackedForm>
 		</AuthShell>
