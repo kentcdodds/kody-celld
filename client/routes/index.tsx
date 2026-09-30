@@ -1,6 +1,5 @@
-import { css, type Handle } from 'remix/ui'
+import { type Handle } from 'remix/ui'
 import { type AppLoaderData } from '#universal/loader-data.ts'
-import { routes } from '#universal/routes.ts'
 import { Account } from './account.tsx'
 import { AccountActivity } from './account-activity.tsx'
 import { AccountApiTokens } from './account-api-tokens.tsx'
@@ -15,14 +14,13 @@ import { AdminAudit } from './admin-audit.tsx'
 import { AdminConfig } from './admin-config.tsx'
 import { AdminUserDetail } from './admin-user-detail.tsx'
 import { AdminUsers } from './admin-users.tsx'
-import { AuthShell } from './auth-shell.tsx'
 import { Community, CommunityDetail, CommunityNotFound } from './community.tsx'
 import {
 	ConnectOauth,
 	ConnectOauthDone,
 	ConnectOauthError,
 } from './connect-oauth.tsx'
-import { Code } from './form-controls.tsx'
+import { ErrorPage } from './error-page.tsx'
 import {
 	AdminLogin,
 	Login,
@@ -39,7 +37,7 @@ import { OauthAuthorize, OauthAuthorizeError } from './oauth-authorize.tsx'
  * is a full document, so the switch is the whole router.
  */
 export function RouteView(
-	handle: Handle<{ data: AppLoaderData; pathname: string }>,
+	handle: Handle<{ data: AppLoaderData; pathname: string; signedIn: boolean }>,
 ) {
 	return () => {
 		const { data, pathname } = handle.props
@@ -53,18 +51,7 @@ export function RouteView(
 			case 'signinLinkPassword':
 				return <SigninLinkPassword data={data} />
 			case 'error':
-				return (
-					<AuthShell
-						title={data.status === 404 ? 'Not found' : 'Something went wrong'}
-					>
-						<p mix={css({ margin: 0 })}>
-							<Code>{data.error}</Code>: {data.message}
-						</p>
-						<p mix={css({ margin: 0 })}>
-							<a href={routes.home.href()}>Back to the start</a>
-						</p>
-					</AuthShell>
-				)
+				return <ErrorPage data={data} signedIn={handle.props.signedIn} />
 			case 'account':
 				return <Account data={data} pathname={pathname} />
 			case 'accountMcpOauthClients':

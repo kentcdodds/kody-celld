@@ -57,7 +57,11 @@ export function AppRoot(handle: Handle<AppRootProps>) {
 							</p>
 						</div>
 					) : null}
-					<RouteView data={data} pathname={pathname} />
+					<RouteView
+						data={data}
+						pathname={pathname}
+						signedIn={session != null}
+					/>
 				</main>
 				<SiteFooter
 					loggedIn={session != null}

@@ -23,7 +23,7 @@ import { handleAccount, isAccountRoute } from './web/account.ts'
 import { handleCommunity, isCommunityRoute } from './web/community.ts'
 import { handleConsole, isConsoleRoute } from './web/console.ts'
 import { renderPage } from '#app/render.tsx'
-import { redirect } from './web/http.ts'
+import { appSessionOf, redirect } from './web/http.ts'
 import { readWebSession } from './web/session.ts'
 import { handleSignin, isSigninRoute, issueSigninLink } from './web/signin.ts'
 import { isLoopbackHost } from './secrets/host-policy.ts'
@@ -85,13 +85,16 @@ function isWebRoute(pathname: string) {
 	)
 }
 
-function errorPage(error: unknown) {
+async function errorPage(error: unknown, request: Request, env: Env) {
 	const body = errorToJson(error)
 	const status = errorStatus(error)
+	// Best effort: the error may be the session lookup itself failing.
+	const session = await readWebSession(request, env).catch(() => null)
 	return renderPage({
 		title: status === 404 ? 'Not found' : 'Something went wrong',
 		pathname: '/',
 		status,
+		session: appSessionOf(session),
 		data: { page: 'error', error: body.error, message: body.message, status },
 	})
 }
@@ -514,7 +517,7 @@ export default {
 			if (url.pathname === '/api' || url.pathname.startsWith('/api/')) return await handleApi(request, env, ctx, url)
 			return json({ error: 'not_found', message: `No route for ${url.pathname}.` }, 404)
 		} catch (error) {
-			if (isWebRoute(url.pathname) && wantsHtml(request)) return errorPage(error)
+			if (isWebRoute(url.pathname) && wantsHtml(request)) return await errorPage(error, request, env)
 			return json(errorToJson(error), errorStatus(error))
 		}
 	},
