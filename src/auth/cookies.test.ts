@@ -5,26 +5,48 @@ import {
 	clearCookie,
 	cookiesAreSecure,
 	csrfToken,
-	parseCookies,
+	readCookie,
 	serializeCookie,
 	sessionSignature,
 } from './cookies.ts'
 
 describe('cookies', () => {
-	it('parses a Cookie header and decodes values', () => {
-		assert.deepEqual(parseCookies('a=1; kody_session=kss_abc%3Ddef; =ignored; bare'), {
-			a: '1',
-			kody_session: 'kss_abc=def',
+	it('reads a named Cookie header value and decodes it', async () => {
+		const request = new Request('https://kody.example', {
+			headers: { cookie: 'a=1; kody_session=kss_abc%3Ddef; =ignored; bare' },
 		})
-		assert.deepEqual(parseCookies(null), {})
+		assert.equal(await readCookie(request, 'kody_session'), 'kss_abc=def')
+		assert.equal(await readCookie(request, 'missing'), null)
+		assert.equal(await readCookie(new Request('https://kody.example'), 'kody_session'), null)
 	})
 
-	it('serializes HttpOnly SameSite=Lax cookies, Secure only for https deployments', () => {
-		const plain = serializeCookie('kody_session', 'kss_x', { maxAgeSeconds: 60, secure: false })
-		assert.equal(plain, 'kody_session=kss_x; Path=/; Max-Age=60; HttpOnly; SameSite=Lax')
-		const secure = serializeCookie('kody_console', 'v', { maxAgeSeconds: 1.9, secure: true, path: '/console' })
-		assert.equal(secure, 'kody_console=v; Path=/console; Max-Age=1; HttpOnly; SameSite=Lax; Secure')
-		assert.match(clearCookie('kody_session', false), /^kody_session=; Path=\/; Max-Age=0; HttpOnly; SameSite=Lax$/)
+	it('round-trips values using the existing cookie encoding', async () => {
+		const value = 'a=b.c%;d'
+		const serialized = await serializeCookie('kody_session', value, { maxAgeSeconds: 60, secure: false })
+		const cookieHeader = serialized.slice(0, serialized.indexOf(';'))
+		const request = new Request('https://kody.example', {
+			headers: { cookie: cookieHeader },
+		})
+		assert.equal(await readCookie(request, 'kody_session'), value)
+	})
+
+	it('reads console cookie values in their existing wire format', async () => {
+		const request = new Request('https://kody.example', {
+			headers: { cookie: 'kody_console=1700000000000.abcdef' },
+		})
+		assert.equal(await readCookie(request, 'kody_console'), '1700000000000.abcdef')
+	})
+
+	it('serializes HttpOnly SameSite=Lax cookies, Secure only for https deployments', async () => {
+		const plain = await serializeCookie('kody_session', 'kss_x', { maxAgeSeconds: 60, secure: false })
+		assert.equal(plain, 'kody_session=kss_x; HttpOnly; Max-Age=60; Path=/; SameSite=Lax')
+		const secure = await serializeCookie('kody_console', 'v', {
+			maxAgeSeconds: 1.9,
+			secure: true,
+			path: '/console',
+		})
+		assert.equal(secure, 'kody_console=v; HttpOnly; Max-Age=1; Path=/console; SameSite=Lax; Secure')
+		assert.equal(await clearCookie('kody_session', false), 'kody_session=; HttpOnly; Max-Age=0; Path=/; SameSite=Lax')
 		assert.equal(cookiesAreSecure('https://kody.example'), true)
 		assert.equal(cookiesAreSecure('http://127.0.0.1:8787'), false)
 		assert.equal(cookiesAreSecure('not a url'), false)

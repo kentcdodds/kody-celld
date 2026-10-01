@@ -6,7 +6,7 @@ import {
 	consoleSessionTtlMs,
 	cookiesAreSecure,
 	csrfToken,
-	parseCookies,
+	readCookie,
 	serializeCookie,
 	sessionCookieName,
 	sessionTtlMs,
@@ -26,7 +26,7 @@ export type WebSession = {
 const registry = (env: Env) => env.REGISTRY.getByName('registry')
 
 export async function readWebSession(request: Request, env: Env): Promise<WebSession | null> {
-	const raw = parseCookies(request.headers.get('cookie'))[sessionCookieName]
+	const raw = await readCookie(request, sessionCookieName)
 	if (!raw) return null
 	const resolved = await registry(env).sessionResolve(raw, sessionTtlMs)
 	if (!resolved) return null
@@ -44,14 +44,14 @@ export async function startWebSession(request: Request, env: Env, userId: string
 		ttlMs: sessionTtlMs,
 		userAgent: request.headers.get('user-agent'),
 	})
-	return serializeCookie(sessionCookieName, created.id, {
+	return await serializeCookie(sessionCookieName, created.id, {
 		maxAgeSeconds: sessionTtlMs / 1000,
 		secure: cookiesAreSecure(env.KODY_PUBLIC_URL),
 	})
 }
 
 export async function endWebSession(request: Request, env: Env) {
-	const raw = parseCookies(request.headers.get('cookie'))[sessionCookieName]
+	const raw = await readCookie(request, sessionCookieName)
 	if (raw) await registry(env).sessionDelete(raw)
 	return clearCookie(sessionCookieName, cookiesAreSecure(env.KODY_PUBLIC_URL))
 }
@@ -90,25 +90,21 @@ async function consoleSignature(env: Env, expiresAt: number) {
 export async function startConsoleSession(env: Env) {
 	const expiresAt = Date.now() + consoleSessionTtlMs
 	const value = `${expiresAt}.${await consoleSignature(env, expiresAt)}`
-	return serializeCookie(consoleCookieName, value, {
+	return await serializeCookie(consoleCookieName, value, {
 		maxAgeSeconds: consoleSessionTtlMs / 1000,
 		secure: cookiesAreSecure(env.KODY_PUBLIC_URL),
 		path: '/console',
 	})
 }
 
-export function endConsoleSession(env: Env) {
-	return serializeCookie(consoleCookieName, '', {
-		maxAgeSeconds: 0,
-		secure: cookiesAreSecure(env.KODY_PUBLIC_URL),
-		path: '/console',
-	})
+export async function endConsoleSession(env: Env) {
+	return clearCookie(consoleCookieName, cookiesAreSecure(env.KODY_PUBLIC_URL), '/console')
 }
 
 export type ConsoleSession = { csrf: string; expiresAt: number }
 
 export async function readConsoleSession(request: Request, env: Env): Promise<ConsoleSession | null> {
-	const raw = parseCookies(request.headers.get('cookie'))[consoleCookieName]
+	const raw = await readCookie(request, consoleCookieName)
 	if (!raw) return null
 	const [expiresRaw, signature] = raw.split('.')
 	const expiresAt = Number(expiresRaw)

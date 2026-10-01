@@ -1,3 +1,4 @@
+import { createCookie } from 'remix/cookie'
 import { KodyError } from '../lib/errors.ts'
 
 export const sessionCookieName = 'kody_session'
@@ -5,41 +6,39 @@ export const consoleCookieName = 'kody_console'
 export const sessionTtlMs = 30 * 24 * 60 * 60 * 1000
 export const consoleSessionTtlMs = 12 * 60 * 60 * 1000
 
-export function parseCookies(header: string | null): Record<string, string> {
-	const out: Record<string, string> = {}
-	if (!header) return out
-	for (const part of header.split(';')) {
-		const eq = part.indexOf('=')
-		if (eq === -1) continue
-		const name = part.slice(0, eq).trim()
-		if (!name) continue
-		try {
-			out[name] = decodeURIComponent(part.slice(eq + 1).trim())
-		} catch {
-			out[name] = part.slice(eq + 1).trim()
-		}
-	}
-	return out
+function appCookie(name: string, options: { secure: boolean; path?: string }) {
+	return createCookie(name, {
+		encode: encodeURIComponent,
+		decode: (value) => {
+			try {
+				return decodeURIComponent(value)
+			} catch {
+				return value
+			}
+		},
+		httpOnly: true,
+		sameSite: 'Lax',
+		path: options.path ?? '/',
+		secure: options.secure,
+	})
 }
 
 export function serializeCookie(
 	name: string,
 	value: string,
 	options: { maxAgeSeconds: number; secure: boolean; path?: string },
-) {
-	const parts = [
-		`${name}=${encodeURIComponent(value)}`,
-		`Path=${options.path ?? '/'}`,
-		`Max-Age=${Math.max(0, Math.floor(options.maxAgeSeconds))}`,
-		'HttpOnly',
-		'SameSite=Lax',
-	]
-	if (options.secure) parts.push('Secure')
-	return parts.join('; ')
+): Promise<string> {
+	return appCookie(name, options).serialize(value, {
+		maxAge: Math.max(0, Math.floor(options.maxAgeSeconds)),
+	})
 }
 
-export function clearCookie(name: string, secure: boolean) {
-	return serializeCookie(name, '', { maxAgeSeconds: 0, secure })
+export function clearCookie(name: string, secure: boolean, path = '/'): Promise<string> {
+	return serializeCookie(name, '', { maxAgeSeconds: 0, secure, path })
+}
+
+export async function readCookie(request: Request, name: string): Promise<string | null> {
+	return appCookie(name, { secure: false }).parse(request.headers.get('cookie'))
 }
 
 /** Cookies carry `Secure` whenever the public URL is https; loopback dev stays plain http. */

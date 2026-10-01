@@ -70,7 +70,7 @@ export async function handleConsole(request: Request, env: Env, ctx: ExecutionCo
 	const flash = flashParam ? { kind: 'ok' as const, text: flashParam.slice(0, 200) } : null
 
 	if (segments[0] === 'signout' && post) {
-		return redirect('/console', { 'set-cookie': endConsoleSession(env) })
+		return redirect('/console', { 'set-cookie': await endConsoleSession(env) })
 	}
 
 	if (segments.length === 0) {
