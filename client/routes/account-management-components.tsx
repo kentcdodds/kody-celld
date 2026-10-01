@@ -336,24 +336,26 @@ type AccountNavItem = { href: string; label: string; icon: IconName }
 export const accountNavItems: Array<AccountNavItem> = [
 	{ href: routes.account.href(), label: 'Overview', icon: 'home' },
 	{ href: routes.accountPackages.href(), label: 'Packages', icon: 'box' },
-	{ href: routes.accountJobs.href(), label: 'Jobs', icon: 'briefcase' },
 	{
 		href: routes.accountActivity.href(),
 		label: 'Activity',
 		icon: 'trending-up',
 	},
+	{ href: routes.accountJobs.href(), label: 'Jobs', icon: 'briefcase' },
+	{ href: routes.accountWebhooks.href(), label: 'Webhooks', icon: 'cloud' },
 	{ href: routes.accountSecrets.href(), label: 'Secrets', icon: 'key' },
 	{
 		href: routes.accountIntegrations.href(),
 		label: 'Integrations',
 		icon: 'plug',
 	},
-	{ href: routes.accountEmail.href(), label: 'Email', icon: 'mail' },
 	{
 		href: routes.accountMcpOauthClients.href(),
 		label: 'MCP clients',
 		icon: 'server',
 	},
+	{ href: routes.accountMemories.href(), label: 'Memories', icon: 'book' },
+	{ href: routes.accountEmail.href(), label: 'Email', icon: 'mail' },
 	{ href: routes.accountApiTokens.href(), label: 'API tokens', icon: 'link' },
 	{ href: routes.accountSessions.href(), label: 'Sessions', icon: 'clock' },
 ]

@@ -6,10 +6,12 @@ import { AccountApiTokens } from './account-api-tokens.tsx'
 import { AccountEmail } from './account-email.tsx'
 import { AccountIntegrations } from './account-integrations.tsx'
 import { AccountJobs } from './account-jobs.tsx'
+import { AccountMemories } from './account-memories.tsx'
 import { AccountMcpOauthClients } from './account-mcp-oauth-clients.tsx'
 import { AccountPackages } from './account-packages.tsx'
 import { AccountSecrets } from './account-secrets.tsx'
 import { AccountSessions } from './account-sessions.tsx'
+import { AccountWebhooks } from './account-webhooks.tsx'
 import { AdminAudit } from './admin-audit.tsx'
 import { AdminConfig } from './admin-config.tsx'
 import { AdminUserDetail } from './admin-user-detail.tsx'
@@ -64,6 +66,10 @@ export function RouteView(
 				return <AccountPackages data={data} pathname={pathname} />
 			case 'accountJobs':
 				return <AccountJobs data={data} pathname={pathname} />
+			case 'accountMemories':
+				return <AccountMemories data={data} pathname={pathname} />
+			case 'accountWebhooks':
+				return <AccountWebhooks data={data} pathname={pathname} />
 			case 'accountActivity':
 				return <AccountActivity data={data} pathname={pathname} />
 			case 'accountIntegrations':

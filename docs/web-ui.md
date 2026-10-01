@@ -76,14 +76,22 @@ Accounts are created by the operator — there is no open registration:
 | Secrets          | list names + approved hosts, add/replace a value (paste form; the value is never rendered again), delete                                                                                                      |
 | Packages         | list saved packages with their exports/jobs/webhooks/source, preview then install/fork from GitHub, a URL, or a public kody.codes `@owner/pkg[.git]`, publish / republish / unpublish to `/community`, delete |
 | Jobs             | list schedules, last run, enable/disable                                                                                                                                                                      |
-| Runs             | recent run history (status, duration, error names — never secret values)                                                                                                                                      |
+| Activity         | recent run history (status, duration, error names — never secret values)                                                                                                                                      |
+| Webhooks         | every webhook your packages declare: handle, package, status, last delivery (never the URL)                                                                                                                   |
 | Integrations     | connected OAuth integrations and their status, disconnect                                                                                                                                                     |
-| Inbox            | email inboxes and recent messages                                                                                                                                                                             |
+| Email            | email inboxes and recent messages                                                                                                                                                                             |
+| Memories         | browse and search your memories, open one, soft-delete or delete permanently                                                                                                                                  |
 | Browser sessions | list and revoke (this one or all others)                                                                                                                                                                      |
 
-The hosted product's paths for three of these (`/account/email`,
-`/account/activity`, `/account/mcp-oauth-clients`) redirect to the local ones
-(`/account/inbox`, `/account/runs`, `/account/clients`).
+Email, Activity and MCP clients live at `/account/inbox`, `/account/runs` and `/account/clients`; the hosted product's paths for them (`/account/email`, `/account/activity`, `/account/mcp-oauth-clients`) redirect there.
+
+Cloud Kody's account pages that are not here, on purpose:
+
+- **Hosted-only, won't port:** Billing, Usage, Experiments. Overview already shows usage vs quotas.
+- **Deferred:** Workflows (see [known-gaps.md](./known-gaps.md): not needed by the core yet) and Waiting (until kody-celld has several sources of attention items).
+- **Same surface, different name:** Repositories is Packages here.
+- **Different product:** cloud's MCP servers page manages servers Kody connects to; MCP clients here lists the OAuth clients authorized _to_ this server.
+- **No separate page:** Connections. A "connect another agent" panel on MCP clients is planned.
 
 Host approvals are intentionally **not** on the account pages — they stay an
 operator decision (see [secrets.md](./secrets.md)); the Secrets page shows the
@@ -249,7 +257,8 @@ no-store` (`src/app/security-headers.ts`). `remix/ui` escapes all
 `node smoke/run.mjs web` (part of `npm run smoke`) covers the redirect
 matrix, invite issuance and acceptance (short password first, reuse after),
 CSRF / cross-site refusal, token create → use → revoke, secrets add/list/delete
-without echoing the value, every read-only page, password and token sign-in,
+without echoing the value, memories list/search/detail/delete, the webhooks
+index (never the URL secret), every read-only page, password and token sign-in,
 sessions and revoke-others, lockout after five failures, password change
 checks, sign-out, the console sign-in/users/hosts/audit/config/invite flow, and
 that a user cannot approve a host from their own pages.

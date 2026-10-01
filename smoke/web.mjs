@@ -132,11 +132,145 @@ export async function smokeWeb({ user, mcp }) {
 	assert(deleted.status === 303, 'secret deleted from the form', deleted)
 	log('secrets', 'save/list/delete through the form; value never echoed')
 
+	// Memories list/search/detail/delete through the server-rendered account page.
+	const hex = randomBytes(4).toString('hex')
+	const memorySubject = `web-memory-${hex}`
+	const createdMemory = await mcp.call('metaMemoryUpsert', {
+		subject: memorySubject,
+		summary: 'Seeded by smoke/web.mjs',
+		tags: ['smoke-web'],
+	})
+	const memoryId = createdMemory.memory.id
+	const memoriesPage = await browser.get('/account/memories')
+	assert(
+		memoriesPage.status === 200 && memoriesPage.text.includes(memorySubject),
+		'memories page lists a created memory',
+		memoriesPage.status,
+	)
+	const matchingSearch = await browser.get(`/account/memories?q=${encodeURIComponent(memorySubject)}`)
+	assert(matchingSearch.text.includes(memorySubject), 'memory search finds a matching subject')
+	const nonmatchingSearch = await browser.get(`/account/memories?q=${encodeURIComponent(`zz-no-match-${hex}`)}`)
+	assert(!nonmatchingSearch.text.includes(memorySubject), 'memory search excludes a nonmatch')
+	const memoryDetail = await browser.get(`/account/memories/${encodeURIComponent(memoryId)}`)
+	assert(
+		memoryDetail.status === 200 &&
+			memoryDetail.text.includes('Seeded by smoke/web.mjs') &&
+			memoryDetail.text.includes(`name="memoryId" value="${memoryId}"`),
+		'memory detail shows summary and delete form id',
+		memoryDetail.status,
+	)
+	const missingMemory = await browser.get(`/account/memories/${encodeURIComponent(`missing-${hex}`)}`)
+	assert(
+		missingMemory.status === 404 && missingMemory.text.includes('Memory not found'),
+		'unknown memory detail renders a not-found page',
+		missingMemory.status,
+	)
+	const memoryNoCsrf = await browser.post('/account/memories', {
+		action: 'delete',
+		memoryId,
+	})
+	assert(memoryNoCsrf.status === 403, 'memory delete without CSRF is refused')
+	const softDelete = await browser.post('/account/memories', {
+		action: 'delete',
+		memoryId,
+		csrf,
+	})
+	assert(
+		softDelete.status === 303 && softDelete.location?.includes('flash=deleted'),
+		'memory soft delete redirects with a flash',
+		softDelete,
+	)
+	const activeList = await browser.get('/account/memories')
+	assert(!activeList.text.includes(memorySubject), 'soft-deleted memory is hidden by default')
+	const deletedList = await browser.get('/account/memories?includeDeleted=1')
+	assert(deletedList.text.includes(memorySubject), 'include-deleted list shows soft-deleted memory')
+	const softDeletedMemory = await mcp.call('metaMemoryGet', { id: memoryId })
+	assert(softDeletedMemory.memory?.status === 'deleted', 'soft delete updates memory status')
+	const permanentDelete = await browser.post('/account/memories', {
+		action: 'delete',
+		memoryId,
+		force: 'true',
+		csrf,
+	})
+	assert(permanentDelete.status === 303, 'permanent memory delete redirects', permanentDelete)
+	const permanentlyDeletedMemory = await mcp.call('metaMemoryGet', { id: memoryId })
+	assert(permanentlyDeletedMemory.memory === null, 'permanent delete removes memory')
+	log('memories', 'list/search/detail, unknown id, CSRF, soft delete and permanent delete')
+
+	// The index exposes webhook metadata but never the ingress URL or secret.
+	const webhookPackageName = `@kody-smoke/web-hooks-${hex}`
+	await mcp.call('packageSave', {
+		files: {
+			'package.json': JSON.stringify({
+				name: webhookPackageName,
+				version: '1.0.0',
+				exports: { '.': './main.js', './hook': './hook.js' },
+				kody: {
+					webhooks: [
+						{
+							name: 'inbound',
+							export: './hook',
+							responseMode: 'sync',
+							inputMode: 'params',
+						},
+					],
+				},
+			}),
+			'README.md': `# ${webhookPackageName}`,
+			'AGENTS.md': 'Handles the inbound smoke webhook.',
+			'main.js': 'export default async () => "ok"',
+			'hook.js': 'export default async (params) => ({ received: params })',
+		},
+		source: 'smoke/web.mjs',
+	})
+	const mintedWebhook = await mcp.callDirect('webhookUrlMint', {
+		packageName: webhookPackageName,
+		webhookName: 'inbound',
+	})
+	const revealResponse = await fetch(`${baseUrl}/api/webhooks/${encodeURIComponent(mintedWebhook.handle)}/url`, {
+		headers: { authorization: `Bearer ${mcp.token}` },
+	})
+	const revealPayload = await revealResponse.json()
+	assert(
+		revealResponse.status === 200 && typeof revealPayload.url === 'string',
+		'authenticated webhook URL reveal succeeds',
+		revealResponse.status,
+	)
+	const webhookUrl = revealPayload.url
+	const webhookSecret = webhookUrl.split('/').at(-1)
+	const deliveryResponse = await fetch(webhookUrl, {
+		method: 'POST',
+		headers: { 'content-type': 'application/json' },
+		body: '{}',
+	})
+	assert(deliveryResponse.status === 200, 'smoke webhook creates one delivery')
+	const webhooksPage = await browser.get('/account/webhooks')
+	const expectedPackageHref = `/account/packages/${encodeURIComponent(webhookPackageName)}`
+	assert(
+		webhooksPage.status === 200 &&
+			webhooksPage.text.includes(webhookPackageName) &&
+			webhooksPage.text.includes('inbound') &&
+			webhooksPage.text.includes(mintedWebhook.handle) &&
+			webhooksPage.text.includes(expectedPackageHref),
+		'webhooks index lists package, declaration, handle and package link',
+		webhooksPage.status,
+	)
+	assert(
+		!webhooksPage.text.includes(webhookSecret) &&
+			!webhooksPage.text.includes(`/webhooks/${user.id}/${mintedWebhook.handle}/`) &&
+			!webhooksPage.text.includes(webhookUrl),
+		'webhooks index never renders the ingress URL or secret',
+	)
+	await mcp.call('packageDelete', { name: webhookPackageName })
+	log('webhooks', 'declaration, minted handle, delivery, package link, no URL secret')
+
 	// Other read-only pages render.
 	for (const path of [
 		'/account/packages',
 		'/account/jobs',
 		'/account/runs',
+		'/account/memories',
+		'/account/webhooks',
 		'/account/integrations',
 		'/account/inbox',
 		'/account/clients',
@@ -145,7 +279,7 @@ export async function smokeWeb({ user, mcp }) {
 		const res = await browser.get(path)
 		assert(res.status === 200, `${path} renders`, res.status)
 	}
-	log('pages', 'packages, jobs, runs, integrations, inbox, clients, sessions render')
+	log('pages', 'packages, jobs, activity, memories, webhooks, integrations, email, clients, sessions render')
 
 	// Packages page: install form enforces the source-host policy; publish /
 	// unpublish toggles a community listing for a saved package.

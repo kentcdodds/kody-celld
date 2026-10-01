@@ -3,6 +3,7 @@ import { getUserCell } from '../execute/engine.ts'
 import { recordAudit } from '../lib/audit.ts'
 import { KodyError } from '../lib/errors.ts'
 import { loadEmailConfig } from '../email/service.ts'
+import { getMemoryCell } from '../capabilities/memory.ts'
 import { defaultPublisher, renamePackageFiles } from '../capabilities/community.ts'
 import {
 	fetchPackageSource,
@@ -18,6 +19,7 @@ import { accountAliasLocation } from './account-aliases.ts'
 import { appSessionOf, readForm, redirect } from './http.ts'
 import { assertCsrf, readWebSession, type WebSession } from './session.ts'
 import { passwordFormView } from './signin.ts'
+import { matchesSearchQuery } from './search-filter.ts'
 
 const registry = (env: Env) => env.REGISTRY.getByName('registry')
 
@@ -373,6 +375,132 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 						lastStatus: job.lastStatus,
 						lastError: job.lastError,
 					})),
+				},
+			})
+		}
+
+		case 'memories': {
+			const cell = getMemoryCell(env, session.user.id)
+			await cell.init(session.user.id)
+			if (post) {
+				if (form.action === 'delete' && form.memoryId) {
+					const result = await cell.memoryDelete({
+						id: form.memoryId,
+						force: form.force === 'true',
+					})
+					await audit(`memory.delete.${result.mode}`, result.id, { via: 'web' })
+					return redirect('/account/memories?flash=deleted')
+				}
+				return redirect('/account/memories')
+			}
+
+			const query = url.searchParams.get('q')?.trim() ?? ''
+			const includeDeletedValue = url.searchParams.get('includeDeleted')?.trim().toLowerCase()
+			const includeDeleted =
+				includeDeletedValue === '1' || includeDeletedValue === 'true' || includeDeletedValue === 'yes'
+			const allMemories = await cell.memoryList({ limit: 100 })
+			const visibleMemories = allMemories.filter((memory) => includeDeleted || memory.status !== 'deleted')
+			const memories = visibleMemories
+				.filter((memory) =>
+					matchesSearchQuery(query, [memory.subject, memory.category, memory.status, memory.summary, ...memory.tags]),
+				)
+				.map((memory) => ({
+					id: memory.id,
+					subject: memory.subject,
+					category: memory.category,
+					status: memory.status,
+					tags: memory.tags,
+					summary: memory.summary,
+					updatedAt: memory.updatedAt,
+				}))
+
+			let selectedId = segments[1] ?? null
+			if (selectedId) {
+				try {
+					selectedId = decodeURIComponent(selectedId)
+				} catch {
+					selectedId = segments[1] ?? null
+				}
+			}
+			const selectedRecord = selectedId ? await cell.memoryGet({ id: selectedId }) : null
+			const selected = selectedRecord
+				? {
+						id: selectedRecord.id,
+						subject: selectedRecord.subject,
+						category: selectedRecord.category,
+						status: selectedRecord.status,
+						tags: selectedRecord.tags,
+						summary: selectedRecord.summary,
+						updatedAt: selectedRecord.updatedAt,
+						details: selectedRecord.details,
+						sourceUris: selectedRecord.sourceUris,
+						dedupeKey: selectedRecord.dedupeKey,
+						createdAt: selectedRecord.createdAt,
+						lastAccessedAt: selectedRecord.lastAccessedAt,
+						deletedAt: selectedRecord.deletedAt,
+					}
+				: null
+
+			return view(session, {
+				title: 'Memories',
+				current: url.pathname,
+				flash,
+				status: selectedId && !selected ? 404 : undefined,
+				data: {
+					page: 'accountMemories',
+					csrf: session.csrf,
+					query,
+					includeDeleted,
+					total: visibleMemories.length,
+					memories,
+					selectedId,
+					selected,
+				},
+			})
+		}
+
+		case 'webhooks': {
+			if (post) break
+			const [listings, deliveries] = await Promise.all([
+				userCell.webhookList(),
+				userCell.webhookDeliveryList({ limit: 200 }),
+			])
+			const latestDeliveryByHandle = new Map<string, (typeof deliveries)[number]>()
+			for (const delivery of deliveries) {
+				if (!latestDeliveryByHandle.has(delivery.handle)) {
+					latestDeliveryByHandle.set(delivery.handle, delivery)
+				}
+			}
+			return view(session, {
+				title: 'Webhooks',
+				current: url.pathname,
+				data: {
+					page: 'accountWebhooks',
+					webhooks: listings.map(({ packageName, definition, mint }) => {
+						const lastDelivery = mint ? latestDeliveryByHandle.get(mint.handle) : undefined
+						return {
+							id: `${packageName}/${definition.name}`,
+							packageName,
+							name: definition.name,
+							exportName: definition.export,
+							description: definition.description ?? null,
+							responseMode: definition.responseMode,
+							inputMode: definition.inputMode,
+							verification: definition.verification
+								? {
+										type: definition.verification.type,
+										header: definition.verification.header,
+									}
+								: null,
+							minted: mint !== null,
+							handle: mint?.handle ?? null,
+							enabled: mint?.enabled ?? null,
+							deliveries: mint?.deliveries ?? 0,
+							lastDeliveryAt: lastDelivery?.receivedAt ?? mint?.lastDeliveryAt ?? null,
+							lastDeliveryStatus: lastDelivery?.status ?? null,
+							lastDeliveryHttpStatus: lastDelivery?.httpStatus ?? null,
+						}
+					}),
 				},
 			})
 		}

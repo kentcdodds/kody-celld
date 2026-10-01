@@ -82,6 +82,45 @@ export type JobView = {
 	lastError: string | null
 }
 
+export type MemoryStatusView = 'active' | 'archived' | 'deleted'
+
+export type MemoryListItemView = {
+	id: string
+	subject: string
+	category: string | null
+	status: MemoryStatusView
+	tags: Array<string>
+	summary: string
+	updatedAt: string
+}
+
+export type MemoryDetailView = MemoryListItemView & {
+	details: string
+	sourceUris: Array<string>
+	dedupeKey: string | null
+	createdAt: string
+	lastAccessedAt: string | null
+	deletedAt: string | null
+}
+
+export type WebhookIndexView = {
+	id: string
+	packageName: string
+	name: string
+	exportName: string
+	description: string | null
+	responseMode: 'ack' | 'sync'
+	inputMode: 'request' | 'params'
+	verification: { type: string; header: string } | null
+	minted: boolean
+	handle: string | null
+	enabled: boolean | null
+	deliveries: number
+	lastDeliveryAt: string | null
+	lastDeliveryStatus: string | null
+	lastDeliveryHttpStatus: number | null
+}
+
 export type RunView = {
 	id: string
 	createdAt: string
@@ -240,6 +279,17 @@ export type AppLoaderData =
 			} | null
 	  }
 	| { page: 'accountJobs'; csrf: string; jobs: Array<JobView> }
+	| {
+			page: 'accountMemories'
+			csrf: string
+			query: string
+			includeDeleted: boolean
+			total: number
+			memories: Array<MemoryListItemView>
+			selectedId: string | null
+			selected: MemoryDetailView | null
+	  }
+	| { page: 'accountWebhooks'; webhooks: Array<WebhookIndexView> }
 	| { page: 'accountActivity'; runs: Array<RunView> }
 	| {
 			page: 'accountIntegrations'
