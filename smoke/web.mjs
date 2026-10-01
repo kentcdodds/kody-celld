@@ -415,6 +415,13 @@ export async function smokeWeb({ user, mcp }) {
 		'publish from package detail redirects to the detail page',
 		detailPublished,
 	)
+	const publishedDetailPage = await browser.get(packageHref)
+	assert(
+		publishedDetailPage.status === 200 &&
+			publishedDetailPage.text.includes('Republish') &&
+			publishedDetailPage.text.includes('Unpublish'),
+		'published package detail shows Republish and Unpublish actions',
+	)
 	const detailUnpublished = await browser.post(packageHref, {
 		action: 'unpublish',
 		name: pkgName,

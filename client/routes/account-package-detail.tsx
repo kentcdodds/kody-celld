@@ -1,6 +1,7 @@
 import { css, type Handle } from 'remix/ui'
 import { type AppLoaderData } from '#universal/loader-data.ts'
 import { routes } from '#universal/routes.ts'
+import { mutedLinkCss } from '#universal/styles/style-primitives.ts'
 import { colors, spacing } from '#universal/styles/tokens.ts'
 import {
 	AccountManagementMessage,
@@ -39,22 +40,39 @@ export function AccountPackageDetail(
 					currentHref={pathname}
 					actions={
 						<Actions>
+							<ActionForm
+								action={detailHref}
+								csrf={data.csrf}
+								fields={{ action: 'publish', name: pkg.name }}
+								disabled={pkg.hidden}
+								label={
+									pkg.published
+										? pkg.published.version === pkg.version
+											? 'Republish'
+											: `Publish v${pkg.version}`
+										: 'Publish'
+								}
+							/>
 							{pkg.published ? (
-								<ActionForm
-									action={detailHref}
-									csrf={data.csrf}
-									fields={{ action: 'unpublish', name: pkg.name }}
-									label="Unpublish"
-								/>
-							) : (
-								<ActionForm
-									action={detailHref}
-									csrf={data.csrf}
-									fields={{ action: 'publish', name: pkg.name }}
-									disabled={pkg.hidden}
-									label="Publish"
-								/>
-							)}
+								<>
+									<a
+										href={routes.communityDetail.href({ name: pkg.name })}
+										mix={css({
+											...mutedLinkCss,
+											alignSelf: 'center',
+											whiteSpace: 'nowrap',
+										})}
+									>
+										v{pkg.published.version} public
+									</a>
+									<ActionForm
+										action={detailHref}
+										csrf={data.csrf}
+										fields={{ action: 'unpublish', name: pkg.name }}
+										label="Unpublish"
+									/>
+								</>
+							) : null}
 							<DangerForm
 								action={detailHref}
 								csrf={data.csrf}
