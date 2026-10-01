@@ -4,6 +4,7 @@ import { recordAudit } from '../lib/audit.ts'
 import { KodyError } from '../lib/errors.ts'
 import { loadEmailConfig } from '../email/service.ts'
 import { getMemoryCell } from '../capabilities/memory.ts'
+import { memoryStatuses } from '../cells/memory-cell.ts'
 import { defaultPublisher, renamePackageFiles } from '../capabilities/community.ts'
 import {
 	fetchPackageSource,
@@ -398,8 +399,18 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 			const includeDeletedValue = url.searchParams.get('includeDeleted')?.trim().toLowerCase()
 			const includeDeleted =
 				includeDeletedValue === '1' || includeDeletedValue === 'true' || includeDeletedValue === 'yes'
-			const allMemories = await cell.memoryList({ limit: 100 })
-			const visibleMemories = allMemories.filter((memory) => includeDeleted || memory.status !== 'deleted')
+			const visibleMemories = includeDeleted
+				? await cell.memoryList({ limit: 100 })
+				: (
+						await Promise.all(
+							memoryStatuses
+								.filter((status) => status !== 'deleted')
+								.map((status) => cell.memoryList({ limit: 100, status })),
+						)
+					)
+						.flat()
+						.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+						.slice(0, 100)
 			const memories = visibleMemories
 				.filter((memory) =>
 					matchesSearchQuery(query, [memory.subject, memory.category, memory.status, memory.summary, ...memory.tags]),
@@ -461,16 +472,11 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 
 		case 'webhooks': {
 			if (post) break
-			const [listings, deliveries] = await Promise.all([
-				userCell.webhookList(),
-				userCell.webhookDeliveryList({ limit: 200 }),
-			])
-			const latestDeliveryByHandle = new Map<string, (typeof deliveries)[number]>()
-			for (const delivery of deliveries) {
-				if (!latestDeliveryByHandle.has(delivery.handle)) {
-					latestDeliveryByHandle.set(delivery.handle, delivery)
-				}
-			}
+			const listings = await userCell.webhookList()
+			const deliveries = await Promise.all(
+				listings.flatMap(({ mint }) => (mint ? [userCell.webhookDeliveryList({ handle: mint.handle, limit: 1 })] : [])),
+			)
+			const latestDeliveryByHandle = new Map(deliveries.flat().map((delivery) => [delivery.handle, delivery] as const))
 			return view(session, {
 				title: 'Webhooks',
 				current: url.pathname,
