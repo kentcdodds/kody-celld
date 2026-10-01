@@ -121,6 +121,47 @@ export type WebhookIndexView = {
 	lastDeliveryHttpStatus: number | null
 }
 
+export type PackageDetailView = {
+	name: string
+	version: string
+	description: string | null
+	source: string
+	createdAt: string
+	updatedAt: string
+	hidden: boolean
+	published: { version: string } | null
+	exports: Array<{ specifier: string; path: string }>
+	jobs: Array<{
+		id: string
+		name: string
+		entry: string
+		schedule: string
+		timezone: string | null
+		description: string | null
+		enabled: boolean | null
+	}>
+	webhooks: Array<{
+		name: string
+		export: string
+		responseMode: string
+		inputMode: string
+		rateLimitPerMinute: number
+		verification: string | null
+		description: string | null
+	}>
+	files: Array<{ path: string; bytes: number }>
+}
+
+export type JobRunView = {
+	id: string
+	trigger: string
+	startedAt: string
+	finishedAt: string | null
+	status: 'running' | 'success' | 'error'
+	durationMs: number | null
+	error: string | null
+}
+
 export type RunView = {
 	id: string
 	createdAt: string
@@ -278,7 +319,27 @@ export type AppLoaderData =
 				warnings: Array<string>
 			} | null
 	  }
+	| {
+			page: 'accountPackageDetail'
+			csrf: string
+			pkg: PackageDetailView
+			error: string | null
+	  }
+	| {
+			page: 'accountPackageFiles'
+			name: string
+			version: string
+			files: Array<{ path: string; bytes: number }>
+			selected: { path: string; content: string; truncated: boolean } | null
+	  }
 	| { page: 'accountJobs'; csrf: string; jobs: Array<JobView> }
+	| {
+			page: 'accountJobDetail'
+			csrf: string
+			job: JobView & { entry: string }
+			packageExists: boolean
+			runs: Array<JobRunView>
+	  }
 	| {
 			page: 'accountMemories'
 			csrf: string

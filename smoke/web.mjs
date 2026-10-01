@@ -301,13 +301,86 @@ export async function smokeWeb({ user, mcp }) {
 				version: '1.0.0',
 				description: 'web smoke',
 				exports: './main.js',
+				kody: {
+					jobs: {
+						nightly: {
+							entry: './main.js',
+							schedule: { type: 'interval', every: '1h' },
+							enabled: false,
+							description: 'nightly web smoke',
+						},
+					},
+				},
 			}),
 			'README.md': `# ${pkgName}`,
 			'AGENTS.md': 'Returns ok.',
 			'main.js': 'export default async () => "ok"',
+			'lib/util.js': 'export const nestedFile = "web smoke file"',
 		},
 		source: 'smoke/web.mjs',
 	})
+	const jobId = `${pkgName}#nightly`
+	const packageHref = `/account/packages/${encodeURIComponent(pkgName)}`
+	const jobHref = `/account/jobs/${encodeURIComponent(jobId)}`
+	const packageDetail = await browser.get(packageHref)
+	assert(
+		packageDetail.status === 200 &&
+			packageDetail.text.includes(pkgName) &&
+			packageDetail.text.includes('web smoke') &&
+			packageDetail.text.includes(jobHref) &&
+			packageDetail.text.includes(`${packageHref}/files/lib/util.js`),
+		'package detail links its job and nested files',
+		packageDetail.status,
+	)
+	const filePage = await browser.get(`${packageHref}/files/lib/util.js`)
+	assert(
+		filePage.status === 200 && filePage.text.includes('nestedFile = "web smoke file"'),
+		'nested package file page shows selected content',
+		filePage.status,
+	)
+	const jobPage = await browser.get(jobHref)
+	assert(
+		jobPage.status === 200 &&
+			jobPage.text.includes(jobId) &&
+			jobPage.text.includes('nightly web smoke') &&
+			jobPage.text.includes('every 1h') &&
+			jobPage.text.includes('Paused'),
+		'job detail shows id, description, schedule and paused status',
+		jobPage.status,
+	)
+	assert(
+		(await browser.get(`/account/packages/${encodeURIComponent('@kody-smoke/does-not-exist')}`)).status === 404,
+		'unknown package detail returns 404',
+	)
+	assert(
+		(await browser.get(`/account/jobs/${encodeURIComponent(`${pkgName}#does-not-exist`)}`)).status === 404,
+		'unknown job detail returns 404',
+	)
+	const detailPostWithoutCsrf = await browser.post(jobHref, {
+		action: 'toggle',
+		id: jobId,
+		enabled: 'true',
+	})
+	assert(detailPostWithoutCsrf.status === 403, 'detail POST without csrf is refused', detailPostWithoutCsrf.status)
+	const toggled = await browser.post(jobHref, {
+		action: 'toggle',
+		id: jobId,
+		enabled: 'true',
+		csrf,
+	})
+	assert(
+		toggled.status === 303 && toggled.location?.includes(`${jobHref}?flash=saved`),
+		'job toggle redirects back to job detail',
+		toggled,
+	)
+	const enabledJobPage = await browser.get(jobHref)
+	assert(
+		enabledJobPage.status === 200 && enabledJobPage.text.includes('Enabled'),
+		'job detail reflects the enabled state',
+	)
+	assert((await browser.get('/account/packages')).text.includes(packageHref), 'packages list links to package detail')
+	assert((await browser.get('/account/jobs')).text.includes(jobHref), 'jobs list links to job detail')
+	log('account details', 'package, nested file, and job pages render; 404, CSRF, and toggle checks passed')
 	const published = await browser.post('/account/packages', { action: 'publish', name: pkgName, csrf })
 	assert(
 		published.status === 303 && published.location?.includes('flash=published'),
@@ -332,6 +405,31 @@ export async function smokeWeb({ user, mcp }) {
 		'listing gone after unpublish',
 	)
 	log('packages form', 'install refusal shown; publish/unpublish toggle the public listing')
+	const detailPublished = await browser.post(packageHref, {
+		action: 'publish',
+		name: pkgName,
+		csrf,
+	})
+	assert(
+		detailPublished.status === 303 && detailPublished.location?.includes(`${packageHref}?flash=published`),
+		'publish from package detail redirects to the detail page',
+		detailPublished,
+	)
+	const detailUnpublished = await browser.post(packageHref, {
+		action: 'unpublish',
+		name: pkgName,
+		csrf,
+	})
+	assert(
+		detailUnpublished.status === 303 && detailUnpublished.location?.includes(`${packageHref}?flash=unpublished`),
+		'unpublish from package detail redirects to the detail page',
+		detailUnpublished,
+	)
+	assert(
+		(await fetch(`${baseUrl}/community/${encodeURIComponent(pkgName)}`)).status === 404,
+		'detail unpublish removes the community listing',
+	)
+	log('package detail actions', 'publish and unpublish redirect to the package detail page')
 
 	// Password sign-in on a second browser, wrong password, lockout after 5 failures.
 	const second = new Browser()

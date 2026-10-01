@@ -179,7 +179,13 @@ export function AccountPackages(
 							cells: {
 								name: (
 									<>
-										<strong>{pkg.name}</strong>
+										<a
+											href={routes.accountPackageDetail.href({
+												name: pkg.name,
+											})}
+										>
+											<strong>{pkg.name}</strong>
+										</a>
 										{pkg.description ? (
 											<>
 												<br />

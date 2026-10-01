@@ -44,9 +44,11 @@ export function AccountJobs(handle: Handle<{ data: Data; pathname: string }>) {
 							cells: {
 								job: (
 									<>
-										<strong>
-											{job.packageName}/{job.jobName}
-										</strong>
+										<a href={routes.accountJobDetail.href({ jobId: job.id })}>
+											<strong>
+												{job.packageName}/{job.jobName}
+											</strong>
+										</a>
 										{job.description ? (
 											<>
 												<br />
