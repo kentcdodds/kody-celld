@@ -63,6 +63,10 @@ function statusColor(status: Data['memories'][number]['status']) {
 	}
 }
 
+function isWebUri(uri: string) {
+	return /^https?:\/\//i.test(uri)
+}
+
 function formatOptional(value: string | null) {
 	return value?.trim() ? value : '—'
 }
@@ -155,17 +159,21 @@ export function AccountMemories(
 						>
 							{d.selected.sourceUris.map((uri) => (
 								<li key={uri}>
-									<a
-										href={uri}
-										target="_blank"
-										rel="noreferrer"
-										mix={css({
-											color: colors.primary,
-											overflowWrap: 'anywhere',
-										})}
-									>
-										{uri}
-									</a>
+									{isWebUri(uri) ? (
+										<a
+											href={uri}
+											target="_blank"
+											rel="noreferrer"
+											mix={css({
+												color: colors.primary,
+												overflowWrap: 'anywhere',
+											})}
+										>
+											{uri}
+										</a>
+									) : (
+										<span mix={css({ overflowWrap: 'anywhere' })}>{uri}</span>
+									)}
 								</li>
 							))}
 						</ul>
@@ -285,9 +293,8 @@ export function AccountMemories(
 						columns={[
 							{ key: 'subject', label: 'Subject', primary: true },
 							{ key: 'status', label: 'Status' },
-							{ key: 'category', label: 'Category', drop: 2 },
-							{ key: 'tags', label: 'Tags', drop: 1 },
-							{ key: 'summary', label: 'Summary', drop: 3 },
+							{ key: 'category', label: 'Category' },
+							{ key: 'tags', label: 'Tags' },
 						]}
 						rows={d.memories.map((memory) => ({
 							id: memory.id,
@@ -301,7 +308,6 @@ export function AccountMemories(
 								),
 								category: memory.category ?? '—',
 								tags: <RecordChips items={memory.tags} empty="—" />,
-								summary: <span mix={clampedCellCss}>{memory.summary}</span>,
 							},
 						}))}
 						record={memoryRecord}

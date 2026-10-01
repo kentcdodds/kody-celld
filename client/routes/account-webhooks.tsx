@@ -56,24 +56,26 @@ export function AccountWebhooks(
 						columns={[
 							{ key: 'name', label: 'Webhook', primary: true },
 							{ key: 'package', label: 'Package' },
-							{ key: 'handle', label: 'Handle' },
 							{ key: 'status', label: 'Status' },
 							{ key: 'delivery', label: 'Last delivery', drop: 1 },
-							{ key: 'mode', label: 'Mode', drop: 2 },
-							{ key: 'verification', label: 'Verification', drop: 2 },
+							{ key: 'mode', label: 'Mode', drop: 3 },
+							{ key: 'verification', label: 'Verification', drop: 3 },
 						]}
 						rows={d.webhooks.map((webhook) => ({
 							id: webhook.id,
 							cells: {
 								name: (
-									<span mix={clampedCellCss}>
-										<strong>{webhook.name}</strong>
-										{webhook.description ? (
-											<>
-												<br />
-												<Muted small>{webhook.description}</Muted>
-											</>
-										) : null}
+									<span
+										mix={css({ display: 'grid', gap: spacing.xs, minWidth: 0 })}
+									>
+										<strong mix={clampedCellCss}>{webhook.name}</strong>
+										{webhook.handle ? (
+											<span mix={clampedCellCss} title={webhook.handle}>
+												<Code>{webhook.handle}</Code>
+											</span>
+										) : (
+											<Muted small>No URL minted</Muted>
+										)}
 									</span>
 								),
 								package: (
@@ -84,7 +86,6 @@ export function AccountWebhooks(
 										{webhook.packageName}
 									</a>
 								),
-								handle: webhook.handle ? <Code>{webhook.handle}</Code> : '—',
 								status: (
 									<span mix={css({ color: webhookStatusColor(webhook) })}>
 										{webhookStatusLabel(webhook)}
