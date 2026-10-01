@@ -293,7 +293,6 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 			userCell.packageGet(job.packageName),
 			userCell.jobRunList({ jobId: job.id, limit: 20 }),
 		])
-		const latestRun = runs[0] ?? null
 		return view(session, {
 			title: job.id,
 			current: url.pathname,
@@ -312,9 +311,9 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 					timezone: job.timezone,
 					enabled: job.enabled,
 					nextRunAt: job.nextRunAt,
-					lastRunAt: job.lastRunAt ?? latestRun?.finishedAt ?? latestRun?.startedAt ?? null,
-					lastStatus: job.lastStatus ?? latestRun?.status ?? null,
-					lastError: job.lastError ?? latestRun?.error ?? null,
+					lastRunAt: job.lastRunAt,
+					lastStatus: job.lastStatus,
+					lastError: job.lastError,
 				},
 				runs: runs.map((run) => ({
 					id: run.id,
