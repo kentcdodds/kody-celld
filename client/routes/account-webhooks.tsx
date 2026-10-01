@@ -1,5 +1,6 @@
 import { css, type Handle } from 'remix/ui'
 import { type AppLoaderData } from '#universal/loader-data.ts'
+import { routes } from '#universal/routes.ts'
 import { colors, spacing } from '#universal/styles/tokens.ts'
 import {
 	AccountManagementPanel,
@@ -80,7 +81,9 @@ export function AccountWebhooks(
 								),
 								package: (
 									<a
-										href={`/account/packages/${encodeURIComponent(webhook.packageName)}`}
+										href={routes.accountPackageDetail.href({
+											name: webhook.packageName,
+										})}
 										mix={clampedCellCss}
 									>
 										{webhook.packageName}
