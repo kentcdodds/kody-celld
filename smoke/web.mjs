@@ -11,6 +11,26 @@ function randomPassword() {
 	return `pw-${randomBytes(12).toString('hex')}`
 }
 
+function assertUniqueIds(html, path) {
+	const tags = html.match(/<[a-z][^>]*>/gi) ?? []
+	const ids = tags.flatMap((tag) => {
+		const id = /\bid="([^"]*)"/.exec(tag)?.[1]
+		return id === undefined ? [] : [id]
+	})
+	const counts = new Map()
+	for (const id of ids) counts.set(id, (counts.get(id) ?? 0) + 1)
+	const duplicates = [...counts].filter(([, count]) => count !== 1).map(([id]) => id)
+	assert(duplicates.length === 0, `${path} has unique IDs`, duplicates)
+
+	const labels = tags.flatMap((tag) => {
+		if (!/^<label\b/i.test(tag)) return []
+		const target = /\bfor="([^"]*)"/.exec(tag)?.[1]
+		return target === undefined ? [] : [target]
+	})
+	const unmatched = labels.filter((target) => counts.get(target) !== 1)
+	assert(unmatched.length === 0, `${path} label targets match exactly one ID`, unmatched)
+}
+
 export async function smokeWeb({ user, mcp }) {
 	// Unauthenticated surfaces.
 	const anon = new Browser()
@@ -28,6 +48,7 @@ export async function smokeWeb({ user, mcp }) {
 		'sign-in page renders',
 		signinPage.status,
 	)
+	assertUniqueIds(signinPage.text, '/signin')
 	assert(
 		!signinPage.text.includes('Email me a link') || signinPage.text.includes('name="intent" value="magic"'),
 		'magic form only when outbound email exists',
@@ -69,6 +90,7 @@ export async function smokeWeb({ user, mcp }) {
 		overview.status === 200 && overview.text.includes(user.email),
 		'account overview renders for the signed-in user',
 	)
+	assertUniqueIds(overview.text, '/account')
 	assert(overview.text.includes('password set'), 'overview shows password badge')
 	const csrf = hiddenInputs(overview.text).csrf
 	assert(csrf && csrf.length >= 32, 'overview carries a CSRF token')

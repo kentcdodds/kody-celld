@@ -63,7 +63,7 @@ type FieldProps = {
 export function Field(handle: Handle<FieldProps>) {
 	return () => {
 		const p = handle.props
-		const id = p.id ?? handle.id
+		const id = p.id ?? `field-${p.name}`
 		return (
 			<div mix={css(accountFieldCss)}>
 				<label for={id} mix={css(accountFieldLabelCss)}>
