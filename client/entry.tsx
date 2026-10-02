@@ -1,4 +1,4 @@
-import { run } from 'remix/ui'
+import { run } from 'remix/component'
 import { ConfirmSubmitButton } from '#client/confirm-submit-button.tsx'
 import { CopyTextButton } from '#client/copy-text-button.tsx'
 import { SiteHeader } from '#client/site-header.tsx'

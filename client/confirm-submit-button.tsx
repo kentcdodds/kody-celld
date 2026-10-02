@@ -1,4 +1,4 @@
-import { type Handle, clientEntry, css } from 'remix/ui'
+import { type Handle, clientEntry, css } from 'remix/component'
 import { createDoubleCheck } from '#client/double-check.ts'
 import { clientEntryId } from '#universal/client-entry.ts'
 import {

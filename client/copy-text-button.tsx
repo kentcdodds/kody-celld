@@ -1,4 +1,4 @@
-import { type Handle, clientEntry, css } from 'remix/ui'
+import { type Handle, clientEntry, css } from 'remix/component'
 import { clientEntryId } from '#universal/client-entry.ts'
 import { writeClipboardText } from '#client/clipboard.ts'
 import { on } from '#client/event-mixin.ts'

@@ -1,4 +1,4 @@
-import { css, type Handle } from 'remix/ui'
+import { css, type Handle } from 'remix/component'
 import { type AppLoaderData } from '#universal/loader-data.ts'
 import { colors, spacing } from '#universal/styles/tokens.ts'
 import { TimestampValue } from './account-management-components.tsx'

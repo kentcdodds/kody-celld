@@ -3,8 +3,8 @@
 kody-celld ships a server-rendered web UI so that people who self-host it do
 not have to drive everything with `curl` and an admin token. It is built on the
 same stack and design system as [kentcdodds/kody](https://github.com/kentcdodds/kody)
-— Remix 3 (`remix/ui` components, `remix/routes` typed routes,
-`remix/ui/server` streaming SSR) with a Vite-built browser bundle — so that
+— Remix 3 (`remix/component` components, `remix/routes` typed routes,
+`remix/component/server` streaming SSR) with a Vite-built browser bundle — so that
 upstream UI changes can be ported with a path strip (see
 [Porting UI changes from kody](#porting-ui-changes-from-kody)). Every page is
 still a plain HTML form posted back to the same route and works with
@@ -122,13 +122,13 @@ log with `via: 'console'`.
 
 The layout mirrors `packages/worker/` in kody so files line up one-to-one:
 
-| kody-celld                            | kody (`packages/worker/`)   | What lives there                                                                                                       |
-| ------------------------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `client/`                             | `client/`                   | `remix/ui` components: `app-root.tsx` (shell + route dispatch), `routes/*.tsx` (one per page), header, footer, islands |
-| `universal/`                          | `universal/`                | code shared by Worker and browser: `routes.ts` (typed routes), `loader-data.ts` (page payloads), `styles/`, icons      |
-| `src/app/`                            | `src/app/`                  | Worker-side SSR: `render.tsx` (`renderPage`), `ssr-document.tsx`, `security-headers.ts`, `ssr-stubs/`                  |
-| `public/`                             | `public/`                   | static assets served by celld: `styles.css`, `fonts/`, `page-init.js`, `build/` (Vite output, git-ignored)             |
-| `src/web/*.ts`, `src/oauth/routes.ts` | `src/app/routes/*` handlers | request handling: auth gates, form parsing, mutations; they build an `AppLoaderData` and call `renderPage()`           |
+| kody-celld                            | kody (`packages/worker/`)   | What lives there                                                                                                              |
+| ------------------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `client/`                             | `client/`                   | `remix/component` components: `app-root.tsx` (shell + route dispatch), `routes/*.tsx` (one per page), header, footer, islands |
+| `universal/`                          | `universal/`                | code shared by Worker and browser: `routes.ts` (typed routes), `loader-data.ts` (page payloads), `styles/`, icons             |
+| `src/app/`                            | `src/app/`                  | Worker-side SSR: `render.tsx` (`renderPage`), `ssr-document.tsx`, `security-headers.ts`, `ssr-stubs/`                         |
+| `public/`                             | `public/`                   | static assets served by celld: `styles.css`, `fonts/`, `page-init.js`, `build/` (Vite output, git-ignored)                    |
+| `src/web/*.ts`, `src/oauth/routes.ts` | `src/app/routes/*` handlers | request handling: auth gates, form parsing, mutations; they build an `AppLoaderData` and call `renderPage()`                  |
 
 Import aliases are the same as upstream: `#client/*`, `#universal/*`,
 `#app/*` (`tsconfig.json`, `vite.config.ts`). Design tokens
@@ -146,7 +146,7 @@ Rendering flow for a page:
    page may show goes in there (never token values after issuance, never
    secret values, never session ids).
 2. `renderPage()` (`src/app/render.tsx`) streams `<AppRoot>` inside
-   `SsrDocument` with `renderToStream` from `remix/ui/server`, prepends the
+   `SsrDocument` with `renderToStream` from `remix/component/server`, prepends the
    doctype, applies the security headers, and lets the handler override
    status / headers.
 3. `client/app-root.tsx` renders the shell (skip link, `SiteHeader`, flash,
@@ -239,7 +239,7 @@ landing page and marketing sections, Cloudflare Turnstile, OG image rendering.
 
 - Responses set `Content-Security-Policy: default-src 'none'; …`,
   `X-Frame-Options: DENY`, `Referrer-Policy: same-origin`, `Cache-Control:
-no-store` (`src/app/security-headers.ts`). `remix/ui` escapes all
+no-store` (`src/app/security-headers.ts`). `remix/component` escapes all
   interpolated text and neutralises `javascript:` URLs in `href`, `src`,
   `action` and `formaction`.
   Raw HTML (`innerHTML`, `srcdoc`) only renders through an explicit

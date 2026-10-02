@@ -1,4 +1,4 @@
-import { type Handle } from 'remix/ui'
+import { type Handle } from 'remix/component'
 import { type AppLoaderData } from '#universal/loader-data.ts'
 import { Account } from './account.tsx'
 import { AccountActivity } from './account-activity.tsx'

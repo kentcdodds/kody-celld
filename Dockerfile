@@ -6,7 +6,7 @@
 #   deploy  — bundle and publish the Worker to the fleet bucket (one-shot job)
 #   node    — a fleet node that serves the bucket's current deployment
 ARG CELLD_VERSION=0.5.0
-ARG NODE_VERSION=22
+ARG NODE_VERSION=24
 
 FROM ghcr.io/denoland/celld:${CELLD_VERSION} AS celld
 
@@ -20,7 +20,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci && npm cache clean --force
 COPY . .
-# Browser bundle (Vite, remix/ui hydration) into public/build; celld serves
+# Browser bundle (Vite, remix/component hydration) into public/build; celld serves
 # public/ as static assets next to the Worker.
 RUN npm run build:client \
   && chmod +x docker/entrypoint.sh docker/healthcheck.sh && mkdir -p /data /var/lib/celld

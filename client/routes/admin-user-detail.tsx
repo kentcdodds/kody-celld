@@ -1,4 +1,4 @@
-import { css, type Handle } from 'remix/ui'
+import { css, type Handle } from 'remix/component'
 import { type AppLoaderData } from '#universal/loader-data.ts'
 import { routes } from '#universal/routes.ts'
 import { spacing } from '#universal/styles/tokens.ts'

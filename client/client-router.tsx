@@ -1,4 +1,4 @@
-import { type Handle } from 'remix/ui'
+import { type Handle } from 'remix/component'
 
 /**
  * Compatibility surface for upstream components that hook into kody's

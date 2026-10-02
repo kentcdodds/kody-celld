@@ -11,7 +11,7 @@
     "#universal/*": "./universal/*"
   },
   "engines": {
-    "node": ">=22.18"
+    "node": ">=24.3"
   },
   "scripts": {
     "dev": "npm run build:client && celld dev . --port 8787",
@@ -43,6 +43,6 @@
   },
   "dependencies": {
     "postal-mime": "3.0.0",
-    "remix": "3.0.0-rc.4"
+    "remix": "3.0.0"
   }
 }

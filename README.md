@@ -130,7 +130,7 @@ browser, SMTP, self-hosted npm CDN), the fleet path, and troubleshooting — is
 
 ## Run locally (no Docker)
 
-Prerequisites: Node ≥ 22.18, `celld` ≥ 0.5 on your `PATH`
+Prerequisites: Node ≥ 24.3, `celld` ≥ 0.5 on your `PATH`
 ([install](https://celld.dev/docs)), and `npm install` (provides `esbuild`,
 which celld uses to bundle the Worker).
 
@@ -371,8 +371,8 @@ src/lib/                  KodyError, limits/quotas from env, audit helper
 src/auth/                 bearer authentication (API + OAuth tokens), passwords (PBKDF2), cookies/CSRF, account store
 src/oauth/                MCP OAuth 2.1 authorization server: protocol rules, registry-cell store, routes
 src/web/                  browser route handlers: sign-in/setup, account pages, operator console, community (build loader data → renderPage)
-src/app/                  SSR: renderPage (remix/ui/server), document shell, security headers — mirrors kody's packages/worker/src/app
-client/                   remix/ui page components, shell, hydration islands — mirrors kody's packages/worker/client
+src/app/                  SSR: renderPage (remix/component/server), document shell, security headers — mirrors kody's packages/worker/src/app
+client/                   remix/component page components, shell, hydration islands — mirrors kody's packages/worker/client
 universal/                typed routes, loader-data contracts, design tokens/primitives/icons shared by Worker + browser — mirrors kody's universal/
 public/                   static assets served by celld: styles.css, fonts, page-init.js, build/ (vite output)
 src/mcp/                  JSON-RPC server (search, execute) + search ranking

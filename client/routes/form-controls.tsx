@@ -1,4 +1,4 @@
-import { css, type Handle, type RemixNode } from 'remix/ui'
+import { css, type Handle, type RemixNode } from 'remix/component'
 import { ConfirmSubmitButton } from '#client/confirm-submit-button.tsx'
 import { CopyTextButton } from '#client/copy-text-button.tsx'
 import {

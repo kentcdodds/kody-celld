@@ -1,4 +1,4 @@
-import { type Handle, clientEntry, css } from 'remix/ui'
+import { type Handle, clientEntry, css } from 'remix/component'
 import { clientEntryId } from '#universal/client-entry.ts'
 import { listenToRouterNavigation } from '#client/client-router.tsx'
 import { on } from '#client/event-mixin.ts'

@@ -1,4 +1,4 @@
-import { css, type Handle, type RemixNode } from 'remix/ui'
+import { css, type Handle, type RemixNode } from 'remix/component'
 import { type AppLoaderData } from '#universal/loader-data.ts'
 import { routes } from '#universal/routes.ts'
 import {

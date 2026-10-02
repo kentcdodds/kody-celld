@@ -1,4 +1,4 @@
-import { type Handle, css } from 'remix/ui'
+import { type Handle, css } from 'remix/component'
 import { SiteFooter } from '#client/site-footer.tsx'
 import { SiteHeader } from '#client/site-header.tsx'
 import { Toaster } from '#client/toaster.tsx'

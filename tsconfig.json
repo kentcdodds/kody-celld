@@ -10,7 +10,7 @@
     "lib": ["ES2022"],
     "types": ["@cloudflare/workers-types/experimental", "node"],
     "jsx": "react-jsx",
-    "jsxImportSource": "remix/ui",
+    "jsxImportSource": "remix/component",
     "paths": {
       "#app/*": ["./src/app/*"],
       "#client/*": ["./client/*"],

@@ -17,7 +17,7 @@ export default defineConfig({
 		],
 	},
 	oxc: {
-		jsx: { runtime: 'automatic', importSource: 'remix/ui' },
+		jsx: { runtime: 'automatic', importSource: 'remix/component' },
 	},
 	build: {
 		outDir: 'public/build',

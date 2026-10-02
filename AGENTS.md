@@ -60,7 +60,7 @@ them without re-testing on celld:
 
 `client/`, `universal/`, `public/` and `src/app/` are laid out like
 `packages/worker/` in kentcdodds/kody and use the same stack (Remix 3
-`remix/ui` + `remix/routes` + `remix/ui/server`, Vite client bundle served as
+`remix/component` + `remix/routes` + `remix/component/server`, Vite client bundle served as
 celld static assets). Design tokens, style primitives, `styles.css`, fonts,
 icons and the shared components are verbatim copies — port upstream diffs
 instead of restyling; page components adapt to our `AppLoaderData` shapes.

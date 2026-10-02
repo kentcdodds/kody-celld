@@ -1,4 +1,4 @@
-import { type Handle, type RemixNode } from 'remix/ui'
+import { type Handle, type RemixNode } from 'remix/component'
 import { CLIENT_ENTRY_HREF } from '#universal/client-entry.ts'
 
 export const STYLESHEET_HREF = '/styles.css'

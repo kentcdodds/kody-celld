@@ -1,4 +1,4 @@
-import { renderToStream } from 'remix/ui/server'
+import { renderToStream } from 'remix/component/server'
 import { AppRoot } from '#client/app-root.tsx'
 import { type AppSession } from '#universal/app-session.ts'
 import { CLIENT_ENTRY_HREF } from '#universal/client-entry.ts'
@@ -40,7 +40,7 @@ export function resolveClientEntry(entryId: string) {
 /**
  * Renders a full HTML document for a browser route: `SsrDocument` →
  * `AppRoot` (site or auth chrome, decided by the loader-data variant) → the
- * route component, streamed with `remix/ui/server` and the first-party
+ * route component, streamed with `remix/component/server` and the first-party
  * security headers (`packages/worker/src/app/ssr-render.tsx` upstream).
  * Text is escaped by the renderer; there is no raw-HTML escape hatch, so the
  * only way a string reaches the document is as text or an attribute value.

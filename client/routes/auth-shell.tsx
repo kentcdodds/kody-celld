@@ -1,4 +1,4 @@
-import { css, type Handle, type RemixNode } from 'remix/ui'
+import { css, type Handle, type RemixNode } from 'remix/component'
 import { routes } from '#universal/routes.ts'
 import { getSurfaceCardCss } from '#universal/styles/style-primitives.ts'
 import { colors, spacing } from '#universal/styles/tokens.ts'
