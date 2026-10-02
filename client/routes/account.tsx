@@ -122,7 +122,11 @@ export function Account(
 							: 'Set a password so you can sign in without a token or link.'
 					}
 				>
-					<PasswordForm form={d.passwordForm} csrf={d.csrf} />
+					<PasswordForm
+						form={d.passwordForm}
+						csrf={d.csrf}
+						username={d.email}
+					/>
 				</AccountManagementPanel>
 			</AccountManagementShell>
 		)

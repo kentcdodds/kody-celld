@@ -175,15 +175,23 @@ export function PasswordForm(
 	handle: Handle<{
 		form: PasswordFormView
 		csrf?: string
+		username: string
 		/** `md` on the auth card, `sm` (default) on the account page. */
 		size?: 'sm' | 'md'
 	}>,
 ) {
 	return () => {
-		const { form, csrf, size } = handle.props
+		const { form, csrf, username, size } = handle.props
 		return (
 			<StackedForm action={form.action}>
 				{csrf ? <CsrfInput token={csrf} /> : null}
+				<input
+					type="text"
+					autocomplete="username"
+					value={username}
+					hidden
+					readonly
+				/>
 				{form.requireCurrent ? (
 					<Field
 						label="Current password"
@@ -233,7 +241,7 @@ export function SigninLinkPassword(handle: Handle<{ data: LinkPasswordData }>) {
 					</>
 				}
 			>
-				<PasswordForm form={passwordForm} size="md" />
+				<PasswordForm form={passwordForm} size="md" username={email} />
 			</AuthShell>
 		)
 	}
