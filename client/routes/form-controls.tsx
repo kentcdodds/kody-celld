@@ -45,6 +45,7 @@ export function Hidden(handle: Handle<{ name: string; value: string }>) {
 type FieldProps = {
 	label: string
 	name: string
+	id?: string
 	type?: 'text' | 'email' | 'password' | 'url' | 'search'
 	value?: string
 	placeholder?: string
@@ -62,7 +63,7 @@ type FieldProps = {
 export function Field(handle: Handle<FieldProps>) {
 	return () => {
 		const p = handle.props
-		const id = `field-${p.name}`
+		const id = p.id ?? handle.id
 		return (
 			<div mix={css(accountFieldCss)}>
 				<label for={id} mix={css(accountFieldLabelCss)}>

@@ -64,6 +64,7 @@ export function Login(handle: Handle<{ data: LoginData }>) {
 							<Field
 								label="Email"
 								name="email"
+								id="signin-magic-email"
 								type="email"
 								autocomplete="username"
 								required
