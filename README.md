@@ -390,7 +390,8 @@ docker/                   entrypoint (single / deploy / node), healthcheck, Cadd
 docs/                     getting started, architecture, run paths, operations, decision record, provision matrix
 ```
 
-See [AGENTS.md](./AGENTS.md) for contributor rules.
+See [AGENTS.md](./AGENTS.md) for contributor rules and
+[CONTRIBUTING.md](./CONTRIBUTING.md) for the inbound CLA.
 
 ## License
 

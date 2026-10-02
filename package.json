@@ -16,10 +16,10 @@
   "scripts": {
     "dev": "npm run build:client && celld dev . --port 8787",
     "typecheck": "tsc -p tsconfig.worker-typecheck.json && tsc -p tsconfig.client.json",
-    "lint": "oxlint src client universal smoke examples scripts mail-bridge",
+    "lint": "oxlint src client universal smoke examples scripts tools mail-bridge",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "node --test 'src/**/*.test.ts' 'mail-bridge/*.test.mjs'",
+    "test": "node --test 'src/**/*.test.ts' 'tools/**/*.test.ts' 'mail-bridge/*.test.mjs'",
     "smoke": "node smoke/run.mjs",
     "smoke:cron": "node smoke/run.mjs --wait-cron",
     "smoke:ai-mock": "node smoke/ai-mock-server.mjs",

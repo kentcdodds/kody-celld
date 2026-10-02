@@ -2,3 +2,5 @@ node_modules
 .celld
 package-lock.json
 public/build
+# CLA recorder serializes with tabs; keep that file stable for git diffs.
+.github/cla-signers.json
