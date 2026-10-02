@@ -130,7 +130,7 @@ browser, SMTP, self-hosted npm CDN), the fleet path, and troubleshooting — is
 
 ## Run locally (no Docker)
 
-Prerequisites: Node ≥ 24.3, `celld` ≥ 0.5 on your `PATH`
+Prerequisites: Node ≥ 24.3, `celld` ≥ 0.6 on your `PATH`
 ([install](https://celld.dev/docs)), and `npm install` (provides `esbuild`,
 which celld uses to bundle the Worker).
 

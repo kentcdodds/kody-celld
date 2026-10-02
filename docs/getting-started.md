@@ -353,7 +353,7 @@ and `--advertise <private-host>:9000` per node.
 
 ```sh
 npm install                      # esbuild for celld's bundler
-# install celld: https://celld.dev/docs (a single binary)
+# install celld ≥ 0.6: https://celld.dev/docs (a single binary)
 npm run dev                      # celld dev . --port 8787; state in .celld/dev
 npm run smoke                    # in another terminal
 ```

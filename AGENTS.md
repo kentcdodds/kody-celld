@@ -46,9 +46,9 @@ too and paste the smoke summary line in the PR.
 celld is not workerd. Things this codebase already works around — do not undo
 them without re-testing on celld:
 
-- The Worker Loader resolves import specifiers by **exact registered name**
-  (`name` and `./name`); it does not walk `../`. Every module is registered
-  under its full path and every import is rewritten to `./<full path>`
+- The Worker Loader resolves relative imports from the importing module's
+  directory (celld 0.6, denoland/celld#227). Every module is registered under
+  its full path and every import is rewritten to a real relative path
   (`relativeSpecifier` in `module-graph.ts`).
 - Worker Loader modules must be **JS strings or wasm** — no `text`/`json`
   module types. JSON becomes `export default {...}`; docs are left out.

@@ -61,8 +61,8 @@ export default async () => {
 ```
 
 The module graph (`src/execute/module-graph.ts`) pulls the package's files into
-the isolate under `packages/<name>/<path>`, rewrites its internal relative
-imports to celld-friendly root paths, and stamps `packageStorage()` →
+the isolate under `packages/<name>/<path>`, rewrites its imports to paths
+relative to the importing module, and stamps `packageStorage()` →
 `packageStorage('<name>')`. Transitive `kody:` imports between packages work
 the same way. Cycles are rejected.
 

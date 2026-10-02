@@ -76,7 +76,7 @@ function options(overrides: Partial<NpmResolverOptions> = {}, cdn = origin): Npm
 }
 
 describe('resolveNpmModules', () => {
-	it('walks the graph on the configured CDN and rewrites imports to registered module names', async () => {
+	it('walks the graph on the configured CDN and rewrites imports to relative module paths', async () => {
 		const requests = fakeCdn(origin, cdnFiles)
 		const result = await resolveNpmModules(['nanoid@5.0.7'], options())
 		assert.equal(result.fetched, 3)
@@ -84,11 +84,8 @@ describe('resolveNpmModules', () => {
 		assert.ok(requests.every((href) => href.startsWith(origin)))
 		const entry = result.entryPaths.get('nanoid@5.0.7')
 		assert.equal(entry, 'npm/esm.test/nanoid@5.0.7___target_es2022.js')
-		assert.match(result.modules[entry!]!, /from '\.\/npm\/esm\.test\/nanoid@5\.0\.7\/es2022\/nanoid\.mjs'/)
-		assert.match(
-			result.modules['npm/esm.test/nanoid@5.0.7/es2022/nanoid.mjs']!,
-			/'\.\/npm\/esm\.test\/nanoid@5\.0\.7\/es2022\/util\.mjs'/,
-		)
+		assert.match(result.modules[entry!]!, /from '\.\/nanoid@5\.0\.7\/es2022\/nanoid\.mjs'/)
+		assert.match(result.modules['npm/esm.test/nanoid@5.0.7/es2022/nanoid.mjs']!, /'\.\/util\.mjs'/)
 		assert.ok(result.warnings.some((w) => w.includes('esm.test') && w.includes('3 downloaded')))
 	})
 

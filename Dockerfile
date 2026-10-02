@@ -5,7 +5,7 @@
 #   single  — one node with local durable state (NAS / laptop / single VPS)
 #   deploy  — bundle and publish the Worker to the fleet bucket (one-shot job)
 #   node    — a fleet node that serves the bucket's current deployment
-ARG CELLD_VERSION=0.5.0
+ARG CELLD_VERSION=0.6.1
 ARG NODE_VERSION=24
 
 FROM ghcr.io/denoland/celld:${CELLD_VERSION} AS celld

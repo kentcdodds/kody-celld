@@ -51,8 +51,8 @@ const fakeUserCell = {
 } as unknown as DurableObjectStub<UserCell>
 
 describe('relativeSpecifier', () => {
-	it('always yields a root-anchored specifier (celld resolves by exact name)', () => {
-		assert.equal(relativeSpecifier('packages/@t/counter/lib/bump.js', 'kody-runtime.js'), './kody-runtime.js')
+	it('yields a path relative to the importing module (celld 0.6)', () => {
+		assert.equal(relativeSpecifier('packages/@t/counter/lib/bump.js', 'kody-runtime.js'), '../../../../kody-runtime.js')
 		assert.equal(relativeSpecifier('main.js', 'packages/@t/counter/status.js'), './packages/@t/counter/status.js')
 	})
 })
@@ -78,11 +78,11 @@ describe('buildModuleGraph', () => {
 			graph.modules['main.js'],
 			"import inc from './packages/@t/counter/increment.js'\nexport default async () => inc()",
 		)
+		assert.match(graph.modules['packages/@t/counter/increment.js'] ?? '', /from '\.\/lib\/bump\.js'/)
 		assert.match(
-			graph.modules['packages/@t/counter/increment.js'] ?? '',
-			/from '\.\/packages\/@t\/counter\/lib\/bump\.js'/,
+			graph.modules['packages/@t/counter/lib/bump.js'] ?? '',
+			/from '\.\.\/\.\.\/\.\.\/\.\.\/kody-runtime\.js'/,
 		)
-		assert.match(graph.modules['packages/@t/counter/lib/bump.js'] ?? '', /from '\.\/kody-runtime\.js'/)
 		assert.match(graph.modules['packages/@t/counter/lib/bump.js'] ?? '', /packageStorage\("@t\/counter"\)/)
 		assert.equal('packages/@t/counter/README.md' in graph.modules, false)
 		assert.equal('packages/@t/counter/AGENTS.md' in graph.modules, false)
@@ -142,7 +142,7 @@ describe('buildModuleGraph', () => {
 		assert.match(viaKody.modules['main.js'] ?? '', /from '\.\/kody-sealed\.js'/)
 		assert.match(viaKody.modules[SEALED_MODULE_PATH] ?? '', /^const error = new Error\(/)
 		assert.match(viaKody.modules[SEALED_MODULE_PATH] ?? '', /secret_provider_entry_sealed:403/)
-		assert.match(viaKody.modules['packages/@t/vault/leak.js'] ?? '', /from '\.\/kody-sealed\.js'/)
+		assert.match(viaKody.modules['packages/@t/vault/leak.js'] ?? '', /from '\.\.\/\.\.\/\.\.\/kody-sealed\.js'/)
 		assert.doesNotMatch(viaKody.modules['main.js'] ?? '', /provider\.js/)
 
 		const status = await buildModuleGraph({

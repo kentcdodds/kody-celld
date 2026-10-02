@@ -50,15 +50,20 @@ function dirname(path: string) {
 /**
  * Import specifier that reaches module `to` from module `from`.
  *
- * Every module in the graph is registered under its full path, and every
- * import is rewritten to `./<full path>` regardless of where the importing
- * module lives. celld's Worker Loader resolves specifiers by exact name (it
- * registers each module as `name` and `./name`) and does not walk `../`
- * segments the way workerd does; root-anchored specifiers are valid under
- * both, so this is the portable form.
+ * celld 0.6 resolves relative imports from the importing module's directory
+ * (workerd parity, denoland/celld#227). A root-anchored `./<full path>` from a
+ * file under `packages/<name>/` would look for that path inside the package.
  */
-export function relativeSpecifier(_from: string, to: string) {
-	return `./${to.split('/').filter(Boolean).join('/')}`
+export function relativeSpecifier(from: string, to: string) {
+	const fromParts = dirname(from).split('/').filter(Boolean)
+	const toParts = to.split('/').filter(Boolean)
+	let shared = 0
+	while (shared < fromParts.length && shared < toParts.length && fromParts[shared] === toParts[shared]) {
+		shared++
+	}
+	const parts = [...Array.from({ length: fromParts.length - shared }, () => '..'), ...toParts.slice(shared)]
+	const spec = parts.join('/')
+	return spec.startsWith('.') ? spec : `./${spec}`
 }
 
 function resolveRelative(from: string, specifier: string) {

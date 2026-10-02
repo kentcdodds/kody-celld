@@ -10,7 +10,7 @@ export default async () => ({ ms: ms('2h'), day: format(new Date(), 'yyyy-MM-dd'
 
 The module graph resolves each bare specifier through an **esm.sh-compatible
 CDN** at graph-build time, follows the CDN's own `/…` imports, rewrites every
-specifier to the exact root-anchored name celld's Worker Loader needs, and
+specifier to a path relative to the importing module, and
 inlines the result into the isolate. Nothing is downloaded inside the sandbox
 and package code has no network access of its own — the fetch happens on the
 node, through the same policy for every user.

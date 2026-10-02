@@ -7,7 +7,7 @@ import { defaultEsmCdnOrigin, type NpmConfig } from './npm-config.ts'
 // resulting ES modules into the Worker Loader module map. There is no bundler
 // inside the runtime, so every module in the transitive graph is fetched and
 // stored under `npm/<host path>.js`, and absolute imports are rewritten to
-// root-anchored module specifiers. Limits keep a runaway graph from exhausting the isolate.
+// paths relative to the importing module. Limits keep a runaway graph from exhausting the isolate.
 
 const MAX_MODULES = 40
 const MAX_TOTAL_BYTES = 6 * 1024 * 1024
