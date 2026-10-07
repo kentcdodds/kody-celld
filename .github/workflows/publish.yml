@@ -77,7 +77,12 @@ jobs:
       KODY_ADMIN_TOKEN: publish-admin-token-${{ github.run_id }}
       KODY_MASTER_KEY: publish-master-key-${{ github.run_id }}-${{ github.run_attempt }}
       KODY_ALLOW_INSECURE_SECRET_HOSTS: host.docker.internal
+      KODY_EMAIL_DOMAIN: kody.local.test
+      KODY_EMAIL_INBOUND_TOKEN: publish-email-inbound-token-${{ github.run_id }}
+      KODY_EMAIL_OUTBOUND_PROVIDER: bridge
+      KODY_EMAIL_OUTBOUND_TOKEN: publish-email-bridge-token-${{ github.run_id }}
       KODY_EMAIL_OUTBOUND_URL: http://host.docker.internal:9796
+      KODY_BROWSER_ALLOW_PRIVATE_HOSTS: 127.0.0.1,localhost,host.docker.internal
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

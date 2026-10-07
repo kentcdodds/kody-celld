@@ -102,10 +102,10 @@ Hosts are normalised (lowercase, no port), IPv6 literals are bracketed, and
 
 ## Development
 
-`KODY_ALLOW_INSECURE_SECRET_HOSTS=127.0.0.1,localhost` (set in `wrangler.jsonc`
-for `celld dev`) lets the smoke suite inject into a plain-HTTP loopback echo
-server. Do not render it into a fleet config unless you are port-forwarding a
-test harness.
+`KODY_ALLOW_INSECURE_SECRET_HOSTS=127.0.0.1,localhost` (in `.dev.vars.example`
+for local `celld dev` / smoke) lets the smoke suite inject into a plain-HTTP
+loopback echo server. Do not set it on a single-node or fleet install unless
+you are port-forwarding a test harness.
 
 ## Current limitations
 

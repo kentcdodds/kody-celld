@@ -6,9 +6,9 @@
 // into capability output.
 //
 // Needs KODY_EMAIL_DOMAIN + KODY_EMAIL_INBOUND_TOKEN + the bridge outbound
-// provider on the server (wrangler.jsonc has loopback-only dev values). The
-// scenario runs its own fake bridge on SMOKE_BRIDGE_PORT (9796) and skips
-// itself when email is not configured on the target deployment.
+// provider on the server (local: .dev.vars from .dev.vars.example; Docker CI:
+// job env). The scenario runs its own fake bridge on SMOKE_BRIDGE_PORT (9796)
+// and skips itself when email is not configured on the target deployment.
 import { createServer } from 'node:http'
 import { createHash, randomBytes } from 'node:crypto'
 import path from 'node:path'

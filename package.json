@@ -1,6 +1,6 @@
 {
   "name": "kody-celld",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "license": "FSL-1.1-ALv2",
   "description": "Self-hosted Kody core (MCP search/execute, packages, secrets, jobs) running on Deno celld.",
@@ -14,7 +14,7 @@
     "node": ">=24.3"
   },
   "scripts": {
-    "dev": "npm run build:client && celld dev . --port 8787",
+    "dev": "node tools/dev/ensure-dev-vars.ts && npm run build:client && celld dev . --port 8787",
     "typecheck": "tsc -p tsconfig.worker-typecheck.json && tsc -p tsconfig.client.json",
     "lint": "oxlint src client universal smoke examples scripts tools mail-bridge",
     "format": "prettier --write .",

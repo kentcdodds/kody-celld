@@ -162,4 +162,21 @@ describe('emailConfigFromEnv', () => {
 		assert.equal(parsed?.outbound?.baseUrl, 'https://api.mailgun.net')
 		assert.equal(parsed?.outbound?.mailgunDomain, 'kody.example')
 	})
+
+	it('uses the Resend API default when the operator picks resend without a URL', () => {
+		const parsed = emailConfigFromEnv({
+			KODY_EMAIL_DOMAIN: 'mail.example.com',
+			KODY_EMAIL_INBOUND_TOKEN: 'c'.repeat(64),
+			KODY_EMAIL_OUTBOUND_PROVIDER: 'resend',
+			KODY_EMAIL_OUTBOUND_TOKEN: 're_test',
+		})
+		assert.equal(parsed?.outbound?.baseUrl, 'https://api.resend.com')
+		assert.equal(parsed?.inboundToken, 'c'.repeat(64))
+	})
+
+	it('leaves inboundToken null when the operator sets a domain without a token', () => {
+		const parsed = emailConfigFromEnv({ KODY_EMAIL_DOMAIN: 'mail.example.com' })
+		assert.equal(parsed?.domain, 'mail.example.com')
+		assert.equal(parsed?.inboundToken, null)
+	})
 })

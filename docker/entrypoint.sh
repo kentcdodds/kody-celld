@@ -21,8 +21,7 @@ done
 # Runtime limits / quota defaults (docs/operations.md) are plain KODY_* vars
 # that the Worker reads from its bindings; list the ones that are set.
 tunable_vars() {
-	compgen -v | grep -E '^KODY_(EXECUTE|RUN|RESPONSE|AUDIT|MCP|QUOTA|AI|SEARCH|VECTOR|QDRANT|BLOB|BROWSER|WEBHOOK|EMAIL|NPM|ESM|PACKAGE)_' |
-		grep -v '^KODY_BROWSER_ALLOW_PRIVATE_HOSTS$' || true
+	compgen -v | grep -E '^KODY_(EXECUTE|RUN|RESPONSE|AUDIT|MCP|QUOTA|AI|SEARCH|VECTOR|QDRANT|BLOB|BROWSER|WEBHOOK|EMAIL|NPM|ESM|PACKAGE)_' || true
 }
 
 random_hex() {
@@ -78,15 +77,19 @@ run_single() {
 		ln -s "$state_dir/celld" /app/.celld
 	fi
 	# .dev.vars overrides wrangler.jsonc vars; celld dev reads it beside the config.
+	# Email / private-host / insecure-host smoke values are not in wrangler.jsonc,
+	# so unset operator env leaves those features off (no public dev fallbacks).
 	umask 077
 	{
 		echo "KODY_ADMIN_TOKEN=$KODY_ADMIN_TOKEN"
 		echo "KODY_MASTER_KEY=$KODY_MASTER_KEY"
 		echo "KODY_PUBLIC_URL=$KODY_PUBLIC_URL"
-		echo "KODY_ALLOW_INSECURE_SECRET_HOSTS=${KODY_ALLOW_INSECURE_SECRET_HOSTS:-}"
-		echo "KODY_MASTER_KEY_PREVIOUS=${KODY_MASTER_KEY_PREVIOUS:-}"
-		# Empty on purpose: the wrangler.jsonc dev value allows loopback rendering for smoke only.
-		echo "KODY_BROWSER_ALLOW_PRIVATE_HOSTS=${KODY_BROWSER_ALLOW_PRIVATE_HOSTS:-}"
+		if [[ -n "${KODY_ALLOW_INSECURE_SECRET_HOSTS:-}" ]]; then
+			echo "KODY_ALLOW_INSECURE_SECRET_HOSTS=$KODY_ALLOW_INSECURE_SECRET_HOSTS"
+		fi
+		if [[ -n "${KODY_MASTER_KEY_PREVIOUS:-}" ]]; then
+			echo "KODY_MASTER_KEY_PREVIOUS=$KODY_MASTER_KEY_PREVIOUS"
+		fi
 		for tunable in $(tunable_vars); do
 			echo "$tunable=${!tunable}"
 		done

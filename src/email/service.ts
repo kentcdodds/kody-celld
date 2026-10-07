@@ -97,6 +97,15 @@ export async function handleEmailInbound(
 	}
 	const config = loadEmailConfig(env)
 	if (!config) return json({ error: 'email_not_configured', message: 'KODY_EMAIL_DOMAIN is not set.' }, 501)
+	if (!config.inboundToken) {
+		return json(
+			{
+				error: 'email_inbound_disabled',
+				message: 'Set KODY_EMAIL_INBOUND_TOKEN to enable /email/inbound/* (no default token).',
+			},
+			501,
+		)
+	}
 	if (!inboundAuthorized(request, url, config)) {
 		return json({ error: 'unauthorized', message: 'Missing or invalid inbound email token.' }, 401)
 	}
@@ -243,6 +252,15 @@ export async function handleEmailEvents(
 	}
 	const config = loadEmailConfig(env)
 	if (!config) return json({ error: 'email_not_configured', message: 'KODY_EMAIL_DOMAIN is not set.' }, 501)
+	if (!config.inboundToken) {
+		return json(
+			{
+				error: 'email_inbound_disabled',
+				message: 'Set KODY_EMAIL_INBOUND_TOKEN to enable /email/events/* (no default token).',
+			},
+			501,
+		)
+	}
 	if (!inboundAuthorized(request, url, config)) {
 		return json({ error: 'unauthorized', message: 'Missing or invalid inbound email token.' }, 401)
 	}

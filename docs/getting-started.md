@@ -359,8 +359,9 @@ npm run smoke                    # in another terminal
 ```
 
 The dev config in `wrangler.jsonc` uses placeholder operator values that only
-work over loopback. See the [README](../README.md) for the day-to-day
-workflow.
+work over loopback. `npm run dev` also seeds `.dev.vars` from
+`.dev.vars.example` (email smoke, private-host allowances). See the
+[README](../README.md) for the day-to-day workflow.
 
 ---
 

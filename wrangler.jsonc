@@ -1,6 +1,11 @@
 // Local development configuration for `celld dev .`
 // Fleet deployments render wrangler.fleet.jsonc (git-ignored) from this file via
 // `npm run fleet:render` so operator values never live in git. See docs/run-fleet.md.
+//
+// Loopback smoke defaults (email, private-host allowances, …) live in
+// `.dev.vars.example` and are copied to `.dev.vars` by `npm run dev`. They must
+// not appear here: single-node Docker runs `celld dev`, which would otherwise
+// inherit them when the operator leaves those env vars unset.
 {
   "name": "kody-celld",
   "main": "src/index.ts",
@@ -35,19 +40,12 @@
     { "tag": "v3", "new_sqlite_classes": ["NpmCacheCell"] },
   ],
   "vars": {
-    // Dev-only values. They are not secrets and only work against `celld dev`.
+    // Loopback-only operator placeholders for `celld dev`. They are not secrets.
+    // The Worker refuses non-loopback requests while these are in effect.
     // Fleet values come from KODY_ADMIN_TOKEN / KODY_MASTER_KEY env at render time.
+    // Single-node Docker always overrides them via .dev.vars from /data/kody.env.
     "KODY_ADMIN_TOKEN": "dev-admin-token",
     "KODY_MASTER_KEY": "dev-master-key-only-for-celld-dev",
     "KODY_PUBLIC_URL": "http://127.0.0.1:8787",
-    "KODY_ALLOW_INSECURE_SECRET_HOSTS": "127.0.0.1,localhost",
-    // Lets local smoke render the loopback fixture server; production leaves this unset.
-    "KODY_BROWSER_ALLOW_PRIVATE_HOSTS": "127.0.0.1,localhost,host.docker.internal",
-    // Dev-only email: inboxes on kody.local.test, smoke/email.mjs runs a loopback mail bridge.
-    "KODY_EMAIL_DOMAIN": "kody.local.test",
-    "KODY_EMAIL_INBOUND_TOKEN": "dev-email-inbound-token-only-for-celld-dev",
-    "KODY_EMAIL_OUTBOUND_PROVIDER": "bridge",
-    "KODY_EMAIL_OUTBOUND_URL": "http://127.0.0.1:9796",
-    "KODY_EMAIL_OUTBOUND_TOKEN": "dev-email-bridge-token-only-for-celld-dev",
   },
 }

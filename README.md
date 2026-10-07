@@ -148,8 +148,10 @@ npm run smoke:cron   # same, plus waits (~60s) for celld's real cron trigger to 
 
 The dev config ships placeholder `KODY_ADMIN_TOKEN` / `KODY_MASTER_KEY` values
 in `wrangler.jsonc`. They only work against loopback: the Worker refuses to
-serve non-loopback requests while those placeholders are in effect. Put real
-values in a `.dev.vars` file (git-ignored) if you want to expose a dev node.
+serve non-loopback requests while those placeholders are in effect. `npm run
+dev` seeds a git-ignored `.dev.vars` from `.dev.vars.example` (email smoke,
+private-host allowances); put real operator values there if you want to expose
+a dev node.
 
 > `celld dev` rebuilds on any project file change, including edits under
 > `smoke/`; pass `--watch-ignore 'smoke/**'` if you edit tests while a smoke run

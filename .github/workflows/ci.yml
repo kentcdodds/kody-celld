@@ -36,8 +36,14 @@ jobs:
       # The secrets scenario's echo server runs on the runner; the container
       # reaches it over http as host.docker.internal.
       KODY_ALLOW_INSECURE_SECRET_HOSTS: host.docker.internal
-      # The email scenario's fake mail bridge also runs on the runner.
+      # Email / browser smoke defaults (not in wrangler.jsonc — single-node would
+      # inherit them). The fake mail bridge runs on the runner.
+      KODY_EMAIL_DOMAIN: kody.local.test
+      KODY_EMAIL_INBOUND_TOKEN: ci-email-inbound-token-${{ github.run_id }}
+      KODY_EMAIL_OUTBOUND_PROVIDER: bridge
+      KODY_EMAIL_OUTBOUND_TOKEN: ci-email-bridge-token-${{ github.run_id }}
       KODY_EMAIL_OUTBOUND_URL: http://host.docker.internal:9796
+      KODY_BROWSER_ALLOW_PRIVATE_HOSTS: 127.0.0.1,localhost,host.docker.internal
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

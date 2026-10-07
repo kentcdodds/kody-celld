@@ -1,0 +1,16 @@
+# Loopback-only smoke defaults for `npm run dev`. Copied to `.dev.vars` (git-ignored)
+# when that file is missing. Do not put these in wrangler.jsonc — single-node Docker
+# runs `celld dev` and would inherit them on a default install.
+#
+# Operator placeholders (admin token / master key / public URL) stay in wrangler.jsonc
+# and are overridden here only when you need non-placeholder values on a exposed node.
+
+KODY_ALLOW_INSECURE_SECRET_HOSTS=127.0.0.1,localhost
+KODY_BROWSER_ALLOW_PRIVATE_HOSTS=127.0.0.1,localhost,host.docker.internal
+
+# Email smoke (smoke/email.mjs): inboxes on kody.local.test, fake bridge on :9796.
+KODY_EMAIL_DOMAIN=kody.local.test
+KODY_EMAIL_INBOUND_TOKEN=dev-email-inbound-token-only-for-celld-dev
+KODY_EMAIL_OUTBOUND_PROVIDER=bridge
+KODY_EMAIL_OUTBOUND_URL=http://127.0.0.1:9796
+KODY_EMAIL_OUTBOUND_TOKEN=dev-email-bridge-token-only-for-celld-dev

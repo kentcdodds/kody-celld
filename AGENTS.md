@@ -30,8 +30,10 @@ too and paste the smoke summary line in the PR.
   or session ids into loader data except the one-time reveal at issuance.
 - **No real secret values in code, docs, fixtures, or smoke output.** Smoke
   tests generate random values at runtime and assert with SHA-256 digests.
-  `wrangler.jsonc` vars are loopback-only placeholders; fleet values are
-  rendered into the git-ignored `wrangler.fleet.jsonc`.
+  `wrangler.jsonc` vars are only the loopback operator placeholders (admin /
+  master / public URL). Smoke-only values (email, private-host allowances)
+  live in `.dev.vars.example` → `.dev.vars` for `npm run dev`; fleet values
+  are rendered into the git-ignored `wrangler.fleet.jsonc`.
 - **Two MCP tools only.** `search` and `execute`. New behaviour is a new
   capability in `src/capabilities/*` (picked up by `search`), not a new tool.
 - **Package provenance is structural.** `packageStorage()` in a saved package is

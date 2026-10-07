@@ -157,7 +157,7 @@ recommendation. On a fleet, run the bridge on any host that can reach a node
 | Variable                                                                                           | Default      | Notes                                                                                                                              |
 | -------------------------------------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
 | `KODY_EMAIL_DOMAIN`                                                                                | —            | Enables email. Every inbox is `<local>@<domain>`.                                                                                  |
-| `KODY_EMAIL_INBOUND_TOKEN`                                                                         | —            | Shared token for `/email/inbound/*` and `/email/events/*`.                                                                         |
+| `KODY_EMAIL_INBOUND_TOKEN`                                                                         | —            | Required for inbound/events. Without it those routes return `501 email_inbound_disabled` (no default).                             |
 | `KODY_EMAIL_MAILGUN_SIGNING_KEY`                                                                   | —            | Also verify Mailgun's `timestamp`/`token`/`signature` on inbound.                                                                  |
 | `KODY_EMAIL_OUTBOUND_PROVIDER`                                                                     | `none`       | `none`, `bridge`, `resend`, `postmark`, `mailgun`, `sendgrid`.                                                                     |
 | `KODY_EMAIL_OUTBOUND_URL`                                                                          | per provider | Bridge base URL (required for `bridge`); API base override otherwise.                                                              |
@@ -169,9 +169,14 @@ recommendation. On a fleet, run the bridge on any host that can reach a node
 | `KODY_QUOTA_EMAIL_MESSAGES`, `KODY_QUOTA_EMAIL_SENDS_PER_DAY`, `KODY_QUOTA_EMAIL_RECEIVES_PER_DAY` | `0`          | Per-user quotas; `0` = unlimited.                                                                                                  |
 | `MAIL_BRIDGE_*`                                                                                    |              | `TOKEN`, `SMTP_URL`, `HOSTNAME`, `SMTP_PORT` (25), `HTTP_PORT` (8025), `BIND`, `MAX_BYTES`, `TLS_CERT`/`TLS_KEY`, `REPORT_EVENTS`. |
 
-`wrangler.jsonc` ships loopback-only development placeholders
-(`kody.local.test`, `bridge` at `http://127.0.0.1:9796`) so `npm run dev` has
-email enabled for the smoke tests; they are not credentials.
+Local `npm run dev` enables email for smoke via `.dev.vars` (seeded from
+`.dev.vars.example`: `kody.local.test`, bridge at `http://127.0.0.1:9796`).
+Those values are not in `wrangler.jsonc`, so a default single-node Docker
+install leaves email off until you set `KODY_EMAIL_*`. Without
+`KODY_EMAIL_INBOUND_TOKEN`, `/email/inbound/*` and `/email/events/*` answer
+`501 email_inbound_disabled` (no default token). Outbound `resend` /
+`postmark` / `mailgun` / `sendgrid` use each provider's public API base when
+`KODY_EMAIL_OUTBOUND_URL` is unset; `bridge` still requires the URL.
 
 ## Smoke coverage
 
