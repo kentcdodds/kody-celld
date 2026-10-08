@@ -89,5 +89,7 @@ Failed runs can be soft-triaged, as in kody (`docs/use/activity.md`):
 
 When a job run succeeds, earlier **open** errors of the same job are marked
 `resolved` (`triagedBy: "system:auto-resolve"`); runs you ignored are left as
-they are. The Activity page (`/account/runs`) shows the same counts, opens on
+they are. Job runs recorded before this feature carry no job id, so their
+errors stay open until you triage them (one `runUpdateBulk` call with a
+`packageName` filter clears them). The Activity page (`/account/runs`) shows the same counts, opens on
 Open errors when there are any, and has Ignore / Resolve / Reopen buttons.
