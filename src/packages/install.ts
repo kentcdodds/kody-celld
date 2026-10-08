@@ -230,6 +230,44 @@ export function describePackageSource(source: PackageSource) {
 	return source.subdir ? `${source.url}#${source.subdir}` : source.url
 }
 
+const fullCommitSha = /^[0-9a-f]{40}$/i
+
+/** Commit SHA embedded in a final codeload URL after GitHub resolves HEAD/branch → SHA. */
+export function commitShaFromCodeloadUrl(url: string): string | undefined {
+	try {
+		const parts = new URL(url).pathname.split('/').filter(Boolean)
+		const tar = parts.findIndex((part) => part === 'tar.gz' || part === 'legacy.tar.gz')
+		const ref = tar >= 0 ? parts[tar + 1] : undefined
+		return ref && fullCommitSha.test(ref) ? ref.toLowerCase() : undefined
+	} catch {
+		return undefined
+	}
+}
+
+/**
+ * Rewrite a github:/kody: source string so its ref is an immutable commit SHA.
+ * Preview links and install forms use this so Install fetches the same tree the
+ * explorer showed (HEAD may have moved). Non-git sources are returned unchanged.
+ */
+export function pinPackageSourceToCommit(sourceText: string, commit: string | null | undefined): string {
+	if (!commit || !fullCommitSha.test(commit)) return sourceText
+	const sha = commit.toLowerCase()
+	try {
+		const source = parsePackageSource(sourceText)
+		if (source.kind === 'github') {
+			if (source.ref?.toLowerCase() === sha) return describePackageSource(source)
+			return describePackageSource({ ...source, ref: sha })
+		}
+		if (source.kind === 'kody') {
+			if (source.ref?.toLowerCase() === sha) return describePackageSource(source)
+			return describePackageSource({ ...source, ref: sha })
+		}
+	} catch {
+		return sourceText
+	}
+	return sourceText
+}
+
 export function githubTarballUrl(source: GithubSource) {
 	return `https://codeload.github.com/${source.owner}/${source.repo}/tar.gz/${encodeURIComponent(source.ref ?? 'HEAD')}`
 }
@@ -418,7 +456,7 @@ export type FetchedPackage = {
 	/** Provenance string stored as the package `source`. */
 	source: string
 	fetchedFrom: string
-	/** Immutable commit SHA when the source was a git clone. */
+	/** Immutable commit SHA when the source resolved to a git commit (clone or codeload). */
 	commit?: string
 }
 
@@ -524,7 +562,17 @@ export async function fetchPackageSource(
 		}
 		result = filesFromJson(text, source.subdir)
 	}
-	return { ...result, source: describePackageSource(source), fetchedFrom: downloaded.url }
+	const commit =
+		source.kind === 'github'
+			? (commitShaFromCodeloadUrl(downloaded.url) ??
+				(source.ref && fullCommitSha.test(source.ref) ? source.ref.toLowerCase() : undefined))
+			: undefined
+	return {
+		...result,
+		source: describePackageSource(source),
+		fetchedFrom: downloaded.url,
+		...(commit ? { commit } : {}),
+	}
 }
 
 export async function previewPackageSource(
@@ -535,7 +583,7 @@ export async function previewPackageSource(
 	return packagePreviewFromFetched(fetched)
 }
 
-/** Max characters of one package file returned for viewing (web file viewer, packagePreview `path`). */
+/** Max characters of one package file (MCP `packagePreview` path, web explorer display). */
 export const packageFileViewMaxChars = 200_000
 
 export type PackageFileView = { path: string; bytes: number; content: string; truncated: boolean }

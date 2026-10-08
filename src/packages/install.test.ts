@@ -7,6 +7,7 @@ import { describe, it } from 'node:test'
 import { KodyError } from '../lib/errors.ts'
 import {
 	assertAllowedSourceUrl,
+	commitShaFromCodeloadUrl,
 	defaultPackageSourceHosts,
 	describePackageSource,
 	fetchAllowed,
@@ -16,6 +17,7 @@ import {
 	packageFileView,
 	packageSourceHostsFromEnv,
 	parsePackageSource,
+	pinPackageSourceToCommit,
 	previewPackageSource,
 	type FetchLike,
 } from './install.ts'
@@ -273,6 +275,25 @@ describe('tar reading', () => {
 	})
 })
 
+const exampleCommit = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+describe('commit pin helpers', () => {
+	it('reads a SHA from the final codeload URL and pins github/kody sources', () => {
+		assert.equal(commitShaFromCodeloadUrl(`https://codeload.github.com/o/r/tar.gz/${exampleCommit}`), exampleCommit)
+		assert.equal(commitShaFromCodeloadUrl('https://codeload.github.com/o/r/tar.gz/HEAD'), undefined)
+		assert.equal(pinPackageSourceToCommit('github:o/hello', exampleCommit), `github:o/hello#${exampleCommit}`)
+		assert.equal(
+			pinPackageSourceToCommit('github:o/hello/packages/x#main', exampleCommit),
+			`github:o/hello/packages/x#${exampleCommit}`,
+		)
+		assert.equal(
+			pinPackageSourceToCommit(`github:o/hello#${exampleCommit}`, exampleCommit),
+			`github:o/hello#${exampleCommit}`,
+		)
+		assert.equal(pinPackageSourceToCommit('https://example.com/pkg.tgz', exampleCommit), 'https://example.com/pkg.tgz')
+	})
+})
+
 describe('fetchPackageSource', () => {
 	it('installs a GitHub tarball: strips the root dir, skips .git/node_modules/binary files', async () => {
 		const fetchImpl = fetchFor({
@@ -286,7 +307,25 @@ describe('fetchPackageSource', () => {
 		assert.equal(result.files['package.json'], manifest)
 		assert.equal(result.source, 'github:o/hello')
 		assert.equal(result.fetchedFrom, 'https://codeload.github.com/o/hello/tar.gz/HEAD')
+		assert.equal(result.commit, undefined)
 		assert.deepEqual(result.warnings, ['Skipped image.png: not UTF-8 text (packages hold text files only).'])
+	})
+
+	it('records the commit when codeload redirects HEAD to a SHA', async () => {
+		const fetchImpl = fetchFor({
+			'https://codeload.github.com/o/hello/tar.gz/HEAD': () =>
+				new Response(null, {
+					status: 302,
+					headers: { location: `https://codeload.github.com/o/hello/tar.gz/${exampleCommit}` },
+				}),
+			[`https://codeload.github.com/o/hello/tar.gz/${exampleCommit}`]: tgzResponse(githubTarball(packageFiles)),
+		})
+		const result = await fetchPackageSource(parsePackageSource('github:o/hello'), {
+			allowedHosts: defaultPackageSourceHosts,
+			fetch: fetchImpl,
+		})
+		assert.equal(result.commit, exampleCommit)
+		assert.equal(result.fetchedFrom, `https://codeload.github.com/o/hello/tar.gz/${exampleCommit}`)
 	})
 
 	it('roots the package at subdir and suggests directories when package.json is elsewhere', async () => {

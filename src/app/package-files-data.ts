@@ -15,6 +15,7 @@ import {
 } from '#universal/package-files.ts'
 import { type ServerTimingEntry } from '#worker/server-timing.ts'
 import { createInProcessHighlightFetcher } from '../highlight/binding.ts'
+import { packageFileViewMaxChars } from '../packages/install.ts'
 
 /**
  * Server half of kody's files explorer (kody: packages/worker/src/app/package-files-data.ts).
@@ -51,15 +52,19 @@ export function withoutMediaPreview(
 /**
  * kody-celld: the explorer island carries the file in its props and the Copy button
  * again, so very large files (lockfiles, bundles) are cut for display, as the previous
- * file viewer did. The header still shows the real size (`contentByteLength`).
+ * file viewer did. The header still shows the real size (`contentByteLength`). The
+ * truncated notice is a separate loader field so Copy does not include it.
  */
-const maxDisplayChars = 200_000
-
-export function withDisplayCap(view: PackageFilesView): PackageFilesView {
-	if (!view.content || view.content.length <= maxDisplayChars) return view
+export function withDisplayCap(view: PackageFilesView): PackageFilesView & {
+	contentTruncated: boolean
+} {
+	if (!view.content || view.content.length <= packageFileViewMaxChars) {
+		return { ...view, contentTruncated: false }
+	}
 	return {
 		...view,
-		content: `${view.content.slice(0, maxDisplayChars)}\n\n… truncated: showing the first 200,000 characters of this file.\n`,
+		content: view.content.slice(0, packageFileViewMaxChars),
+		contentTruncated: true,
 	}
 }
 
@@ -70,7 +75,7 @@ async function toLoaderData(input: {
 	backHref: string
 	backLabel: string
 	filesBasePath: string
-	view: PackageFilesView
+	view: PackageFilesView & { contentTruncated?: boolean }
 	serverTiming?: Array<ServerTimingEntry>
 }): Promise<PackageFilesLoaderData> {
 	const contentKind = input.view.contentKind
@@ -110,6 +115,7 @@ async function toLoaderData(input: {
 		contentKind,
 		language,
 		contentByteLength: input.view.contentByteLength,
+		contentTruncated: input.view.contentTruncated === true,
 		mediaHref: null,
 		contentFences,
 		// kody-celld: a plain result is the content again; the explorer rebuilds it from `content`.

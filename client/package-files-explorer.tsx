@@ -402,6 +402,12 @@ function renderContent(data: PackageFilesLoaderData): RemixNode {
 					/>
 				) : null}
 			</div>
+			{/* kody-celld: truncation notice stays outside content so Copy is clean. */}
+			{data.contentTruncated ? (
+				<p mix={css(truncationNoticeCss)} data-testid="package-files-truncated">
+					Showing the first 200,000 characters of this file.
+				</p>
+			) : null}
 			{renderFilePreview(data, heading, body)}
 		</div>
 	)
@@ -804,6 +810,15 @@ const contentToolbarCss = {
 	gap: spacing.sm,
 	padding: `${spacing.sm} ${spacing.md}`,
 	borderBottom: `1px solid ${colors.border}`,
+}
+
+// kody-celld: display-cap notice sits above the body, outside Copy's value.
+const truncationNoticeCss = {
+	margin: 0,
+	padding: `${spacing.sm} ${spacing.md}`,
+	borderBottom: `1px solid ${colors.border}`,
+	fontSize: typography.fontSize.sm,
+	color: colors.textMuted,
 }
 
 const contentHeadingWrapCss = {

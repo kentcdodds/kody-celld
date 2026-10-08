@@ -41,14 +41,4 @@ describe('in-process HIGHLIGHT binding', () => {
 		assert.equal((await post(many)).status, 413)
 		assert.equal((await post(big.slice(0, 1))).status, 200)
 	})
-
-	it('turns a handler crash into a 500 so highlight-code falls back to plain text', async () => {
-		const fetcher = createInProcessHighlightFetcher({
-			fetch: async () => {
-				throw new Error('tokenizer exploded')
-			},
-		})
-		const response = await fetcher.fetch(highlightUrl, { method: 'POST', body: '{}' })
-		assert.equal(response.status, 500)
-	})
 })

@@ -1,5 +1,6 @@
 import { css, type Handle } from 'remix/component'
 import { PackageFilesExplorerIsland } from '#client/package-files-explorer-island.tsx'
+import { getPageContainerCss } from '#client/page-layout.ts'
 import { AccountManagementMessage } from './account-management-components.tsx'
 import {
 	Actions,
@@ -15,18 +16,13 @@ import {
 import { type AppLoaderData } from '#universal/loader-data.ts'
 import { routes } from '#universal/routes.ts'
 import { spacing } from '#universal/styles/tokens.ts'
-import {
-	layoutMaxWidths,
-	pageGutter,
-} from '#universal/styles/style-primitives.ts'
 
 type Data = Extract<AppLoaderData, { page: 'accountPackagePreviewFiles' }>
 
-// Same width and gutter as kody's explorer <article>, so the summary lines up with the tree.
+// Shared page box (width: 100% is load-bearing) so the summary lines up with the tree.
 const summaryCss = {
-	maxWidth: layoutMaxWidths.extended,
-	marginInline: 'auto',
-	padding: `${spacing.lg} ${pageGutter} 0`,
+	...getPageContainerCss('app'),
+	paddingTop: spacing.lg,
 	display: 'grid',
 	gap: spacing.md,
 }

@@ -1,12 +1,9 @@
 import { css, type Handle } from 'remix/component'
 import { PackageFilesExplorerIsland } from '#client/package-files-explorer-island.tsx'
+import { getPageShellCss } from '#client/page-layout.ts'
 import { type AppLoaderData } from '#universal/loader-data.ts'
 import { routes } from '#universal/routes.ts'
-import {
-	layoutMaxWidths,
-	mutedLinkCss,
-	pageGutter,
-} from '#universal/styles/style-primitives.ts'
+import { mutedLinkCss } from '#universal/styles/style-primitives.ts'
 import { colors, spacing, typography } from '#universal/styles/tokens.ts'
 import {
 	AccountManagementMessage,
@@ -108,7 +105,7 @@ export function AccountPackageDetail(
 								label: 'Created',
 								value: <TimestampValue value={pkg.createdAt} />,
 							},
-							{ label: 'Files', value: String(pkg.files.length) },
+							{ label: 'Files', value: String(pkg.fileCount) },
 							{
 								label: 'Community',
 								value: pkg.published ? (
@@ -231,11 +228,7 @@ export function AccountPackageDetail(
 }
 
 const pageCss = {
-	boxSizing: 'border-box' as const,
-	width: '100%',
-	maxWidth: layoutMaxWidths.extended,
-	marginInline: 'auto',
-	padding: `${spacing.lg} ${pageGutter} ${spacing['2xl']}`,
+	...getPageShellCss('app'),
 	display: 'grid',
 	gap: spacing.xl,
 	alignContent: 'start',

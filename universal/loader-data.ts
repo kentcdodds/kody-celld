@@ -152,7 +152,7 @@ export type PackageDetailView = {
 		verification: string | null
 		description: string | null
 	}>
-	files: Array<{ path: string; bytes: number }>
+	fileCount: number
 }
 
 export type JobRunView = {
@@ -271,6 +271,8 @@ export type PackageFilesLoaderData = {
 	contentKind: PackageFilesContentKind | null
 	language: string | null
 	contentByteLength?: number | null
+	/** kody-celld: content was cut for display; notice is shown outside Copy. */
+	contentTruncated?: boolean
 	mediaHref?: string | null
 	contentHighlighted?: HighlightedCode | null
 	contentFences?: Array<HighlightedCode>

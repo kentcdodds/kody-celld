@@ -6,11 +6,13 @@ import { loadEmailConfig } from '../email/service.ts'
 import { getMemoryCell } from '../capabilities/memory.ts'
 import { memoryStatuses } from '../cells/memory-cell.ts'
 import { defaultPublisher, renamePackageFiles } from '../capabilities/community.ts'
+import { fetchPackageSourceCached } from '../packages/fetched-package-cache.ts'
 import {
 	fetchPackageSource,
 	packageSourceHostsFromEnv,
 	parsePackageSource,
 	packagePreviewFromFetched,
+	pinPackageSourceToCommit,
 	previewPackageSource,
 	type PackagePreview,
 } from '../packages/install.ts'
@@ -173,12 +175,6 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 		])
 		const jobsByName = new Map(jobRecords.map((job) => [job.jobName, job]))
 		const listing = published.find((item) => item.name === pkg.name)
-		const files = Object.entries(pkg.files)
-			.map(([path, content]) => ({
-				path,
-				bytes: new TextEncoder().encode(content).byteLength,
-			}))
-			.sort((a, b) => a.path.localeCompare(b.path))
 		// kody: the package page is its files view (tree + README at the root).
 		const explorer = await loadPackageFilesData({
 			env: inProcessHighlightEnv(),
@@ -237,7 +233,7 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 							: null,
 						description: definition.description ?? null,
 					})),
-					files,
+					fileCount: Object.keys(pkg.files).length,
 				},
 			},
 		})
@@ -246,10 +242,21 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 	if (detailPath?.kind === 'packagePreviewFiles') {
 		if (post) return redirect(url.pathname)
 		const ref = decodePreviewSource(detailPath.source)
-		const fetched = await fetchPackageSource(parsePackageSource(ref.source, ref.subdir), {
+		const fetched = await fetchPackageSourceCached(parsePackageSource(ref.source, ref.subdir), {
 			allowedHosts: packageSourceHostsFromEnv(env),
 		})
 		const preview = packagePreviewFromFetched(fetched)
+		// Pin the commit into the URL so Install (and later file clicks) resolve the
+		// same tree the explorer showed; unpinned github:/kody: refs can drift.
+		const pinnedSource = pinPackageSourceToCommit(ref.source, preview.commit)
+		if (pinnedSource !== ref.source) {
+			return redirect(
+				routes.accountPackagePreviewFiles.href({
+					source: encodePreviewSource({ source: pinnedSource, subdir: ref.subdir }),
+					relativePath: detailPath.relativePath ?? undefined,
+				}),
+			)
+		}
 		const files = await loadPackageFilesData({
 			env: inProcessHighlightEnv(),
 			files: fetched.files,
@@ -589,6 +596,7 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 				registry(env).communityListByUser(session.user.id),
 			])
 			const publishedByName = new Map(published.map((listing) => [listing.name, listing]))
+			const pinnedPreviewSource = preview ? pinPackageSourceToCommit(preview.source, preview.commit) : null
 			return view(session, {
 				title: 'Packages',
 				current: '/account/packages',
@@ -599,13 +607,15 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 					sourceHosts: packageSourceHostsFromEnv(env),
 					installError,
 					installDraft: {
-						source: form.source ?? preview?.source ?? '',
+						// After a successful preview, draft the pinned source so Install
+						// matches Browse files (form.source is always set when preview is).
+						source: pinnedPreviewSource ?? form.source ?? '',
 						subdir: form.subdir ?? '',
 						as: form.as ?? '',
 					},
 					preview: preview
 						? {
-								source: preview.source,
+								source: pinnedPreviewSource ?? preview.source,
 								fetchedFrom: preview.fetchedFrom,
 								commit: preview.commit,
 								name: preview.name,
@@ -616,7 +626,10 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 								permissions: preview.permissions,
 								warnings: preview.warnings,
 								browseHref: routes.accountPackagePreviewFiles.href({
-									source: encodePreviewSource({ source: form.source ?? preview.source, subdir: form.subdir || null }),
+									source: encodePreviewSource({
+										source: pinnedPreviewSource ?? preview.source,
+										subdir: form.subdir || null,
+									}),
 								}),
 							}
 						: null,

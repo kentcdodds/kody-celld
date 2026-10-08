@@ -4,6 +4,7 @@ import {
 	inProcessHighlightEnv,
 	loadPackageFilesData,
 } from '#app/package-files-data.ts'
+import { packageFileViewMaxChars } from '../packages/install.ts'
 
 const files = {
 	'README.md': '# Demo\n\nRun it:\n\n```ts\nconst x = 1\n```\n',
@@ -45,6 +46,15 @@ describe('loadPackageFilesData', () => {
 	it('still refuses traversal after the decoded path is re-encoded', async () => {
 		assert.equal(await load('../README.md'), null)
 		assert.equal(await load('src/../../README.md'), null)
+	})
+
+	it('encoded .. segments stay literal after re-encoding (do not open README)', async () => {
+		// Without re-encoding, decodeURIComponent('%2E%2E') is '..' and normalize
+		// rejects. After re-encoding each segment, '%2E%2E' is a literal name —
+		// not parent traversal — so the real README is never selected.
+		assert.equal(await load('src/%2E%2E/README.md'), null)
+		assert.equal(await load('%2E%2E/README.md'), null)
+		assert.equal((await load('README.md'))?.contentPath, 'README.md')
 	})
 
 	it('opens the root on the README with highlighted fences', async () => {
@@ -100,25 +110,22 @@ describe('loadPackageFilesData', () => {
 		assert.equal(data?.content?.length, files['big.ts'].length)
 		assert.equal(data?.contentKind, 'code')
 		assert.equal(data?.contentHighlighted, null)
+		assert.equal(data?.contentTruncated, false)
 	})
 
-	it('very large files are truncated for display with a notice (kody-celld)', async () => {
-		const huge = 'x'.repeat(300_000)
+	it('very large files are truncated for display; notice is outside content', async () => {
+		const huge = 'x'.repeat(packageFileViewMaxChars + 100_000)
 		const data = await load('huge.txt', { files: { 'huge.txt': huge } })
-		assert.ok(data?.content?.startsWith('x'.repeat(200_000)))
-		assert.ok((data?.content?.length ?? 0) < 200_200)
-		assert.match(
-			data?.content ?? '',
-			/truncated: showing the first 200,000 characters/,
-		)
-		assert.equal(data?.contentByteLength, 300_000)
+		assert.equal(data?.content, 'x'.repeat(packageFileViewMaxChars))
+		assert.equal(data?.contentTruncated, true)
+		assert.equal(data?.contentByteLength, huge.length)
+		assert.doesNotMatch(data?.content ?? '', /truncated/)
 	})
 
 	it('unknown, traversal and prototype paths return null', async () => {
 		for (const path of [
 			'nope.js',
 			'../README.md',
-			'src/%2E%2E/README.md',
 			'constructor',
 			'__proto__',
 		]) {
