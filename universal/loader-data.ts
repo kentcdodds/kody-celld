@@ -374,10 +374,7 @@ export type AppLoaderData =
 	  }
 	| {
 			page: 'accountPackageFiles'
-			name: string
-			version: string
-			files: Array<{ path: string; bytes: number }>
-			selected: { path: string; content: string; truncated: boolean } | null
+			files: PackageFilesLoaderData
 	  }
 	| { page: 'accountJobs'; csrf: string; jobs: Array<JobView> }
 	| {

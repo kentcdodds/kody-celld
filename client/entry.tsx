@@ -1,6 +1,7 @@
 import { run } from 'remix/component'
 import { ConfirmSubmitButton } from '#client/confirm-submit-button.tsx'
 import { CopyTextButton } from '#client/copy-text-button.tsx'
+import { PackageFilesExplorerIsland } from '#client/package-files-explorer-island.tsx'
 import { SiteHeader } from '#client/site-header.tsx'
 import { Toaster } from '#client/toaster.tsx'
 
@@ -15,6 +16,7 @@ import { Toaster } from '#client/toaster.tsx'
 const islands: Record<string, Function> = {
 	ConfirmSubmitButton,
 	CopyTextButton,
+	PackageFilesExplorerIsland,
 	SiteHeader,
 	Toaster,
 }

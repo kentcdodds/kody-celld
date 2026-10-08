@@ -370,12 +370,28 @@ export async function smokeWeb({ user, mcp }) {
 		'package detail links its job and nested files',
 		packageDetail.status,
 	)
+	const filesRoot = await browser.get(`${packageHref}/files`)
+	assert(
+		filesRoot.status === 200 &&
+			filesRoot.text.includes('data-testid="package-files"') &&
+			filesRoot.text.includes('data-testid="package-files-markdown"') &&
+			filesRoot.text.includes(`href="${packageHref}/files/lib"`),
+		'package files root shows the tree and the rendered README',
+		filesRoot.status,
+	)
 	const filePage = await browser.get(`${packageHref}/files/lib/util.js`)
 	assert(
-		filePage.status === 200 && filePage.text.includes('nestedFile = "web smoke file"'),
-		'nested package file page shows selected content',
+		filePage.status === 200 &&
+			filePage.text.includes('data-testid="package-files-code"') &&
+			filePage.text.includes('class="shiki shiki-themes github-light github-dark"') &&
+			filePage.text.includes('--shiki-dark'),
+		'nested package file page shows Shiki-highlighted content',
 		filePage.status,
 	)
+	for (const bad of ['nope.js', '..%2Fpackage.json', 'constructor']) {
+		const missing = await browser.get(`${packageHref}/files/${bad}`)
+		assert(missing.status === 404, `package files 404 for ${bad}`, missing.status)
+	}
 	const jobPage = await browser.get(jobHref)
 	assert(
 		jobPage.status === 200 &&

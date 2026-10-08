@@ -17,6 +17,7 @@ import {
 } from '../packages/install.ts'
 import { parsePackageManifest } from '../packages/manifest.ts'
 import { renderPage } from '#app/render.tsx'
+import { inProcessHighlightEnv, loadPackageFilesData } from '#app/package-files-data.ts'
 import { type AppLoaderData, type PageFlash } from '#universal/loader-data.ts'
 import { routes } from '#universal/routes.ts'
 import { accountAliasLocation } from './account-aliases.ts'
@@ -235,29 +236,24 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 				status: 404,
 			})
 		}
-		const selected = detailPath.relativePath !== null ? packageFileView(pkg.files, detailPath.relativePath) : null
-		const files = Object.entries(pkg.files)
-			.map(([path, content]) => ({
-				path,
-				bytes: new TextEncoder().encode(content).byteLength,
-			}))
-			.sort((a, b) => a.path.localeCompare(b.path))
-		const filesHref = routes.accountPackageFiles.href({
-			name: detailPath.name,
-			...(detailPath.relativePath === null ? {} : { relativePath: detailPath.relativePath }),
+		if (post) return redirect(url.pathname)
+		const files = await loadPackageFilesData({
+			env: inProcessHighlightEnv(),
+			files: pkg.files,
+			selectedPath: detailPath.relativePath ?? '',
+			title: pkg.name,
+			backHref: routes.accountPackageDetail.href({ name: pkg.name }),
+			backLabel: pkg.name,
+			filesBasePath: routes.accountPackageFiles.href({ name: pkg.name }),
 		})
-		if (post) return redirect(filesHref)
+		if (!files) {
+			throw new KodyError('package_file_not_found', 'Package file was not found.', { status: 404 })
+		}
 		return view(session, {
 			title: `${pkg.name} files`,
 			current: url.pathname,
 			flash,
-			data: {
-				page: 'accountPackageFiles',
-				name: pkg.name,
-				version: pkg.version,
-				files,
-				selected,
-			},
+			data: { page: 'accountPackageFiles', files },
 		})
 	}
 
