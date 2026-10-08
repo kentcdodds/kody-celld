@@ -1,3 +1,6 @@
+import { type HighlightedCode } from '#universal/highlighted-code.ts'
+import { type PackageFilesContentKind } from '#universal/package-file-media.ts'
+
 /**
  * Page payloads the Worker renders and the browser hydrates. Everything here
  * must be plain JSON: it is serialized into the document for `clientEntry`
@@ -244,6 +247,43 @@ export type PasswordFormView = {
 	submit: string
 	requireCurrent: boolean
 	minLength: number
+}
+
+type PackageFilesChildLoaderData = {
+	name: string
+	path: string
+	kind: 'file' | 'directory'
+}
+
+/** Ported from kody's loader-data.ts — the shape `client/package-files-explorer.tsx` renders. */
+export type PackageFilesLoaderData = {
+	ok: true
+	title: string
+	backHref: string
+	backLabel: string
+	filesBasePath: string
+	selectedPath: string
+	kind: 'file' | 'directory'
+	paths: Array<string>
+	children: Array<PackageFilesChildLoaderData>
+	content: string | null
+	contentPath: string | null
+	contentKind: PackageFilesContentKind | null
+	language: string | null
+	contentByteLength?: number | null
+	mediaHref?: string | null
+	contentHighlighted?: HighlightedCode | null
+	contentFences?: Array<HighlightedCode>
+	username?: string
+	kodyId?: string
+	viewerIsOwner?: boolean
+	isPrivate?: boolean
+	isListed?: boolean
+	iconUrl?: string | null
+	imageBaseHref?: string | null
+	description?: string
+	/** True when `/@owner` is publicly reachable. Omit to keep the owner link. */
+	ownerProfilePublic?: boolean
 }
 
 export type AppLoaderData =
