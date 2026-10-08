@@ -19,24 +19,12 @@ import {
 	Hidden,
 	Lede,
 	Muted,
-	PreBlock,
 	StackedForm,
 	SubmitButton,
 } from './form-controls.tsx'
 import { RecordTable } from './record-table.tsx'
 
 type Data = Extract<AppLoaderData, { page: 'accountPackages' }>
-
-/** File names in the preview list are submit buttons that open the file below. */
-const fileButtonCss = {
-	background: 'none',
-	border: 0,
-	padding: 0,
-	font: 'inherit',
-	color: 'inherit',
-	cursor: 'pointer',
-	textAlign: 'left',
-} as const
 
 /** `/account/packages`: saved packages, preview/install from GitHub/URL/kody.codes, community publish. */
 export function AccountPackages(
@@ -138,49 +126,16 @@ export function AccountPackages(
 							{preview.readme.slice(0, 4000)}
 							{preview.readme.length > 4000 ? '\n…' : ''}
 						</pre>
-						<details open={preview.selectedFile !== null}>
-							<summary>Files ({preview.fileList.length})</summary>
-							<form method="post" action={action}>
-								<CsrfInput token={d.csrf} />
-								<Hidden name="action" value="preview" />
-								<Hidden
-									name="source"
-									value={d.installDraft.source || preview.source}
-								/>
-								<Hidden name="subdir" value={d.installDraft.subdir} />
-								<ul>
-									{preview.fileList.map((path) => (
-										<li key={path}>
-											<button
-												type="submit"
-												name="path"
-												value={path}
-												aria-current={
-													preview.selectedFile?.path === path
-														? 'true'
-														: undefined
-												}
-												mix={css(fileButtonCss)}
-											>
-												<Code>{path}</Code>
-											</button>
-										</li>
-									))}
-								</ul>
-							</form>
-						</details>
-						{preview.selectedFile ? (
-							<div>
-								<Lede>
-									<strong>{preview.selectedFile.path}</strong>{' '}
-									<Muted small>{preview.selectedFile.bytes} bytes</Muted>
-								</Lede>
-								<PreBlock>{preview.selectedFile.content}</PreBlock>
-								{preview.selectedFile.truncated ? (
-									<p>File content is truncated at 200,000 characters.</p>
-								) : null}
-							</div>
-						) : null}
+						<Lede>
+							<a href={preview.browseHref}>
+								Browse files ({preview.fileList.length})
+							</a>
+							<Muted small>
+								{' '}
+								— tree, highlighted code and rendered Markdown before you
+								install.
+							</Muted>
+						</Lede>
 						<StackedForm action={action}>
 							<CsrfInput token={d.csrf} />
 							<Hidden

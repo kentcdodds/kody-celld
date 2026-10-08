@@ -10,12 +10,12 @@ import {
 	fetchPackageSource,
 	packageSourceHostsFromEnv,
 	parsePackageSource,
-	packageFileView,
+	packagePreviewFromFetched,
 	previewPackageSource,
-	type PackageFileView,
 	type PackagePreview,
 } from '../packages/install.ts'
 import { parsePackageManifest } from '../packages/manifest.ts'
+import { decodePreviewSource, encodePreviewSource } from '../packages/preview-source.ts'
 import { renderPage } from '#app/render.tsx'
 import { inProcessHighlightEnv, loadPackageFilesData } from '#app/package-files-data.ts'
 import { type AppLoaderData, type PageFlash } from '#universal/loader-data.ts'
@@ -224,6 +224,48 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 						description: definition.description ?? null,
 					})),
 					files,
+				},
+			},
+		})
+	}
+
+	if (detailPath?.kind === 'packagePreviewFiles') {
+		if (post) return redirect(url.pathname)
+		const ref = decodePreviewSource(detailPath.source)
+		const fetched = await fetchPackageSource(parsePackageSource(ref.source, ref.subdir), {
+			allowedHosts: packageSourceHostsFromEnv(env),
+		})
+		const preview = packagePreviewFromFetched(fetched)
+		const files = await loadPackageFilesData({
+			env: inProcessHighlightEnv(),
+			files: fetched.files,
+			selectedPath: detailPath.relativePath ?? '',
+			title: preview.name,
+			backHref: routes.accountPackages.href(),
+			backLabel: 'Packages',
+			filesBasePath: routes.accountPackagePreviewFiles.href({ source: detailPath.source }),
+		})
+		if (!files) {
+			throw new KodyError('package_file_not_found', 'Package file was not found.', { status: 404 })
+		}
+		return view(session, {
+			title: `Preview ${preview.name}`,
+			current: url.pathname,
+			flash,
+			data: {
+				page: 'accountPackagePreviewFiles',
+				csrf: session.csrf,
+				files,
+				preview: {
+					source: ref.source,
+					subdir: ref.subdir ?? '',
+					fetchedFrom: preview.fetchedFrom,
+					commit: preview.commit,
+					name: preview.name,
+					version: preview.version,
+					description: preview.description,
+					warnings: preview.warnings,
+					permissions: preview.permissions,
 				},
 			},
 		})
@@ -477,7 +519,6 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 		case 'packages': {
 			let installError: string | null = null
 			let preview: PackagePreview | null = null
-			let previewFile: PackageFileView | null = null
 			if (post) {
 				const mutation = await handlePackageMutation({
 					action: form.action ?? '',
@@ -496,7 +537,6 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 						const source = parsePackageSource(form.source, form.subdir || null)
 						if (form.action === 'preview') {
 							preview = await previewPackageSource(source, { allowedHosts: packageSourceHostsFromEnv(env) })
-							if (form.path) previewFile = packageFileView(preview.files, form.path)
 						} else {
 							const fetched = await fetchPackageSource(source, { allowedHosts: packageSourceHostsFromEnv(env) })
 							const forkAs = form.action === 'fork' ? (form.as || '').trim() : ''
@@ -561,7 +601,9 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 								fileList: preview.fileList,
 								permissions: preview.permissions,
 								warnings: preview.warnings,
-								selectedFile: previewFile,
+								browseHref: routes.accountPackagePreviewFiles.href({
+									source: encodePreviewSource({ source: form.source ?? preview.source, subdir: form.subdir || null }),
+								}),
 							}
 						: null,
 					packages: packages.map((pkg) => {

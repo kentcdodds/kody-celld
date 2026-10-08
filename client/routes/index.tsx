@@ -26,6 +26,7 @@ import {
 } from './connect-oauth.tsx'
 import { ErrorPage } from './error-page.tsx'
 import { PackageFiles } from './package-files.tsx'
+import { PackagePreviewFiles } from './package-preview-files.tsx'
 import {
 	AdminLogin,
 	Login,
@@ -71,6 +72,8 @@ export function RouteView(
 				return <AccountPackageDetail data={data} pathname={pathname} />
 			case 'accountPackageFiles':
 				return <PackageFiles data={data} pathname={pathname} />
+			case 'accountPackagePreviewFiles':
+				return <PackagePreviewFiles data={data} pathname={pathname} />
 			case 'accountJobs':
 				return <AccountJobs data={data} pathname={pathname} />
 			case 'accountJobDetail':

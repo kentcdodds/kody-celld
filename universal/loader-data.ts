@@ -286,6 +286,24 @@ export type PackageFilesLoaderData = {
 	ownerProfilePublic?: boolean
 }
 
+export type PackagePreviewSummary = {
+	source: string
+	subdir: string
+	fetchedFrom: string
+	commit: string | null
+	name: string
+	version: string
+	description: string
+	warnings: Array<string>
+	permissions: {
+		jobs: Array<string>
+		webhooks: Array<string>
+		subscriptions: Array<string>
+		secretProvider: string | null
+		dependencies: Array<string>
+	}
+}
+
 export type AppLoaderData =
 	| {
 			page: 'login'
@@ -357,13 +375,7 @@ export type AppLoaderData =
 					dependencies: Array<string>
 				}
 				warnings: Array<string>
-				/** File opened from the preview's file list (re-fetched from the source, not saved). */
-				selectedFile: {
-					path: string
-					bytes: number
-					content: string
-					truncated: boolean
-				} | null
+				browseHref: string
 			} | null
 	  }
 	| {
@@ -374,6 +386,12 @@ export type AppLoaderData =
 	  }
 	| {
 			page: 'accountPackageFiles'
+			files: PackageFilesLoaderData
+	  }
+	| {
+			page: 'accountPackagePreviewFiles'
+			csrf: string
+			preview: PackagePreviewSummary
 			files: PackageFilesLoaderData
 	  }
 	| { page: 'accountJobs'; csrf: string; jobs: Array<JobView> }

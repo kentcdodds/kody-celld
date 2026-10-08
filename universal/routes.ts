@@ -26,6 +26,9 @@ export const routes = route({
 	accountPackages: '/account/packages',
 	accountPackageDetail: '/account/packages/:name',
 	accountPackageFiles: '/account/packages/:name/files(/*relativePath)',
+	// kody-celld: pre-install preview of a remote source in kody's files explorer.
+	accountPackagePreviewFiles:
+		'/account/packages/preview/:source/files(/*relativePath)',
 	accountJobs: '/account/jobs',
 	accountJobDetail: '/account/jobs/:jobId',
 	accountMemories: '/account/memories',

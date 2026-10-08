@@ -3,15 +3,26 @@ import { routes } from '#universal/routes.ts'
 
 const packageMatcher = createMatcher(routes.accountPackageDetail.pattern)
 const packageFilesMatcher = createMatcher(routes.accountPackageFiles.pattern)
+const packagePreviewFilesMatcher = createMatcher(routes.accountPackagePreviewFiles.pattern)
 const jobMatcher = createMatcher(routes.accountJobDetail.pattern)
 
 export type AccountDetailPath =
 	| { kind: 'package'; name: string }
 	| { kind: 'packageFiles'; name: string; relativePath: string | null }
+	| { kind: 'packagePreviewFiles'; source: string; relativePath: string | null }
 	| { kind: 'job'; jobId: string }
 
 export function matchAccountDetailPath(url: URL): AccountDetailPath | null {
 	try {
+		const previewFiles = packagePreviewFilesMatcher.match(url)
+		if (previewFiles) {
+			return {
+				kind: 'packagePreviewFiles',
+				source: previewFiles.params.source,
+				relativePath: previewFiles.params.relativePath ?? null,
+			}
+		}
+
 		const packageFiles = packageFilesMatcher.match(url)
 		if (packageFiles) {
 			return {
