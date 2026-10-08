@@ -48,6 +48,21 @@ export function withoutMediaPreview(
 	}
 }
 
+/**
+ * kody-celld: the explorer island carries the file in its props and the Copy button
+ * again, so very large files (lockfiles, bundles) are cut for display, as the previous
+ * file viewer did. The header still shows the real size (`contentByteLength`).
+ */
+const maxDisplayChars = 200_000
+
+export function withDisplayCap(view: PackageFilesView): PackageFilesView {
+	if (!view.content || view.content.length <= maxDisplayChars) return view
+	return {
+		...view,
+		content: `${view.content.slice(0, maxDisplayChars)}\n\n… truncated: showing the first 200,000 characters of this file.\n`,
+	}
+}
+
 // kody's toLoaderData, minus community / media / icon fields this project does not have.
 async function toLoaderData(input: {
 	env: HighlightEnv
@@ -68,7 +83,7 @@ async function toLoaderData(input: {
 		contentKind === 'markdown' && content
 			? await highlightMarkdownFences(input.env, content, highlightOptions)
 			: []
-	const contentHighlighted =
+	const highlighted =
 		contentKind === 'code' && content
 			? ((
 					await highlightSnippets(
@@ -97,7 +112,8 @@ async function toLoaderData(input: {
 		contentByteLength: input.view.contentByteLength,
 		mediaHref: null,
 		contentFences,
-		contentHighlighted,
+		// kody-celld: a plain result is the content again; the explorer rebuilds it from `content`.
+		contentHighlighted: highlighted?.plain ? null : highlighted,
 		imageBaseHref: null,
 	}
 }
@@ -118,6 +134,6 @@ export async function loadPackageFilesData(input: {
 	if (!view) return null
 	return toLoaderData({
 		...input,
-		view: withoutMediaPreview(view, input.files),
+		view: withDisplayCap(withoutMediaPreview(view, input.files)),
 	})
 }

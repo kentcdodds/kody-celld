@@ -27,6 +27,21 @@ describe('in-process HIGHLIGHT binding', () => {
 		assert.equal(response.status, 400)
 	})
 
+	it('refuses oversized batches with a 413 so highlight-code falls back to plain text', async () => {
+		const fetcher = createInProcessHighlightFetcher()
+		const post = (snippets: Array<{ code: string; lang: string }>) =>
+			fetcher.fetch(highlightUrl, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ snippets }),
+			})
+		const big = Array.from({ length: 5 }, () => ({ code: 'x'.repeat(49_000), lang: 'ts' }))
+		assert.equal((await post(big)).status, 413)
+		const many = Array.from({ length: 201 }, () => ({ code: 'const x = 1', lang: 'ts' }))
+		assert.equal((await post(many)).status, 413)
+		assert.equal((await post(big.slice(0, 1))).status, 200)
+	})
+
 	it('turns a handler crash into a 500 so highlight-code falls back to plain text', async () => {
 		const fetcher = createInProcessHighlightFetcher({
 			fetch: async () => {

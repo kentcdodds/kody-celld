@@ -77,10 +77,23 @@ describe('loadPackageFilesData', () => {
 		)
 	})
 
-	it('large files fall back to plain text', async () => {
+	it('large files fall back to plain text without a second copy of the content', async () => {
 		const data = await load('big.ts')
 		assert.equal(data?.content?.length, files['big.ts'].length)
-		assert.equal(data?.contentHighlighted?.plain, true)
+		assert.equal(data?.contentKind, 'code')
+		assert.equal(data?.contentHighlighted, null)
+	})
+
+	it('very large files are truncated for display with a notice (kody-celld)', async () => {
+		const huge = 'x'.repeat(300_000)
+		const data = await load('huge.txt', { files: { 'huge.txt': huge } })
+		assert.ok(data?.content?.startsWith('x'.repeat(200_000)))
+		assert.ok((data?.content?.length ?? 0) < 200_200)
+		assert.match(
+			data?.content ?? '',
+			/truncated: showing the first 200,000 characters/,
+		)
+		assert.equal(data?.contentByteLength, 300_000)
 	})
 
 	it('unknown, traversal and prototype paths return null', async () => {
