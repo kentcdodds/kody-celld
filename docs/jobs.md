@@ -94,7 +94,9 @@ older `created_at`, with `id` as a tie-break) are marked `resolved`
 (`triagedBy: "system:auto-resolve"`); runs you ignored are left as they are.
 (Kody excludes only `id !=` the success; celld also bounds by start time so a
 later overlapping failure stays open.) Job runs recorded before this feature
-carry no job id, so their errors stay open until you triage them (one
-`runUpdateBulk` call with a `packageName` filter clears them). The Activity
-page (`/account/runs`) shows the same counts, opens on Open errors when there
-are any, and has Ignore / Resolve / Reopen buttons.
+carry no job id, so their errors stay open until you triage them: list open
+errors (`runList({ errorTriage: "open" })`), pick the ones with a null
+`jobId`, and pass those ids to `runUpdateBulk({ runIds, … })` — do not use a
+`packageName`-only filter, which would also match current open errors. The
+Activity page (`/account/runs`) shows the same counts, opens on Open errors
+when there are any, and has Ignore / Resolve / Reopen buttons.
