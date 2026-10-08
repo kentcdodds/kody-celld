@@ -6,6 +6,7 @@ import {
 	resolvePackageExport,
 	type PackageFiles,
 } from '../packages/manifest.ts'
+import { lexImportSpecifiers, relativeImportCandidates, replaceImportSpecifiers } from './import-specifiers.ts'
 import { resolveNpmModules, type NpmResolverOptions } from './npm-resolver.ts'
 import { RUNTIME_MODULE_SOURCE } from './runtime-module.ts'
 import { buildWrapperModule } from './wrapper-module.ts'
@@ -25,10 +26,6 @@ error.name = ${JSON.stringify(`KodyError:${SEALED_ENTRY_ERROR}:403`)}
 throw error
 export default undefined
 `
-
-const staticImportRegex = /(\b(?:import|export)\b[^'"`;]*?\bfrom\s*)(['"])([^'"\n]+)\2/g
-const sideEffectImportRegex = /(^|[^\w.$])(import\s*)(['"])([^'"\n]+)\3/g
-const dynamicImportRegex = /(\bimport\s*\(\s*)(['"])([^'"\n]+)\2/g
 
 export type ModuleGraph = {
 	modules: Record<string, string>
@@ -90,28 +87,28 @@ export function stampPackageStorage(source: string, packageName: string) {
 	return source.replaceAll(/\bpackageStorage\(\s*\)/g, `packageStorage(${JSON.stringify(packageName)})`)
 }
 
+/**
+ * Rewrites the specifiers of real imports only (static, `export … from`,
+ * side-effect and literal `import()`), found by the lexer. Text that merely
+ * looks like an import inside a string, template literal or comment is left
+ * as written, so package files built inside `execute` survive packageSave.
+ */
 async function rewriteImports(source: string, fromPath: string, rewrite: Rewriter) {
 	const replacements = new Map<string, string>()
-	const collect = async (specifier: string) => {
+	for (const { specifier } of lexImportSpecifiers(source, fromPath)) {
 		if (!replacements.has(specifier)) replacements.set(specifier, await rewrite(specifier, fromPath))
 	}
-	for (const match of source.matchAll(staticImportRegex)) await collect(match[3] ?? '')
-	for (const match of source.matchAll(sideEffectImportRegex)) await collect(match[4] ?? '')
-	for (const match of source.matchAll(dynamicImportRegex)) await collect(match[3] ?? '')
-	let out = source.replace(
-		staticImportRegex,
-		(_m, head: string, quote: string, spec: string) => `${head}${quote}${replacements.get(spec) ?? spec}${quote}`,
-	)
-	out = out.replace(
-		sideEffectImportRegex,
-		(_m, pre: string, head: string, quote: string, spec: string) =>
-			`${pre}${head}${quote}${replacements.get(spec) ?? spec}${quote}`,
-	)
-	out = out.replace(
-		dynamicImportRegex,
-		(_m, head: string, quote: string, spec: string) => `${head}${quote}${replacements.get(spec) ?? spec}${quote}`,
-	)
-	return out
+	return replaceImportSpecifiers(source, fromPath, (specifier) => replacements.get(specifier) ?? null)
+}
+
+/** "lib/main.js in package @scope/pkg", or "your execute code" for the ad hoc module. */
+function describeModule(path: string) {
+	if (path === ADHOC_MODULE_PATH) return 'your execute code'
+	if (!path.startsWith('packages/')) return path
+	const rest = path.slice('packages/'.length)
+	const parts = rest.split('/')
+	const name = parts[0]?.startsWith('@') ? parts.slice(0, 2).join('/') : (parts[0] ?? '')
+	return `${rest.slice(name.length + 1)} in package ${name}`
 }
 
 /**
@@ -174,11 +171,12 @@ export async function buildModuleGraph(input: {
 		if (isBuiltin(specifier)) return specifier
 		if (isRelative(specifier)) {
 			const target = resolveRelative(fromPath, specifier)
-			for (const candidate of [target, `${target}.js`, target.replace(/\.ts$/, '.js'), `${target}/index.js`]) {
+			for (const candidate of relativeImportCandidates(target)) {
 				if (!(candidate in modules)) continue
 				return importTarget(fromPath, candidate)
 			}
-			return specifier
+			// Left as is, celld fails the whole isolate with an opaque `instantiate: <none>`.
+			throw new KodyError('invalid_import', `Cannot resolve "${specifier}" from ${describeModule(fromPath)}.`)
 		}
 		if (!input.allowNpm) {
 			throw new KodyError(
@@ -243,14 +241,13 @@ export async function buildModuleGraph(input: {
 		const resolved = await resolveNpmModules([...npmSpecifiers], input.npm)
 		for (const [path, source] of Object.entries(resolved.modules)) modules[path] = source
 		warnings.push(...resolved.warnings)
-		for (const [specifier, path] of resolved.entryPaths) {
-			for (const modulePath of Object.keys(modules)) {
-				if (modulePath.startsWith('npm/')) continue
-				modules[modulePath] = sourceOf(modulePath).replaceAll(
-					new RegExp(`(['"])${specifier.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\1`, 'g'),
-					`$1${relativeSpecifier(modulePath, path)}$1`,
-				)
-			}
+		const npmPaths = new Map<string, string>(resolved.entryPaths)
+		for (const modulePath of Object.keys(modules)) {
+			if (modulePath.startsWith('npm/')) continue
+			modules[modulePath] = replaceImportSpecifiers(sourceOf(modulePath), modulePath, (specifier) => {
+				const path = npmPaths.get(specifier)
+				return path ? relativeSpecifier(modulePath, path) : null
+			})
 		}
 	}
 

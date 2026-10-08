@@ -43,6 +43,7 @@
     "esbuild@0.27.7": true
   },
   "dependencies": {
+    "es-module-lexer": "2.3.2",
     "marked": "^18.1.0",
     "postal-mime": "3.0.0",
     "remix": "3.0.0",

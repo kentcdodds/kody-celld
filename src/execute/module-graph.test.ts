@@ -32,7 +32,36 @@ const vaultFiles = {
 	'leak.js': "import provider from './provider.js'\nexport default async () => provider({ ref: 'x' })",
 }
 
-const packages: Record<string, Record<string, string>> = { '@t/counter': counterFiles, '@t/vault': vaultFiles }
+// A package written by an agent from inside execute: its source mentions
+// imports in a string, a template literal and a comment.
+const textFiles = {
+	'package.json': JSON.stringify({ name: '@t/text', version: '1.0.0', exports: { '.': './main.js' } }),
+	'README.md': 'text',
+	'AGENTS.md': 'text',
+	'main.js': [
+		"import { packageStorage } from 'kody:runtime'",
+		"export * from './lib/extra.js'",
+		'const template = "import { packageStorage } from \'kody:runtime\'"',
+		"// import other from 'kody:runtime'",
+		"const doc = `import x from './lib/extra.js'`",
+		"export default async () => ({ template, doc, extra: (await import('./lib/extra.js')).extra })",
+	].join('\n'),
+	'lib/extra.js': 'export const extra = 1',
+}
+
+const brokenFiles = {
+	'package.json': JSON.stringify({ name: '@t/broken', version: '1.0.0', exports: { '.': './lib/main.js' } }),
+	'README.md': 'broken',
+	'AGENTS.md': 'broken',
+	'lib/main.js': "import { packageStorage } from './kody-runtime.js'\nexport default async () => typeof packageStorage",
+}
+
+const packages: Record<string, Record<string, string>> = {
+	'@t/counter': counterFiles,
+	'@t/vault': vaultFiles,
+	'@t/text': textFiles,
+	'@t/broken': brokenFiles,
+}
 
 const fakeUserCell = {
 	async packageGet(name: string) {
@@ -41,7 +70,9 @@ const fakeUserCell = {
 		return {
 			name,
 			version: '1.0.0',
-			manifest: parsePackageManifest(files),
+			// @t/broken was saved before packageSave checked relative imports, so its
+			// stored manifest exists even though parsing its files now refuses them.
+			manifest: parsePackageManifest(name === '@t/broken' ? { ...files, 'lib/main.js': 'export default 1' } : files),
 			files,
 			source: 'test',
 			createdAt: '',
@@ -88,6 +119,50 @@ describe('buildModuleGraph', () => {
 		assert.equal('packages/@t/counter/AGENTS.md' in graph.modules, false)
 		assert.match(graph.modules['packages/@t/counter/package.json'] ?? '', /^export default \{/)
 		assert.deepEqual(graph.packages, ['@t/counter'])
+	})
+
+	it('rewrites only real imports: strings, templates and comments that look like imports stay as written', async () => {
+		const graph = await buildModuleGraph({
+			entry: { kind: 'package', packageName: '@t/text' },
+			userCell: fakeUserCell,
+			allowNpm: false,
+		})
+		assert.equal(
+			graph.modules['packages/@t/text/main.js'],
+			[
+				"import { packageStorage } from '../../../kody-runtime.js'",
+				"export * from './lib/extra.js'",
+				'const template = "import { packageStorage } from \'kody:runtime\'"',
+				"// import other from 'kody:runtime'",
+				"const doc = `import x from './lib/extra.js'`",
+				"export default async () => ({ template, doc, extra: (await import('./lib/extra.js')).extra })",
+			].join('\n'),
+		)
+	})
+
+	it('names the file and package of a relative import that does not resolve', async () => {
+		await assert.rejects(
+			buildModuleGraph({
+				entry: { kind: 'package', packageName: '@t/broken' },
+				userCell: fakeUserCell,
+				allowNpm: false,
+			}),
+			(error: unknown) => {
+				const e = error as { code?: string; message?: string }
+				return (
+					e.code === 'invalid_import' &&
+					e.message === 'Cannot resolve "./kody-runtime.js" from lib/main.js in package @t/broken.'
+				)
+			},
+		)
+		await assert.rejects(
+			buildModuleGraph({
+				entry: { kind: 'adhoc', code: "import x from './nope.js'\nexport default () => x" },
+				userCell: fakeUserCell,
+				allowNpm: false,
+			}),
+			/Cannot resolve "\.\/nope\.js" from your execute code\./,
+		)
 	})
 
 	it('refuses bare npm imports when npm is disabled and unknown packages always', async () => {

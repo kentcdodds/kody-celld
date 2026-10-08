@@ -55,6 +55,59 @@ describe('parsePackageManifest', () => {
 	})
 })
 
+describe('parsePackageManifest relative imports', () => {
+	const withFiles = (files: Record<string, string>) => ({
+		'package.json': JSON.stringify({ name: '@scope/pkg', version: '1.0.0', exports: './index.js' }),
+		'README.md': '# pkg',
+		'AGENTS.md': 'Use it.',
+		...files,
+	})
+
+	it('accepts imports that resolve the way the module graph resolves them', () => {
+		assert.doesNotThrow(() =>
+			parsePackageManifest(
+				withFiles({
+					'index.js': [
+						"import { packageStorage } from 'kody:runtime'",
+						"import a from './lib/a'",
+						"import b from './lib/b.js'",
+						"import c from './lib/c'",
+						"import data from './data.json'",
+						'const note = "import x from \'./missing.js\'"',
+						"export default async () => (await import('./lib/a.js')).default",
+					].join('\n'),
+					'lib/a.js': 'export default 1',
+					'lib/b.js': "export { default } from '../lib/a.js'",
+					'lib/c/index.js': 'export default 3',
+					'data.json': '{}',
+				}),
+			),
+		)
+	})
+
+	it('refuses a relative import that resolves to nothing, naming the file', () => {
+		assert.throws(
+			() =>
+				parsePackageManifest(
+					withFiles({
+						'index.js': "import { packageStorage } from './kody-runtime.js'\nexport default () => 1",
+					}),
+				),
+			(error: unknown) => {
+				const e = error as { code?: string; message?: string }
+				return (
+					e.code === 'invalid_import' &&
+					e.message === 'Cannot resolve "./kody-runtime.js" from index.js: no such file in the package.'
+				)
+			},
+		)
+		assert.throws(
+			() => parsePackageManifest(withFiles({ 'index.js': "import doc from './README.md'\nexport default doc" })),
+			/Cannot resolve "\.\/README\.md" from index\.js/,
+		)
+	})
+})
+
 describe('kody.webhooks + kody.subscriptions', () => {
 	const exportsMap = { '.': './index.js', './hook': './lib/other.js' }
 

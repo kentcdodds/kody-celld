@@ -1,3 +1,4 @@
+import { lexImportSpecifiers, relativeImportCandidates } from '../execute/import-specifiers.ts'
 import { KodyError } from '../lib/errors.ts'
 
 // Mirrors kentcdodds/kody `package.json#kody` shapes for the surfaces this
@@ -404,6 +405,7 @@ export function parsePackageManifest(files: PackageFiles): PackageManifest {
 	if (!readme) throw new KodyError('invalid_manifest', 'A non-empty README.md is required.')
 	if (!agents) throw new KodyError('invalid_manifest', 'A non-empty AGENTS.md is required.')
 
+	assertRelativeImportsResolve(files)
 	return {
 		name,
 		version: typeof json.version === 'string' ? json.version : '0.0.0',
@@ -454,4 +456,30 @@ export function resolvePackageExport(manifest: PackageManifest, exportName: stri
 		)
 	}
 	return path
+}
+
+/**
+ * kody-celld: relative imports must name a module in the package, using the
+ * module graph's lookup (`x`, `x.js`, `.ts` as `.js`, `x/index.js`; code and
+ * JSON only). A broken import is refused at save time instead of failing the
+ * whole isolate as `instantiate: <none>` after the next restart. Imports are
+ * found by the lexer, so text in strings and comments is not checked.
+ */
+function assertRelativeImportsResolve(files: PackageFiles) {
+	const modulePaths = new Set(
+		Object.keys(files)
+			.filter((path) => /\.(?:m?js|ts|json)$/.test(path))
+			.map((path) => normalizeModulePath(path)),
+	)
+	for (const [file, source] of Object.entries(files)) {
+		if (!/\.(?:m?js|ts)$/.test(file)) continue
+		const path = normalizeModulePath(file)
+		const base = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : ''
+		for (const { specifier } of lexImportSpecifiers(source, path)) {
+			if (!specifier.startsWith('./') && !specifier.startsWith('../') && !specifier.startsWith('/')) continue
+			const target = normalizeModulePath(base ? `${base}/${specifier}` : specifier)
+			if (relativeImportCandidates(target).some((candidate) => modulePaths.has(candidate))) continue
+			throw new KodyError('invalid_import', `Cannot resolve "${specifier}" from ${path}: no such file in the package.`)
+		}
+	}
 }
