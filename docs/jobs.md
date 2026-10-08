@@ -69,3 +69,25 @@ every user — handy right after a deploy or to test without waiting a minute.
 - `execute_timeout` (60 s) applies.
 - Deleting the package deletes its jobs; re-saving with a changed schedule
   recomputes `nextRunAt` from now.
+
+## Run triage
+
+Failed runs can be soft-triaged, as in kody (`docs/use/activity.md`):
+
+- `runSummary({ since? })` — "is anything broken?": total, open `errors`
+  (not ignored/resolved), `ignored`, `resolved`, `running`, and `byKind`.
+- `runUpdate({ runId, triage, note? })` — mark an **error** run `ignored` or
+  `resolved`, or `open` to clear triage. Status, error, logs and result never
+  change. Omit `note` to keep it, pass `""` to clear it (max 2000 characters).
+- `runUpdateBulk({ runIds | filter, triage, note?, limit?, dryRun? })` — up to
+  100 error runs by id or by an exact filter (`kind`, `packageName`, `jobId`,
+  `errorName`, `errorMessage`, plus `errorTriage`, default `open`). Preview with
+  `dryRun`, repeat while `hasMore`. A filtered reopen must name
+  `errorTriage: "ignored"` or `"resolved"`.
+- `runList({ errorTriage })` — `open | ignored | resolved | all`. Unlike
+  kody, the default is `all`, so existing callers see every run.
+
+When a job run succeeds, earlier **open** errors of the same job are marked
+`resolved` (`triagedBy: "system:auto-resolve"`); runs you ignored are left as
+they are. The Activity page (`/account/runs`) shows the same counts, opens on
+Open errors when there are any, and has Ignore / Resolve / Reopen buttons.
