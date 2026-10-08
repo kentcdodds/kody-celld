@@ -38,9 +38,9 @@ Rules enforced by `src/packages/manifest.ts` on `packageSave`:
 - static relative imports reached from `exports`, job entries and subscription
   handlers must resolve to a module in the package (`x`, `x.js`, `x/index.js`;
   code and JSON only), so a broken import is refused with `invalid_import`
-  instead of failing the run later; unreached files (tests, client code) and
-  dynamic `import()` are not checked. Install, fork and preview apply the same
-  check;
+  instead of failing the run later; unreached files (tests, client code),
+  dynamic `import()`, and TypeScript `import type` / `export type … from` are
+  not checked. Install, fork and preview apply the same check;
 - `kody.dependencies` is validated and kept on the manifest for tooling; at run
   time packages simply `import` each other via `kody:@scope/pkg/...` (there is
   no install step).

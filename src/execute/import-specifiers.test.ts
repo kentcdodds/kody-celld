@@ -22,6 +22,31 @@ describe('lexImportSpecifiers', () => {
 		)
 	})
 
+	it('marks TypeScript import type as typeOnly; export type … from is absent or typeOnly (kody skips both)', () => {
+		const ranges = lexImportSpecifiers(
+			[
+				"import type { X } from './missing.js'",
+				"export type { Y } from './also-missing.js'",
+				"import { Z } from './real.js'",
+				'export default 1',
+			].join('\n'),
+			'main.ts',
+		)
+		// es-module-lexer 2.3.2 omits `export type … from`; if a future lexer
+		// reports it, typeOnly must be true so reachability still skips it.
+		assert.deepEqual(
+			ranges.map((i) => ({ specifier: i.specifier, typeOnly: i.typeOnly, kind: i.kind })),
+			[
+				{ specifier: './missing.js', typeOnly: true, kind: 'static' },
+				{ specifier: './real.js', typeOnly: false, kind: 'static' },
+			],
+		)
+		assert.equal(
+			ranges.every((i) => i.specifier !== './also-missing.js' || i.typeOnly),
+			true,
+		)
+	})
+
 	it('reports a module the lexer cannot read as invalid_module with the file name', () => {
 		assert.throws(
 			() => lexImportSpecifiers("import x from 'a'\nconst = ;\n`", 'packages/@t/p/lib/bad.js'),
@@ -54,6 +79,17 @@ describe('replaceImportSpecifiers', () => {
 			replaceImportSpecifiers(source, 'main.js', () => null),
 			source,
 		)
+	})
+
+	it('uses pre-lexed ranges without re-lexing when they are passed in', () => {
+		const ranges = lexImportSpecifiers("import a from 'kody:runtime'\nexport default a", 'main.js')
+		const out = replaceImportSpecifiers(
+			"import a from 'kody:runtime'\nexport default a",
+			'main.js',
+			(specifier) => (specifier === 'kody:runtime' ? './kody-runtime.js' : null),
+			ranges,
+		)
+		assert.equal(out, "import a from './kody-runtime.js'\nexport default a")
 	})
 })
 

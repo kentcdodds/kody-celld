@@ -151,6 +151,78 @@ describe('parsePackageManifest relative imports', () => {
 			/Cannot resolve "\.\/README\.md" from index\.js/,
 		)
 	})
+
+	it('accepts import type / export type … from to a missing module; still refuses a real import', () => {
+		const tsPkg = (entry: string) => ({
+			'package.json': JSON.stringify({ name: '@scope/pkg', version: '1.0.0', exports: './index.ts' }),
+			'README.md': '# pkg',
+			'AGENTS.md': 'Use it.',
+			'index.ts': entry,
+		})
+		assert.doesNotThrow(() =>
+			parsePackageManifest(
+				tsPkg(
+					[
+						"import type { X } from './missing.js'",
+						"export type { Y } from './also-missing.js'",
+						'export default (): number => 1',
+					].join('\n'),
+				),
+			),
+		)
+		assert.throws(
+			() => parsePackageManifest(tsPkg("import { X } from './missing.js'\nexport default (): number => 1")),
+			(error: unknown) => {
+				const e = error as { code?: string; message?: string }
+				return (
+					e.code === 'invalid_import' &&
+					e.message === 'Cannot resolve "./missing.js" from index.ts: no such file in the package.'
+				)
+			},
+		)
+	})
+
+	it('checks files reached from subscription handlers, not only exports', () => {
+		assert.throws(
+			() =>
+				parsePackageManifest({
+					'package.json': JSON.stringify({
+						name: '@scope/pkg',
+						version: '1.0.0',
+						exports: './index.js',
+						kody: {
+							subscriptions: {
+								'email.message.received': { handler: './handlers/on-mail.js' },
+							},
+						},
+					}),
+					'README.md': '# pkg',
+					'AGENTS.md': 'Use it.',
+					'index.js': 'export default () => 1',
+					'handlers/on-mail.js': "import { handle } from './missing.js'\nexport default handle",
+				}),
+			/Cannot resolve "\.\/missing\.js" from handlers\/on-mail\.js/,
+		)
+		assert.doesNotThrow(() =>
+			parsePackageManifest({
+				'package.json': JSON.stringify({
+					name: '@scope/pkg',
+					version: '1.0.0',
+					exports: './index.js',
+					kody: {
+						subscriptions: {
+							'email.message.received': { handler: './handlers/on-mail.js' },
+						},
+					},
+				}),
+				'README.md': '# pkg',
+				'AGENTS.md': 'Use it.',
+				'index.js': 'export default () => 1',
+				'handlers/on-mail.js': "import { handle } from './run.js'\nexport default handle",
+				'handlers/run.js': 'export const handle = () => 1',
+			}),
+		)
+	})
 })
 
 describe('kody.webhooks + kody.subscriptions', () => {

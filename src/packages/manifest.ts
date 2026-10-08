@@ -469,10 +469,11 @@ export function resolvePackageExport(manifest: PackageManifest, exportName: stri
  * package, using the module graph's lookup (`x`, `x.js`, `.ts` as `.js`,
  * `x/index.js`; code and JSON only). celld links exactly those, so a broken
  * one is refused here instead of failing as `instantiate: <none>` after the
- * next restart. Files nothing reaches (tests, client code) and dynamic
- * `import()`s are not checked: celld never links them up front, and a failed
- * `import()` stays catchable. Imports come from the lexer, so text in strings
- * and comments is never checked.
+ * next restart. Files nothing reaches (tests, client code), dynamic
+ * `import()`s, and TypeScript `import type` / `export type … from` are not
+ * checked: celld never links them up front, a failed `import()` stays
+ * catchable, and type-only imports are erased (kody skips them too). Imports
+ * come from the lexer, so text in strings and comments is never checked.
  */
 function assertRelativeImportsResolve(files: PackageFiles, entries: Array<string>) {
 	const sources = new Map<string, string>()
@@ -488,8 +489,8 @@ function assertRelativeImportsResolve(files: PackageFiles, entries: Array<string
 		const source = sources.get(path)
 		if (source === undefined || path.endsWith('.json')) continue
 		const base = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : ''
-		for (const { specifier, kind } of lexImportSpecifiers(source, path)) {
-			if (kind !== 'static') continue
+		for (const { specifier, kind, typeOnly } of lexImportSpecifiers(source, path)) {
+			if (kind !== 'static' || typeOnly) continue
 			if (!specifier.startsWith('./') && !specifier.startsWith('../') && !specifier.startsWith('/')) continue
 			let target: string
 			try {

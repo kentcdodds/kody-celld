@@ -15,6 +15,17 @@ export type ImportSpecifierRange = {
 	end: number
 	/** `static` imports are linked with the module; `dynamic` ones load (and can fail) at call time. */
 	kind: 'static' | 'dynamic'
+	/**
+	 * kody-celld: TypeScript `import type` / `export type … from` are erased
+	 * before link time (kody skips them in collectModuleImportNodes). They may
+	 * still be rewritten, but must not be required to resolve.
+	 */
+	typeOnly: boolean
+}
+
+/** True for `import type …` / `export type … from` at the statement start the lexer reports. */
+function isTypeOnlyImportStatement(source: string, statementStart: number) {
+	return /^(?:import|export)\s+type\b/.test(source.slice(statementStart))
 }
 
 export function lexImportSpecifiers(source: string, modulePath: string): Array<ImportSpecifierRange> {
@@ -32,28 +43,44 @@ export function lexImportSpecifiers(source: string, modulePath: string): Array<I
 		// d === -2 is import.meta; a dynamic import of a computed value has no name.
 		if (entry.d === -2 || entry.n === undefined) continue
 		if (entry.d === -1) {
-			ranges.push({ specifier: entry.n, start: entry.s, end: entry.e, kind: 'static' })
+			ranges.push({
+				specifier: entry.n,
+				start: entry.s,
+				end: entry.e,
+				kind: 'static',
+				typeOnly: isTypeOnlyImportStatement(source, entry.ss),
+			})
 			continue
 		}
 		// A literal dynamic import's range includes its quotes.
 		const quote = source[entry.s]
 		if ((quote === "'" || quote === '"' || quote === '`') && source[entry.e - 1] === quote) {
-			ranges.push({ specifier: entry.n, start: entry.s + 1, end: entry.e - 1, kind: 'dynamic' })
+			ranges.push({
+				specifier: entry.n,
+				start: entry.s + 1,
+				end: entry.e - 1,
+				kind: 'dynamic',
+				typeOnly: false,
+			})
 		}
 	}
 	return ranges
 }
 
-/** Replaces each import specifier `replace` maps (null keeps it); everything else stays byte-for-byte. */
+/**
+ * Replaces each import specifier `replace` maps (null keeps it). Pass `ranges`
+ * from a prior `lexImportSpecifiers` to avoid lexing the same source twice.
+ */
 export function replaceImportSpecifiers(
 	source: string,
 	modulePath: string,
 	replace: (specifier: string) => string | null,
+	ranges: Array<ImportSpecifierRange> = lexImportSpecifiers(source, modulePath),
 ): string {
-	const ranges = lexImportSpecifiers(source, modulePath).sort((a, b) => a.start - b.start)
+	const sorted = [...ranges].sort((a, b) => a.start - b.start)
 	let out = ''
 	let cursor = 0
-	for (const range of ranges) {
+	for (const range of sorted) {
 		const next = replace(range.specifier)
 		if (next === null || next === range.specifier) continue
 		out += source.slice(cursor, range.start) + next

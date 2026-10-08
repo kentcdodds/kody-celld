@@ -94,11 +94,12 @@ export function stampPackageStorage(source: string, packageName: string) {
  * as written, so package files built inside `execute` survive packageSave.
  */
 async function rewriteImports(source: string, fromPath: string, rewrite: Rewriter) {
+	const ranges = lexImportSpecifiers(source, fromPath)
 	const replacements = new Map<string, string>()
-	for (const { specifier } of lexImportSpecifiers(source, fromPath)) {
+	for (const { specifier } of ranges) {
 		if (!replacements.has(specifier)) replacements.set(specifier, await rewrite(specifier, fromPath))
 	}
-	return replaceImportSpecifiers(source, fromPath, (specifier) => replacements.get(specifier) ?? null)
+	return replaceImportSpecifiers(source, fromPath, (specifier) => replacements.get(specifier) ?? null, ranges)
 }
 
 /**
@@ -123,8 +124,9 @@ function assertReachableImportsResolve(
 		const failure = unreadable.get(path)
 		if (failure) throw failure
 		if (path === RUNTIME_MODULE_PATH || path.endsWith('.json')) continue
-		for (const { specifier, kind } of lexImportSpecifiers(modules[path] ?? '', path)) {
-			if (kind !== 'static' || !isRelative(specifier)) continue
+		for (const { specifier, kind, typeOnly } of lexImportSpecifiers(modules[path] ?? '', path)) {
+			// Type-only imports are erased before link time (kody skips them too).
+			if (kind !== 'static' || typeOnly || !isRelative(specifier)) continue
 			let target: string
 			try {
 				target = resolveRelative(path, specifier)

@@ -197,6 +197,29 @@ describe('buildModuleGraph', () => {
 		)
 	})
 
+	it('does not require import type to resolve; still names a missing value import', async () => {
+		const graph = await buildModuleGraph({
+			entry: {
+				kind: 'adhoc',
+				code: "import type { X } from './missing.js'\nexport default (): number => 1",
+			},
+			userCell: fakeUserCell,
+			allowNpm: false,
+		})
+		assert.match(graph.modules[graph.entryPath] ?? '', /import type \{ X \} from/)
+		await assert.rejects(
+			buildModuleGraph({
+				entry: {
+					kind: 'adhoc',
+					code: "import { X } from './missing.js'\nexport default (): number => 1",
+				},
+				userCell: fakeUserCell,
+				allowNpm: false,
+			}),
+			/Cannot resolve "\.\/missing\.js" from your execute code\./,
+		)
+	})
+
 	it('ignores files the entry never reaches and keeps optional dynamic imports catchable', async () => {
 		const graph = await buildModuleGraph({
 			entry: { kind: 'package', packageName: '@t/tolerant' },
