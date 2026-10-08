@@ -174,7 +174,11 @@ export function AccountActivity(
 							]}
 							rows={d.runs.map((run) => ({
 								id: run.id,
-								href: runHref(run.id),
+								// The open run links back to the list: a second click closes it.
+								href:
+									run.id === d.selectedId
+										? `${base}?view=${d.view}`
+										: runHref(run.id),
 								cells: {
 									when: <TimestampValue value={run.createdAt} />,
 									package: run.packageName ?? <Muted>ad hoc {run.kind}</Muted>,

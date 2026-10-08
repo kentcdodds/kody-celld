@@ -328,6 +328,11 @@ export async function smokeWeb({ user, mcp }) {
 		'an error row links to its expanded run with logs and a fix prompt',
 		runDetail.status,
 	)
+	assert(
+		runDetail.text.includes('href="/account/runs?view=errors"') &&
+			!runDetail.text.includes(`href="/account/runs/${triageFail.runId}?view=errors"`),
+		'the expanded row links back to the list, so clicking it again closes the run',
+	)
 	const missingRun = await browser.get('/account/runs/run_does_not_exist')
 	assert(
 		missingRun.status === 200 && missingRun.text.includes('Run not found'),
