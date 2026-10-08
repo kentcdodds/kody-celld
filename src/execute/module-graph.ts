@@ -96,8 +96,11 @@ export function stampPackageStorage(source: string, packageName: string) {
 async function rewriteImports(source: string, fromPath: string, rewrite: Rewriter) {
 	const ranges = lexImportSpecifiers(source, fromPath)
 	const replacements = new Map<string, string>()
-	for (const { specifier } of ranges) {
-		if (!replacements.has(specifier)) replacements.set(specifier, await rewrite(specifier, fromPath))
+	// Skip type-only ranges for resolution (they are erased); a value import of
+	// the same specifier still populates replacements and rewrites both sites.
+	for (const { specifier, typeOnly } of ranges) {
+		if (typeOnly || replacements.has(specifier)) continue
+		replacements.set(specifier, await rewrite(specifier, fromPath))
 	}
 	return replaceImportSpecifiers(source, fromPath, (specifier) => replacements.get(specifier) ?? null, ranges)
 }

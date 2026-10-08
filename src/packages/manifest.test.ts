@@ -180,6 +180,17 @@ describe('parsePackageManifest relative imports', () => {
 				)
 			},
 		)
+		// `import type from` binds the default export to `type` — a value import.
+		assert.throws(
+			() => parsePackageManifest(withFiles({ 'index.js': "import type from './missing.js'\nexport default type" })),
+			(error: unknown) => {
+				const e = error as { code?: string; message?: string }
+				return (
+					e.code === 'invalid_import' &&
+					e.message === 'Cannot resolve "./missing.js" from index.js: no such file in the package.'
+				)
+			},
+		)
 	})
 
 	it('checks files reached from subscription handlers, not only exports', () => {

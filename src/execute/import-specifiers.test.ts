@@ -47,6 +47,14 @@ describe('lexImportSpecifiers', () => {
 		)
 	})
 
+	it('treats import type from as a value import (binding name type), not typeOnly', () => {
+		const ranges = lexImportSpecifiers("import type from './missing.js'\nexport default type", 'main.js')
+		assert.deepEqual(
+			ranges.map((i) => ({ specifier: i.specifier, typeOnly: i.typeOnly })),
+			[{ specifier: './missing.js', typeOnly: false }],
+		)
+	})
+
 	it('reports a module the lexer cannot read as invalid_module with the file name', () => {
 		assert.throws(
 			() => lexImportSpecifiers("import x from 'a'\nconst = ;\n`", 'packages/@t/p/lib/bad.js'),

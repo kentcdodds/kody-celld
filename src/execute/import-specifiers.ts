@@ -23,9 +23,19 @@ export type ImportSpecifierRange = {
 	typeOnly: boolean
 }
 
-/** True for `import type …` / `export type … from` at the statement start the lexer reports. */
+/**
+ * True for TypeScript `import type …` / `export type … from`.
+ * `import type from '…'` is a value import (binding name `type`), not type-only.
+ */
 function isTypeOnlyImportStatement(source: string, statementStart: number) {
-	return /^(?:import|export)\s+type\b/.test(source.slice(statementStart))
+	const stmt = source.slice(statementStart)
+	if (/^export\s+type\b/.test(stmt)) return true
+	const importType = stmt.match(/^import\s+type\b/)
+	if (!importType) return false
+	const after = stmt.slice(importType[0].length)
+	// `import type { … }` / `import type * as …` / `import type Name from …`
+	if (/^\s*[{*]/.test(after)) return true
+	return /^\s*[A-Za-z_$][\w$]*\s+from\b/.test(after)
 }
 
 export function lexImportSpecifiers(source: string, modulePath: string): Array<ImportSpecifierRange> {

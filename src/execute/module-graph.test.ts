@@ -207,11 +207,31 @@ describe('buildModuleGraph', () => {
 			allowNpm: false,
 		})
 		assert.match(graph.modules[graph.entryPath] ?? '', /import type \{ X \} from/)
+		// Bare type-only must not trip unsupported_import when npm is disabled.
+		await buildModuleGraph({
+			entry: {
+				kind: 'adhoc',
+				code: "import type { X } from 'missing-types'\nexport default (): number => 1",
+			},
+			userCell: fakeUserCell,
+			allowNpm: false,
+		})
 		await assert.rejects(
 			buildModuleGraph({
 				entry: {
 					kind: 'adhoc',
 					code: "import { X } from './missing.js'\nexport default (): number => 1",
+				},
+				userCell: fakeUserCell,
+				allowNpm: false,
+			}),
+			/Cannot resolve "\.\/missing\.js" from your execute code\./,
+		)
+		await assert.rejects(
+			buildModuleGraph({
+				entry: {
+					kind: 'adhoc',
+					code: "import type from './missing.js'\nexport default type",
 				},
 				userCell: fakeUserCell,
 				allowNpm: false,
