@@ -10,5 +10,7 @@
       "#universal/*": ["./universal/*"]
     }
   },
-  "include": ["client/**/*.ts", "client/**/*.tsx", "universal/**/*.ts", "universal/**/*.tsx"]
+  "include": ["client/**/*.ts", "client/**/*.tsx", "universal/**/*.ts", "universal/**/*.tsx"],
+  // Unit tests run on Node (node:test types), not in the browser typecheck.
+  "exclude": ["**/*.test.ts"]
 }

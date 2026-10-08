@@ -8,7 +8,8 @@
       "#app/*": ["./src/app/*"],
       "#client/app-root.tsx": ["./src/app/ssr-stubs/app-root.ts"],
       "#client/*": ["./client/*"],
-      "#universal/*": ["./universal/*"]
+      "#universal/*": ["./universal/*"],
+      "#worker/*": ["./src/*"]
     }
   }
 }

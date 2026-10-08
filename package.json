@@ -8,7 +8,8 @@
   "imports": {
     "#app/*": "./src/app/*",
     "#client/*": "./client/*",
-    "#universal/*": "./universal/*"
+    "#universal/*": "./universal/*",
+    "#worker/*": "./src/*"
   },
   "engines": {
     "node": ">=24.3"
@@ -19,7 +20,7 @@
     "lint": "oxlint src client universal smoke examples scripts tools mail-bridge",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "node --test 'src/**/*.test.ts' 'tools/**/*.test.ts' 'mail-bridge/*.test.mjs'",
+    "test": "node --test 'src/**/*.test.ts' 'tools/**/*.test.ts' 'universal/**/*.test.ts' 'mail-bridge/*.test.mjs'",
     "smoke": "node smoke/run.mjs",
     "smoke:cron": "node smoke/run.mjs --wait-cron",
     "smoke:ai-mock": "node smoke/ai-mock-server.mjs",
@@ -42,7 +43,9 @@
     "esbuild@0.27.7": true
   },
   "dependencies": {
+    "marked": "^18.1.0",
     "postal-mime": "3.0.0",
-    "remix": "3.0.0"
+    "remix": "3.0.0",
+    "shiki": "^4.5.0"
   }
 }

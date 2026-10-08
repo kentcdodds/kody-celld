@@ -14,7 +14,8 @@
     "paths": {
       "#app/*": ["./src/app/*"],
       "#client/*": ["./client/*"],
-      "#universal/*": ["./universal/*"]
+      "#universal/*": ["./universal/*"],
+      "#worker/*": ["./src/*"]
     },
     "strict": true,
     "noUncheckedIndexedAccess": true,
