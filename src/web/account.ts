@@ -43,6 +43,9 @@ const flashes: Record<string, PageFlash> = {
 	forked: { kind: 'ok', text: 'Package forked into your catalog.' },
 	published: { kind: 'ok', text: 'Published to the community catalog.' },
 	unpublished: { kind: 'ok', text: 'Removed from the community catalog.' },
+	run_ignored: { kind: 'ok', text: 'Run marked ignored.' },
+	run_resolved: { kind: 'ok', text: 'Run marked resolved.' },
+	run_reopened: { kind: 'ok', text: 'Run reopened.' },
 }
 
 function view(
@@ -816,13 +819,46 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 		}
 
 		case 'runs': {
-			if (post) break
-			const runs = await userCell.runList({ limit: 50 })
+			let triageError: string | null = null
+			if (post) {
+				const triage =
+					form.triage === 'ignored' || form.triage === 'resolved' || form.triage === 'open' ? form.triage : null
+				const back = form.view === 'recent' ? 'recent' : 'errors'
+				if (form.action !== 'triage' || !form.runId || !triage) return redirect(routes.accountActivity.href())
+				try {
+					await userCell.runTriageUpdate({ runId: form.runId, triage, note: undefined })
+					await audit('run.triage', form.runId, { triage, via: 'web' })
+					return redirect(
+						hrefWithFlash(
+							`${routes.accountActivity.href()}?view=${back}`,
+							triage === 'open' ? 'run_reopened' : `run_${triage}`,
+						),
+					)
+				} catch (error) {
+					triageError = KodyError.fromUnknown(error)?.message ?? 'Update failed.'
+				}
+			}
+			const summary = await userCell.runSummary({})
+			const viewParam = url.searchParams.get('view') ?? (post ? form.view : null)
+			const viewMode: 'errors' | 'recent' =
+				viewParam === 'errors' || viewParam === 'recent' ? viewParam : summary.errors > 0 ? 'errors' : 'recent'
+			const runs = await userCell.runList({ limit: 50, errorTriage: viewMode === 'errors' ? 'open' : 'all' })
 			return view(session, {
 				title: 'Runs',
 				current: '/account/runs',
+				flash,
+				...(triageError ? { status: 400 } : {}),
 				data: {
 					page: 'accountActivity',
+					csrf: session.csrf,
+					view: viewMode,
+					error: triageError,
+					summary: {
+						errors: summary.errors,
+						ignored: summary.ignored,
+						resolved: summary.resolved,
+						running: summary.running,
+					},
 					runs: runs.map((run) => ({
 						id: run.id,
 						createdAt: run.createdAt,
@@ -831,6 +867,7 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 						status: run.status,
 						durationMs: run.durationMs,
 						error: run.error ? `${run.error.name}: ${run.error.message}` : null,
+						errorTriage: run.errorTriage,
 					})),
 				},
 			})

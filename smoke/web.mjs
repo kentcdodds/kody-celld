@@ -303,6 +303,60 @@ export async function smokeWeb({ user, mcp }) {
 	}
 	log('pages', 'packages, jobs, activity, memories, webhooks, integrations, email, clients, sessions render')
 
+	// Activity triage: summary line, Open errors view, Ignore POST, Recent runs badge.
+	const triageFail = await mcp.execute(`export default async function main() { throw new Error('web triage smoke') }`)
+	assert(!triageFail.ok && triageFail.runId, 'a failing execute records an error run for the Activity page', triageFail)
+	const errorsView = await browser.get('/account/runs?view=errors')
+	assert(
+		errorsView.status === 200 &&
+			/\d+ open errors? · \d+ ignored · \d+ resolved · \d+ running/.test(errorsView.text) &&
+			errorsView.text.includes(`name="runId" value="${triageFail.runId}"`) &&
+			errorsView.text.includes('name="triage" value="ignored"'),
+		'Activity open-errors view shows the summary and an Ignore form for the failing run',
+		errorsView.status,
+	)
+	const noCsrfTriage = await browser.post('/account/runs', {
+		action: 'triage',
+		runId: triageFail.runId,
+		triage: 'ignored',
+	})
+	assert(noCsrfTriage.status === 403, 'Activity triage POST needs the csrf token', noCsrfTriage.status)
+	const ignoredPost = await browser.post('/account/runs', {
+		action: 'triage',
+		runId: triageFail.runId,
+		triage: 'ignored',
+		view: 'errors',
+		csrf: hiddenInputs(errorsView.text).csrf,
+	})
+	assert(
+		ignoredPost.status === 303 &&
+			ignoredPost.location?.includes('/account/runs?view=errors') &&
+			ignoredPost.location.includes('flash=run_ignored'),
+		'Ignore redirects back to the open-errors view',
+		ignoredPost,
+	)
+	const errorsAfter = await browser.get('/account/runs?view=errors')
+	const recentAfter = await browser.get('/account/runs?view=recent')
+	assert(
+		!errorsAfter.text.includes(`value="${triageFail.runId}"`) &&
+			recentAfter.text.includes(`value="${triageFail.runId}"`) &&
+			recentAfter.text.includes('name="triage" value="open"'),
+		'an ignored run leaves Open errors and shows a Reopen form in Recent runs',
+	)
+	const staleTriage = await browser.post('/account/runs', {
+		action: 'triage',
+		runId: 'run_does_not_exist',
+		triage: 'resolved',
+		view: 'errors',
+		csrf: hiddenInputs(recentAfter.text).csrf,
+	})
+	assert(
+		staleTriage.status === 400 && staleTriage.text.includes('was not found'),
+		'triaging a run that no longer exists re-renders with the error',
+		staleTriage.status,
+	)
+	log('activity triage', { runId: triageFail.runId })
+
 	// Packages page: install form enforces the source-host policy; publish /
 	// unpublish toggles a community listing for a saved package.
 	const refused = await browser.post('/account/packages', {

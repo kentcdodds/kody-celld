@@ -173,6 +173,14 @@ export type RunView = {
 	status: string
 	durationMs: number | null
 	error: string | null
+	errorTriage: 'ignored' | 'resolved' | null
+}
+
+export type RunSummaryView = {
+	errors: number
+	ignored: number
+	resolved: number
+	running: number
 }
 
 export type IntegrationView = {
@@ -416,7 +424,14 @@ export type AppLoaderData =
 			selected: MemoryDetailView | null
 	  }
 	| { page: 'accountWebhooks'; webhooks: Array<WebhookIndexView> }
-	| { page: 'accountActivity'; runs: Array<RunView> }
+	| {
+			page: 'accountActivity'
+			csrf: string
+			view: 'errors' | 'recent'
+			error: string | null
+			summary: RunSummaryView
+			runs: Array<RunView>
+	  }
 	| {
 			page: 'accountIntegrations'
 			csrf: string
