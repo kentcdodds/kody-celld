@@ -67,6 +67,23 @@ export default async function main() { return await kody.packageInstall({ source
 		return
 	}
 
+	// packagePreview can read one file so the code is reviewable before install.
+	const preview = await mcp.call('packagePreview', { source, path: 'probe.js' })
+	assert(
+		preview.file?.path === 'probe.js' &&
+			preview.file.content.includes('FetchGateway') &&
+			preview.file.truncated === false,
+		'packagePreview returns the requested file content',
+		preview.file,
+	)
+	const missingFile = await mcp.callDirectRaw('packagePreview', { source, path: 'nope.js' })
+	assert(
+		missingFile.isError && /was not found/.test(JSON.stringify(missingFile.payload)),
+		'packagePreview refuses paths outside the package',
+		missingFile.payload,
+	)
+	log('packagePreview', { files: preview.fileCount, file: preview.file.path, bytes: preview.file.bytes })
+
 	// Ad hoc runs act as the user and may install.
 	const installed = await mcp.call('packageInstall', { source })
 	assert(installed.name === '@kody-smoke/http-probe', 'installed the wrong package', installed)

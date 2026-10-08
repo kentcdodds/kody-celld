@@ -317,6 +317,13 @@ export type AppLoaderData =
 					dependencies: Array<string>
 				}
 				warnings: Array<string>
+				/** File opened from the preview's file list (re-fetched from the source, not saved). */
+				selectedFile: {
+					path: string
+					bytes: number
+					content: string
+					truncated: boolean
+				} | null
 			} | null
 	  }
 	| {

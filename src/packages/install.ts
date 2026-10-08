@@ -534,3 +534,22 @@ export async function previewPackageSource(
 	const fetched = await fetchPackageSource(source, options)
 	return packagePreviewFromFetched(fetched)
 }
+
+/** Max characters of one package file returned for viewing (web file viewer, packagePreview `path`). */
+export const packageFileViewMaxChars = 200_000
+
+export type PackageFileView = { path: string; bytes: number; content: string; truncated: boolean }
+
+/** One file of a package (saved or previewed) for reading, truncated at packageFileViewMaxChars. */
+export function packageFileView(files: PackageFiles, path: string): PackageFileView {
+	if (!Object.hasOwn(files, path)) {
+		throw new KodyError('package_file_not_found', `Package file "${path}" was not found.`, { status: 404 })
+	}
+	const content = files[path]!
+	return {
+		path,
+		bytes: new TextEncoder().encode(content).byteLength,
+		content: content.slice(0, packageFileViewMaxChars),
+		truncated: content.length > packageFileViewMaxChars,
+	}
+}

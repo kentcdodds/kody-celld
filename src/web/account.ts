@@ -10,7 +10,9 @@ import {
 	fetchPackageSource,
 	packageSourceHostsFromEnv,
 	parsePackageSource,
+	packageFileView,
 	previewPackageSource,
+	type PackageFileView,
 	type PackagePreview,
 } from '../packages/install.ts'
 import { parsePackageManifest } from '../packages/manifest.ts'
@@ -233,20 +235,7 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 				status: 404,
 			})
 		}
-		let selected: { path: string; content: string; truncated: boolean } | null = null
-		if (detailPath.relativePath !== null) {
-			const content = pkg.files[detailPath.relativePath]
-			if (content === undefined) {
-				throw new KodyError('package_file_not_found', 'Package file was not found.', {
-					status: 404,
-				})
-			}
-			selected = {
-				path: detailPath.relativePath,
-				content: content.slice(0, 200_000),
-				truncated: content.length > 200_000,
-			}
-		}
+		const selected = detailPath.relativePath !== null ? packageFileView(pkg.files, detailPath.relativePath) : null
 		const files = Object.entries(pkg.files)
 			.map(([path, content]) => ({
 				path,
@@ -492,6 +481,7 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 		case 'packages': {
 			let installError: string | null = null
 			let preview: PackagePreview | null = null
+			let previewFile: PackageFileView | null = null
 			if (post) {
 				const mutation = await handlePackageMutation({
 					action: form.action ?? '',
@@ -510,6 +500,7 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 						const source = parsePackageSource(form.source, form.subdir || null)
 						if (form.action === 'preview') {
 							preview = await previewPackageSource(source, { allowedHosts: packageSourceHostsFromEnv(env) })
+							if (form.path) previewFile = packageFileView(preview.files, form.path)
 						} else {
 							const fetched = await fetchPackageSource(source, { allowedHosts: packageSourceHostsFromEnv(env) })
 							const forkAs = form.action === 'fork' ? (form.as || '').trim() : ''
@@ -574,6 +565,7 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 								fileList: preview.fileList,
 								permissions: preview.permissions,
 								warnings: preview.warnings,
+								selectedFile: previewFile,
 							}
 						: null,
 					packages: packages.map((pkg) => {

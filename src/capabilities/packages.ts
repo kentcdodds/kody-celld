@@ -6,6 +6,7 @@ import {
 	fetchPackageSource,
 	packageSourceHostsFromEnv,
 	parsePackageSource,
+	packageFileView,
 	previewPackageSource,
 } from '../packages/install.ts'
 import type { PackageFiles } from '../packages/manifest.ts'
@@ -262,11 +263,11 @@ export default async function main() {
 	},
 })
 
-export const packagePreview = defineCapability<{ source: string; subdir?: string }>({
+export const packagePreview = defineCapability<{ source: string; subdir?: string; path?: string }>({
 	domain: 'packages',
 	name: 'packagePreview',
 	description:
-		'Fetch a remote package source without saving it: returns manifest, README, AGENTS, file list, declared permissions (jobs/webhooks/subscriptions/secretProvider/dependencies), provenance, and commit SHA for git clones. Use packageInstall to save or fork afterward. Does not transfer secrets.',
+		'Fetch a remote package source without saving it: returns manifest, README, AGENTS, file list, declared permissions (jobs/webhooks/subscriptions/secretProvider/dependencies), provenance, and commit SHA for git clones. Pass `path` (an entry of fileList) to also return the content of that file (truncated at 200,000 characters) so you can review the code before installing. Use packageInstall to save or fork afterward. Does not transfer secrets.',
 	tags: ['packages', 'read'],
 	keywords: [
 		'preview package',
@@ -274,6 +275,7 @@ export const packagePreview = defineCapability<{ source: string; subdir?: string
 		'kody.codes package',
 		'package readme before install',
 		'dry run install',
+		'read package file before install',
 	],
 	inputSchema: {
 		type: 'object',
@@ -284,6 +286,11 @@ export const packagePreview = defineCapability<{ source: string; subdir?: string
 					'Same source grammar as packageInstall (github:, kody.codes/@owner/leaf[.git], tarball, JSON map).',
 			},
 			subdir: { type: 'string' },
+			path: {
+				type: 'string',
+				description:
+					'Optional file path from fileList; returns its content as `file` (path, bytes, content, truncated).',
+			},
 		},
 		required: ['source'],
 	},
@@ -295,7 +302,11 @@ export default async function main() {
 	async handler(args, ctx) {
 		if (typeof args.source !== 'string') throw new KodyError('invalid_args', '"source" is required.')
 		const source = parsePackageSource(args.source, typeof args.subdir === 'string' ? args.subdir : undefined)
+		if (args.path !== undefined && typeof args.path !== 'string') {
+			throw new KodyError('invalid_args', '"path" must be a string.')
+		}
 		const preview = await previewPackageSource(source, { allowedHosts: packageSourceHostsFromEnv(ctx.env) })
+		const file = typeof args.path === 'string' ? packageFileView(preview.files, args.path) : undefined
 		return {
 			source: preview.source,
 			fetchedFrom: preview.fetchedFrom,
@@ -310,6 +321,7 @@ export default async function main() {
 			permissions: preview.permissions,
 			manifest: preview.manifest,
 			warnings: preview.warnings,
+			...(file ? { file } : {}),
 		}
 	},
 })

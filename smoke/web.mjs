@@ -315,6 +315,22 @@ export async function smokeWeb({ user, mcp }) {
 		'install form surfaces the refusal',
 		refused.status,
 	)
+	if (process.env.SMOKE_OFFLINE !== '1') {
+		// Preview lets you open a remote file before installing it.
+		const previewed = await browser.post('/account/packages', {
+			action: 'preview',
+			source: 'github:kentcdodds/kody-celld/examples/packages/http-probe#main',
+			path: 'probe.js',
+			csrf,
+		})
+		assert(
+			previewed.status === 200 &&
+				previewed.text.includes('name="path" value="provider-probe.js"') &&
+				previewed.text.includes('FetchGateway'),
+			'package preview links its files and shows the selected file',
+			previewed.status,
+		)
+	}
 	const pkgName = `@kody-smoke/web-${randomBytes(3).toString('hex')}`
 	await mcp.call('packageSave', {
 		files: {

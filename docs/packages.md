@@ -139,6 +139,11 @@ The same preview → install / fork flow is on the account **Packages** page. Ru
 - `packagePreview` returns declared surfaces (jobs, webhooks, subscriptions,
   secretProvider, dependencies) as "permissions" for human review — these are
   not a separate ACL, and installing still does not copy secrets.
+- Pass `path` (an entry of `fileList`) to `packagePreview` to read that file
+  before installing: the result gains `file: { path, bytes, content, truncated }`
+  (content capped at 200,000 characters; unknown paths fail with
+  `package_file_not_found`). On the web Packages page, file names in a preview
+  open the file below the list.
 - Pass `as` on `packageInstall` (or Fork on the web form) to rewrite
   `package.json#name` like a community fork; `packageUpdate` refuses forks.
 - Package code cannot call `packageInstall`/`packageUpdate` (403); only the

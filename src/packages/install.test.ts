@@ -4,6 +4,7 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, it } from 'node:test'
+import { KodyError } from '../lib/errors.ts'
 import {
 	assertAllowedSourceUrl,
 	defaultPackageSourceHosts,
@@ -12,8 +13,10 @@ import {
 	fetchPackageSource,
 	filesFromJson,
 	githubTarballUrl,
+	packageFileView,
 	packageSourceHostsFromEnv,
 	parsePackageSource,
+	previewPackageSource,
 	type FetchLike,
 } from './install.ts'
 import { gunzip, readTar } from './tar.ts'
@@ -350,5 +353,45 @@ describe('fetchPackageSource', () => {
 			/package_source_refused/,
 		)
 		assert.deepEqual(fetchImpl.calls, [])
+	})
+})
+
+describe('packageFileView', () => {
+	it('returns one file of a package with its UTF-8 byte size', () => {
+		const view = packageFileView({ 'package.json': manifest, 'main.js': 'export const é = 1\n' }, 'main.js')
+		assert.deepEqual(view, { path: 'main.js', bytes: 20, content: 'export const é = 1\n', truncated: false })
+	})
+
+	it('truncates content at 200,000 characters and says so', () => {
+		const big = 'x'.repeat(200_001)
+		const view = packageFileView({ 'big.txt': big }, 'big.txt')
+		assert.equal(view.content.length, 200_000)
+		assert.equal(view.truncated, true)
+		assert.equal(view.bytes, 200_001)
+	})
+
+	it('rejects paths that are not in the package', () => {
+		assert.throws(
+			() => packageFileView({ 'main.js': 'x' }, 'nope.js'),
+			(error: unknown) =>
+				error instanceof KodyError && error.code === 'package_file_not_found' && /nope\.js/.test(error.message),
+		)
+	})
+
+	it('does not treat inherited object keys as package files', () => {
+		for (const path of ['constructor', '__proto__', 'toString']) {
+			assert.throws(() => packageFileView({ 'main.js': 'x' }, path), /was not found/)
+		}
+	})
+
+	it('reads source files of a fetched preview before install', async () => {
+		const fetchImpl = fetchFor({
+			'https://codeload.github.com/o/hello/tar.gz/HEAD': tgzResponse(githubTarball(packageFiles)),
+		})
+		const preview = await previewPackageSource(parsePackageSource('github:o/hello'), {
+			allowedHosts: defaultPackageSourceHosts,
+			fetch: fetchImpl,
+		})
+		assert.equal(packageFileView(preview.files, 'main.js').content, packageFiles['main.js'])
 	})
 })
