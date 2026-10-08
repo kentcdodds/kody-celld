@@ -142,8 +142,10 @@ The same preview → install / fork flow is on the account **Packages** page. Ru
 - Pass `path` (an entry of `fileList`) to `packagePreview` to read that file
   before installing: the result gains `file: { path, bytes, content, truncated }`
   (content capped at 200,000 characters; unknown paths fail with
-  `package_file_not_found`). On the web Packages page, file names in a preview
-  open the file below the list.
+  `package_file_not_found`). On the web Packages page, **Preview → Browse files** opens the package in the
+  files explorer (tree, highlighted code, rendered Markdown) before you install
+  it; installed packages use the same explorer under
+  `/account/packages/<name>/files`.
 - Pass `as` on `packageInstall` (or Fork on the web form) to rewrite
   `package.json#name` like a community fork; `packageUpdate` refuses forks.
 - Package code cannot call `packageInstall`/`packageUpdate` (403); only the

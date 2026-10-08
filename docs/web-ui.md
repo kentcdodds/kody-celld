@@ -232,6 +232,14 @@ heading and the header brand should not move.
 5. Run `npm run validate`, `npm run dev` + `node smoke/run.mjs --only web`
    (and `oauth-server`, `community` when touching those pages).
 
+The package files explorer is a port of kody's
+(`client/package-files-explorer.tsx` + `markdown-view`, `syntax-highlight`,
+`src/app/highlight-code.ts`, `packages/highlight-worker`) at
+kentcdodds/kody@2bfeb29. kody reaches Shiki through the `HIGHLIGHT` service
+binding; here `src/highlight/binding.ts` runs the same handler in-process.
+Differences are marked `// kody-celld:` (no community repo chrome, no media
+or raw routes — media-named files show as text).
+
 Not ported on purpose: kody's client-side router / no-flash navigation, the
 landing page and marketing sections, Cloudflare Turnstile, OG image rendering.
 
