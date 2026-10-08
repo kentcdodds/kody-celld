@@ -3,7 +3,7 @@
 //
 //   node smoke/run.mjs                 # all scenarios, skips the ~1-2 minute real-cron wait
 //   node smoke/run.mjs --wait-cron     # also waits for celld's cron trigger to fire a job
-//   node smoke/run.mjs --only secrets  # one scenario (mcp | packages | secrets | jobs | limits | memory | blobs | browser | webhooks | email | mail-bridge | integrations | secret-providers | oauth-server | web | npm | install | community)
+//   node smoke/run.mjs --only secrets  # one scenario (mcp | packages | secrets | jobs | runs | limits | memory | blobs | browser | webhooks | email | mail-bridge | integrations | secret-providers | oauth-server | web | npm | install | community)
 //   SMOKE_OFFLINE=1 node smoke/run.mjs      # skip the parts that need esm.sh / GitHub
 //   SMOKE_AI_MOCK=1 node smoke/run.mjs --only memory  # with smoke/ai-mock-server.mjs + KODY_AI_* set
 //   SMOKE_MAIL_BRIDGE=1 node smoke/run.mjs --only mail-bridge  # real SMTP sidecar (needs `npm ci` in mail-bridge/)
@@ -18,6 +18,7 @@ import { smokeBrowser } from './browser.mjs'
 import { smokeCommunity } from './community.mjs'
 import { smokeInstall } from './install.mjs'
 import { smokeJobs } from './jobs.mjs'
+import { smokeRuns } from './runs.mjs'
 import { smokeLimits } from './limits.mjs'
 import { smokeMailBridge } from './mail-bridge.mjs'
 import { smokeMcp } from './mcp.mjs'
@@ -41,6 +42,7 @@ const scenarios = [
 	['packages', smokePackages],
 	['secrets', smokeSecrets],
 	['jobs', smokeJobs],
+	['runs', smokeRuns],
 	['limits', smokeLimits],
 	['memory', smokeMemory],
 	['blobs', smokeBlobs],
@@ -59,7 +61,7 @@ const scenarios = [
 
 if (scenarios.length === 0) {
 	console.error(
-		`Unknown scenario "${only}". Choose one of: mcp, packages, secrets, jobs, limits, memory, blobs, browser, webhooks, email, mail-bridge, integrations, secret-providers, oauth-server, web, npm, install, community`,
+		`Unknown scenario "${only}". Choose one of: mcp, packages, secrets, jobs, runs, limits, memory, blobs, browser, webhooks, email, mail-bridge, integrations, secret-providers, oauth-server, web, npm, install, community`,
 	)
 	process.exit(2)
 }

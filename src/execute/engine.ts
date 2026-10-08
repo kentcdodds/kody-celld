@@ -19,6 +19,8 @@ export type ExecuteInput = {
 	responseLimit?: number | undefined
 	idempotencyKey?: string | undefined
 	trigger?: string | undefined
+	/** Job id for `kind: 'job'` runs, so a later success can resolve earlier errors (kody). */
+	jobId?: string | undefined
 	/**
 	 * Sealed runs return their result only to the host caller: run history keeps
 	 * the record (kind, status, duration, gateway events) but stores no result or
@@ -99,6 +101,7 @@ export async function executeRun(
 		kind: input.kind,
 		packageName,
 		idempotencyKey: input.idempotencyKey ?? null,
+		jobId: input.jobId ?? null,
 	})
 	if (replayed) return runToResult(run, true)
 

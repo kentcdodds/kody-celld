@@ -47,6 +47,16 @@ import {
 	type SecretProviderBinding,
 	type SecretProviderGrant,
 } from '../secrets/provider-store.ts'
+import type { ErrorTriageFilter, RunTriageBulkInput, RunTriageUpdate } from '../runs/triage-args.ts'
+import {
+	ensureRunTriageColumns,
+	errorTriageWhere,
+	type RunSummary,
+	type RunTriageBulkResult,
+	type RunTriageFields,
+	RunTriageStore,
+	triageFieldsFromRow,
+} from '../runs/triage-store.ts'
 import { signatureMatches } from '../webhooks/verify.ts'
 
 export type SecretMetadata = {
@@ -115,7 +125,7 @@ export type RunRecord = {
 	logsJson: string
 	warnings: Array<string>
 	gateway: Array<GatewayEvent>
-}
+} & RunTriageFields
 
 export type GatewayEvent = {
 	at: string
@@ -560,12 +570,15 @@ export class UserCell extends DurableObject<Env> {
 		if (!usageColumns.includes('email_receives')) {
 			this.ctx.storage.sql.exec(`ALTER TABLE usage_daily ADD COLUMN email_receives INTEGER NOT NULL DEFAULT 0`)
 		}
+		ensureRunTriageColumns(this.ctx.storage.sql)
+		this.runTriage = new RunTriageStore(this.ctx.storage.sql)
 	}
 
 	private readonly limits: Limits
 	private readonly defaultQuotas: Quotas
 	private readonly integrations: IntegrationStore
 	private readonly secretProviders: SecretProviderStore
+	private readonly runTriage: RunTriageStore
 
 	private keyringPromise: Promise<MasterKeyring> | undefined
 	private keyring() {
@@ -1600,6 +1613,7 @@ export class UserCell extends DurableObject<Env> {
 		kind: RunRecord['kind']
 		packageName?: string | null | undefined
 		idempotencyKey?: string | null | undefined
+		jobId?: string | null | undefined
 	}): Promise<{ run: RunRecord; replayed: boolean }> {
 		if (input.idempotencyKey) {
 			const existing = await this.runGet({ idempotencyKey: input.idempotencyKey })
@@ -1611,12 +1625,13 @@ export class UserCell extends DurableObject<Env> {
 		this.assertQuota('executeMsPerDay', usage.executeMs, 'Daily execute-time')
 		const id = randomId('run')
 		this.ctx.storage.sql.exec(
-			`INSERT INTO runs (id, kind, package_name, idempotency_key, status, created_at) VALUES (?, ?, ?, ?, 'running', ?)`,
+			`INSERT INTO runs (id, kind, package_name, idempotency_key, status, created_at, job_id) VALUES (?, ?, ?, ?, 'running', ?, ?)`,
 			id,
 			input.kind,
 			input.packageName ?? null,
 			input.idempotencyKey ?? null,
 			nowIso(),
+			input.jobId ?? null,
 		)
 		this.ctx.storage.sql.exec(
 			`INSERT INTO usage_daily (day, runs) VALUES (?, 1) ON CONFLICT(day) DO UPDATE SET runs = runs + 1`,
@@ -1655,6 +1670,15 @@ export class UserCell extends DurableObject<Env> {
 			JSON.stringify(input.warnings ?? []),
 			input.id,
 		)
+		if (input.status === 'success') {
+			// kody: a later success of the same job resolves its earlier open errors.
+			const finished = this.ctx.storage.sql
+				.exec<{ kind: string; job_id: string | null }>('SELECT kind, job_id FROM runs WHERE id = ?', input.id)
+				.toArray()[0]
+			if (finished?.kind === 'job' && finished.job_id) {
+				this.runTriage.autoResolveJob({ runId: input.id, jobId: finished.job_id })
+			}
+		}
 		this.ctx.storage.sql.exec(
 			`INSERT INTO usage_daily (day, errors, execute_ms) VALUES (?, ?, ?)
 			 ON CONFLICT(day) DO UPDATE SET errors = errors + excluded.errors, execute_ms = execute_ms + excluded.execute_ms`,
@@ -1731,17 +1755,20 @@ export class UserCell extends DurableObject<Env> {
 			logsJson: row.logs_json,
 			warnings: JSON.parse(row.warnings_json) as Array<string>,
 			gateway: JSON.parse(row.gateway_json) as Array<GatewayEvent>,
+			...triageFieldsFromRow(row as unknown as Record<string, unknown>),
 		}
 	}
 
 	async runList(
-		filter: { limit?: number | undefined } = {},
+		filter: { limit?: number | undefined; errorTriage?: ErrorTriageFilter | undefined } = {},
 	): Promise<Array<Omit<RunRecord, 'resultJson' | 'logsJson' | 'gateway'>>> {
 		const limit = Math.min(Math.max(filter.limit ?? 20, 1), 200)
 		return (
 			this.ctx.storage.sql
 				.exec(
-					'SELECT id, kind, package_name, idempotency_key, status, created_at, finished_at, duration_ms, error_json, warnings_json FROM runs ORDER BY created_at DESC LIMIT ?',
+					`SELECT id, kind, package_name, idempotency_key, status, created_at, finished_at, duration_ms, error_json, warnings_json,
+						error_triage, triage_note, triaged_at, triaged_by, job_id
+					FROM runs WHERE ${errorTriageWhere(filter.errorTriage ?? 'all')} ORDER BY created_at DESC LIMIT ?`,
 					limit,
 				)
 				.toArray() as Array<{
@@ -1767,7 +1794,37 @@ export class UserCell extends DurableObject<Env> {
 			durationMs: row.duration_ms,
 			error: row.error_json ? (JSON.parse(row.error_json) as RunRecord['error']) : null,
 			warnings: JSON.parse(row.warnings_json) as Array<string>,
+			...triageFieldsFromRow(row as unknown as Record<string, unknown>),
 		}))
+	}
+
+	async runSummary(input: { since?: string | null | undefined } = {}): Promise<RunSummary> {
+		return this.runTriage.summary(input.since ?? null)
+	}
+
+	async runTriageUpdate(input: {
+		runId: string
+		triage: RunTriageUpdate
+		note: string | undefined
+	}): Promise<RunRecord> {
+		const outcome = this.runTriage.update({ ...input, by: this.userId })
+		if (!outcome.ok) {
+			if (outcome.reason === 'not_found') {
+				throw new KodyError('run_not_found', `Run "${input.runId}" was not found.`, { status: 404 })
+			}
+			throw new KodyError(
+				'run_not_error',
+				`Run "${input.runId}" has status "${outcome.status}"; only error runs can be ignored or resolved.`,
+				{ status: 400 },
+			)
+		}
+		const run = await this.runGet({ id: input.runId })
+		if (!run) throw new KodyError('run_not_found', `Run "${input.runId}" was not found.`, { status: 404 })
+		return run
+	}
+
+	async runTriageBulk(input: RunTriageBulkInput): Promise<RunTriageBulkResult> {
+		return this.runTriage.bulk({ ...input, by: this.userId })
 	}
 
 	// --------------------------------------------------------------- webhooks

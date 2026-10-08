@@ -25,6 +25,7 @@ export async function runJobNow(
 		entry: { kind: 'package', packageName: job.packageName, entryPath: job.entry },
 		params: { jobName: job.jobName, packageName: job.packageName, scheduledFor, trigger, jobId: job.id },
 		trigger,
+		jobId: job.id,
 	})
 	await userCell.jobRunFinish({
 		id: jobRunId,
