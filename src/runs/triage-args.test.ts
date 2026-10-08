@@ -34,6 +34,11 @@ describe('parseTriageNote', () => {
 		assert.equal(parseTriageNote(''), '')
 		assert.equal(parseTriageNote('flaky upstream'), 'flaky upstream')
 	})
+	it('trims notes and treats whitespace-only as clear (kody)', () => {
+		assert.equal(parseTriageNote('  flaky upstream  '), 'flaky upstream')
+		assert.equal(parseTriageNote('   '), '')
+		assert.equal(parseTriageNote('\t\n'), '')
+	})
 	it('refuses notes over the limit and non-strings', () => {
 		assert.equal(parseTriageNote('x'.repeat(runTriageMaxNoteLength))?.length, runTriageMaxNoteLength)
 		invalidArgs(() => parseTriageNote('x'.repeat(runTriageMaxNoteLength + 1)), /at most 2000/)

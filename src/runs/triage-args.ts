@@ -5,9 +5,21 @@ import { KodyError } from '../lib/errors.ts'
 export const runTriageMaxNoteLength = 2000
 export const runTriageBulkMaxLimit = 100
 
-export type RunKind = 'execute' | 'package' | 'job' | 'webhook' | 'subscription' | 'secret-provider'
-export type RunTriageUpdate = 'ignored' | 'resolved' | 'open'
-export type ErrorTriageFilter = 'open' | 'ignored' | 'resolved' | 'all'
+/** Single source for run `kind` (kody's surface). */
+export const runKinds = ['execute', 'package', 'job', 'webhook', 'subscription', 'secret-provider'] as const
+export type RunKind = (typeof runKinds)[number]
+
+/** Soft triage values stored on error runs (`null` = open). */
+export const runErrorTriageValues = ['ignored', 'resolved'] as const
+export type RunErrorTriage = (typeof runErrorTriageValues)[number]
+
+/** Values accepted by runUpdate / runUpdateBulk. */
+export const runTriageUpdates = ['ignored', 'resolved', 'open'] as const
+export type RunTriageUpdate = (typeof runTriageUpdates)[number]
+
+/** List / bulk / summary filters over soft triage. */
+export const errorTriageFilters = ['open', 'ignored', 'resolved', 'all'] as const
+export type ErrorTriageFilter = (typeof errorTriageFilters)[number]
 
 export type RunTriageBulkFilter = {
 	kind?: RunKind
@@ -27,10 +39,6 @@ export type RunTriageBulkInput = {
 	dryRun: boolean
 }
 
-const runKinds: ReadonlyArray<RunKind> = ['execute', 'package', 'job', 'webhook', 'subscription', 'secret-provider']
-const triageUpdates: ReadonlyArray<RunTriageUpdate> = ['ignored', 'resolved', 'open']
-const triageFilters: ReadonlyArray<ErrorTriageFilter> = ['open', 'ignored', 'resolved', 'all']
-
 function invalid(message: string): never {
 	throw new KodyError('invalid_args', message, { status: 400 })
 }
@@ -47,7 +55,7 @@ function optionalText(value: unknown, label: string): string | undefined {
 }
 
 export function parseRunTriage(value: unknown): RunTriageUpdate {
-	return oneOf(value, triageUpdates, 'triage')
+	return oneOf(value, runTriageUpdates, 'triage')
 }
 
 export function parseTriageNote(value: unknown): string | undefined {
@@ -55,12 +63,13 @@ export function parseTriageNote(value: unknown): string | undefined {
 	if (typeof value !== 'string') return invalid('note must be a string.')
 	if (value.length > runTriageMaxNoteLength)
 		return invalid(`note must be at most ${runTriageMaxNoteLength} characters.`)
-	return value
+	// kody: whitespace-only notes clear triage_note (trim then empty → clear).
+	return value.trim()
 }
 
 export function parseErrorTriageFilter(value: unknown, fallback: ErrorTriageFilter): ErrorTriageFilter {
 	if (value === undefined || value === null) return fallback
-	return oneOf(value, triageFilters, 'errorTriage')
+	return oneOf(value, errorTriageFilters, 'errorTriage')
 }
 
 export function parseSince(value: unknown): string | null {

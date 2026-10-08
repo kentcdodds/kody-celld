@@ -1,11 +1,12 @@
-import type { ErrorTriageFilter, RunTriageBulkInput, RunTriageUpdate } from './triage-args.ts'
+import type { ErrorTriageFilter, RunErrorTriage, RunTriageBulkInput, RunTriageUpdate } from './triage-args.ts'
+import { runErrorTriageValues } from './triage-args.ts'
 
 // kody: packages/worker/src/run-records/run-log-do.ts (maybeAutoResolvePriorJobErrors).
 export const autoResolveNote = 'auto-resolved: later success of the same job'
 export const autoResolveBy = 'system:auto-resolve'
 
 export type RunTriageFields = {
-	errorTriage: 'ignored' | 'resolved' | null
+	errorTriage: RunErrorTriage | null
 	triageNote: string | null
 	triagedAt: string | null
 	triagedBy: string | null
@@ -55,7 +56,10 @@ function text(value: unknown): string | null {
 export function triageFieldsFromRow(row: Record<string, unknown>): RunTriageFields {
 	const triage = row.error_triage
 	return {
-		errorTriage: triage === 'ignored' || triage === 'resolved' ? triage : null,
+		errorTriage:
+			typeof triage === 'string' && (runErrorTriageValues as ReadonlyArray<string>).includes(triage)
+				? (triage as RunErrorTriage)
+				: null,
 		triageNote: text(row.triage_note),
 		triagedAt: text(row.triaged_at),
 		triagedBy: text(row.triaged_by),
@@ -63,7 +67,13 @@ export function triageFieldsFromRow(row: Record<string, unknown>): RunTriageFiel
 	}
 }
 
-/** SQL boolean over `runs` for a list/bulk triage filter. `open` = unhandled error runs (kody). */
+/**
+ * SQL boolean over `runs` for a list/bulk triage filter.
+ *
+ * kody-celld: `open` is unhandled *error* runs only. Kody's runList
+ * `error_triage=open` keeps successes and running visible (only hides
+ * ignored/resolved). Activity Open errors and runSummary match both.
+ */
 export function errorTriageWhere(filter: ErrorTriageFilter): string {
 	switch (filter) {
 		case 'open':
@@ -183,7 +193,8 @@ export class RunTriageStore {
 		const ids = (
 			this.sql
 				.exec(
-					`SELECT id FROM runs WHERE ${where.join(' AND ')} ORDER BY created_at DESC LIMIT ?`,
+					// kody: ORDER BY started_at DESC, id DESC — celld uses created_at.
+					`SELECT id FROM runs WHERE ${where.join(' AND ')} ORDER BY created_at DESC, id DESC LIMIT ?`,
 					...params,
 					input.limit + 1,
 				)
@@ -198,18 +209,27 @@ export class RunTriageStore {
 		return { matchedRunIds, updatedCount, hasMore, dryRun: false }
 	}
 
-	// Only failures that started before the successful run: a later-started
-	// failure (an overlapping manual run) is newer evidence and stays open.
+	/**
+	 * Soft-resolve open errors of the same job that started strictly before
+	 * this successful run. A later-started failure (overlapping manual run) stays open.
+	 *
+	 * kody-celld: kody's maybeAutoResolvePriorJobErrors only excludes
+	 * `id != success`; we also require `created_at` (then `id`) earlier.
+	 */
 	autoResolveJob(input: { runId: string; jobId: string }): number {
+		const success = this.sql.exec(`SELECT created_at FROM runs WHERE id = ?`, input.runId).toArray()[0] as
+			{ created_at: string } | undefined
+		if (!success) return 0
 		return this.sql.exec(
 			`UPDATE runs SET error_triage = 'resolved', triage_note = ?, triaged_at = ?, triaged_by = ?
-			WHERE status = 'error' AND error_triage IS NULL AND kind = 'job' AND job_id = ? AND id != ?
-				AND created_at < (SELECT created_at FROM runs WHERE id = ?)`,
+			WHERE status = 'error' AND error_triage IS NULL AND kind = 'job' AND job_id = ?
+				AND (created_at < ? OR (created_at = ? AND id < ?))`,
 			autoResolveNote,
 			this.now(),
 			autoResolveBy,
 			input.jobId,
-			input.runId,
+			success.created_at,
+			success.created_at,
 			input.runId,
 		).rowsWritten
 	}
@@ -231,10 +251,12 @@ export class RunTriageStore {
 				...ids,
 			).rowsWritten
 		}
+		// kody: trim; whitespace-only clears the note.
+		const trimmed = note.trim()
 		return this.sql.exec(
 			`UPDATE runs SET error_triage = ?, triage_note = ?, triaged_at = ?, triaged_by = ? WHERE id IN (${placeholders})`,
 			triage,
-			note === '' ? null : note,
+			trimmed === '' ? null : trimmed,
 			this.now(),
 			by,
 			...ids,

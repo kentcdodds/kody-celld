@@ -69,6 +69,7 @@ export function AccountActivity(
 					...(open ? { open: runId } : {}),
 				}}
 				label={label}
+				ariaLabel={`${label} run ${runId}`}
 			/>
 		)
 		const triageActions = (
@@ -161,7 +162,11 @@ export function AccountActivity(
 							emptyLabel={
 								d.view === 'errors' ? 'No open errors.' : 'No runs yet.'
 							}
-							countLabel={`${d.runs.length} shown`}
+							countLabel={
+								d.view === 'errors' && d.summary.errors > d.runs.length
+									? `${d.runs.length} of ${d.summary.errors}`
+									: `${d.runs.length} shown`
+							}
 							columns={[
 								{ key: 'when', label: 'When', primary: true },
 								// No `drop` columns: the expanded run's row spans every column,

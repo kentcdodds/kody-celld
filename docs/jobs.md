@@ -85,11 +85,16 @@ Failed runs can be soft-triaged, as in kody (`docs/use/activity.md`):
   `dryRun`, repeat while `hasMore`. A filtered reopen must name
   `errorTriage: "ignored"` or `"resolved"`.
 - `runList({ errorTriage })` — `open | ignored | resolved | all`. Unlike
-  kody, the default is `all`, so existing callers see every run.
+  kody, the default is `all`, so existing callers see every run. `open` is
+  unhandled **error** runs only; kody's list `open` still shows successes and
+  running (it only hides ignored/resolved).
 
-When a job run succeeds, earlier **open** errors of the same job are marked
-`resolved` (`triagedBy: "system:auto-resolve"`); runs you ignored are left as
-they are. Job runs recorded before this feature carry no job id, so their
-errors stay open until you triage them (one `runUpdateBulk` call with a
-`packageName` filter clears them). The Activity page (`/account/runs`) shows the same counts, opens on
-Open errors when there are any, and has Ignore / Resolve / Reopen buttons.
+When a job run succeeds, **earlier** open errors of the same job (strictly
+older `created_at`, with `id` as a tie-break) are marked `resolved`
+(`triagedBy: "system:auto-resolve"`); runs you ignored are left as they are.
+(Kody excludes only `id !=` the success; celld also bounds by start time so a
+later overlapping failure stays open.) Job runs recorded before this feature
+carry no job id, so their errors stay open until you triage them (one
+`runUpdateBulk` call with a `packageName` filter clears them). The Activity
+page (`/account/runs`) shows the same counts, opens on Open errors when there
+are any, and has Ignore / Resolve / Reopen buttons.

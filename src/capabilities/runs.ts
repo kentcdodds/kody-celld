@@ -1,5 +1,6 @@
 import { KodyError } from '../lib/errors.ts'
 import {
+	errorTriageFilters,
 	parseErrorTriageFilter,
 	parseRunTriage,
 	parseRunTriageBulk,
@@ -7,6 +8,7 @@ import {
 	parseTriageNote,
 	runTriageBulkMaxLimit,
 	runTriageMaxNoteLength,
+	runTriageUpdates,
 } from '../runs/triage-args.ts'
 import { defineCapability, defineDomain } from './define.ts'
 
@@ -18,9 +20,15 @@ export const runsDomain = defineDomain({
 
 const errorTriageFilterSchema = {
 	type: 'string',
-	enum: ['open', 'ignored', 'resolved', 'all'],
+	enum: [...errorTriageFilters],
 	description:
 		'open = error runs not ignored/resolved; ignored / resolved = triaged error runs; all (default) = every run.',
+}
+
+const runTriageUpdateSchema = {
+	type: 'string',
+	enum: [...runTriageUpdates],
+	description: 'ignored (noise), resolved (fixed), or open (clear triage).',
 }
 
 export const runList = defineCapability<{ limit?: number; errorTriage?: string }>({
@@ -101,11 +109,7 @@ export const runUpdate = defineCapability<{ runId: string; triage: string; note?
 		type: 'object',
 		properties: {
 			runId: { type: 'string', description: 'Run id from runList, runGet or jobRunNow.' },
-			triage: {
-				type: 'string',
-				enum: ['ignored', 'resolved', 'open'],
-				description: 'ignored (noise), resolved (fixed), or open (clear triage).',
-			},
+			triage: runTriageUpdateSchema,
 			note: {
 				type: 'string',
 				description: `Optional note (at most ${runTriageMaxNoteLength} characters). Omit to keep the current note; pass "" to clear it. Cleared when triage is open.`,
@@ -149,7 +153,7 @@ export const runUpdateBulk = defineCapability<Record<string, unknown>>({
 					errorTriage: errorTriageFilterSchema,
 				},
 			},
-			triage: { type: 'string', enum: ['ignored', 'resolved', 'open'] },
+			triage: runTriageUpdateSchema,
 			note: { type: 'string' },
 			limit: { type: 'integer' },
 			dryRun: { type: 'boolean' },

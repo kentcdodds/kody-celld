@@ -837,7 +837,9 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 						hrefWithFlash(`${backPath}?view=${back}`, triage === 'open' ? 'run_reopened' : `run_${triage}`),
 					)
 				} catch (error) {
-					triageError = KodyError.fromUnknown(error)?.message ?? 'Update failed.'
+					const known = KodyError.fromUnknown(error)
+					if (!known) console.error('[kody-celld] Activity triage update failed', form.runId, error)
+					triageError = known?.message ?? 'Update failed.'
 				}
 			}
 			const summary = await userCell.runSummary({})

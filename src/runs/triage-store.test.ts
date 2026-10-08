@@ -133,9 +133,11 @@ describe('RunTriageStore.summary', () => {
 })
 
 describe('RunTriageStore.update', () => {
-	it('ignores and resolves an error run with a note, keeps the note when omitted, clears it with an empty string', () => {
+	it('ignores and resolves an error run with a note, keeps the note when omitted, clears empty/whitespace, and trims', () => {
 		const { store, row } = setup([{ id: 'r1', status: 'error', createdAt: '2026-10-08T01:00:00Z' }])
-		assert.deepEqual(store.update({ runId: 'r1', triage: 'ignored', note: 'flaky', by: 'user_1' }), { ok: true })
+		assert.deepEqual(store.update({ runId: 'r1', triage: 'ignored', note: '  flaky  ', by: 'user_1' }), {
+			ok: true,
+		})
 		assert.deepEqual(triageFieldsFromRow(row('r1')), {
 			errorTriage: 'ignored',
 			triageNote: 'flaky',
@@ -147,6 +149,9 @@ describe('RunTriageStore.update', () => {
 		assert.equal(triageFieldsFromRow(row('r1')).errorTriage, 'resolved')
 		assert.equal(triageFieldsFromRow(row('r1')).triageNote, 'flaky')
 		store.update({ runId: 'r1', triage: 'resolved', note: '', by: 'user_1' })
+		assert.equal(triageFieldsFromRow(row('r1')).triageNote, null)
+		store.update({ runId: 'r1', triage: 'ignored', note: 'again', by: 'user_1' })
+		store.update({ runId: 'r1', triage: 'ignored', note: '   ', by: 'user_1' })
 		assert.equal(triageFieldsFromRow(row('r1')).triageNote, null)
 		assert.equal(row('r1').status, 'error')
 		assert.equal(row('r1').error_json, '{"name":"Error","message":"boom"}')
@@ -219,6 +224,24 @@ describe('RunTriageStore.bulk', () => {
 		assert.equal(result.updatedCount, 0)
 		assert.equal(result.dryRun, true)
 		assert.equal(triageFieldsFromRow(row('e0')).errorTriage, null)
+	})
+
+	it('orders matches by created_at DESC then id DESC (kody tie-break)', () => {
+		const { store } = setup([
+			{ id: 'b', kind: 'job', status: 'error', createdAt: '2026-10-08T02:00:00Z', jobId: '@a/b#tick' },
+			{ id: 'a', kind: 'job', status: 'error', createdAt: '2026-10-08T02:00:00Z', jobId: '@a/b#tick' },
+			{ id: 'c', kind: 'job', status: 'error', createdAt: '2026-10-08T03:00:00Z', jobId: '@a/b#tick' },
+		])
+		const result = store.bulk({
+			runIds: null,
+			filter: { jobId: '@a/b#tick', errorTriage: 'open' },
+			triage: 'resolved',
+			note: undefined,
+			limit: 100,
+			dryRun: true,
+			by: 'u',
+		})
+		assert.deepEqual(result.matchedRunIds, ['c', 'b', 'a'])
 	})
 
 	it('bulk by filter pages with hasMore until done', () => {
@@ -367,6 +390,20 @@ describe('RunTriageStore.autoResolveJob', () => {
 		assert.equal(triageFieldsFromRow(row('a2')).errorTriage, 'ignored')
 		assert.equal(triageFieldsFromRow(row('b1')).errorTriage, null)
 		assert.equal(triageFieldsFromRow(row('x1')).errorTriage, null)
+	})
+
+	it('does not resolve open errors that started at or after the successful run', () => {
+		// Ids are lexicographic so the same-timestamp tie-break (`id < success`) is deliberate.
+		const { store, row } = setup([
+			{ id: 'a-early', kind: 'job', status: 'error', createdAt: '2026-10-08T01:00:00Z', jobId: '@a/b#tick' },
+			{ id: 'b-success', kind: 'job', status: 'success', createdAt: '2026-10-08T02:00:00Z', jobId: '@a/b#tick' },
+			{ id: 'c-same-time', kind: 'job', status: 'error', createdAt: '2026-10-08T02:00:00Z', jobId: '@a/b#tick' },
+			{ id: 'd-later', kind: 'job', status: 'error', createdAt: '2026-10-08T03:00:00Z', jobId: '@a/b#tick' },
+		])
+		assert.equal(store.autoResolveJob({ runId: 'b-success', jobId: '@a/b#tick' }), 1)
+		assert.equal(triageFieldsFromRow(row('a-early')).errorTriage, 'resolved')
+		assert.equal(triageFieldsFromRow(row('c-same-time')).errorTriage, null)
+		assert.equal(triageFieldsFromRow(row('d-later')).errorTriage, null)
 	})
 })
 

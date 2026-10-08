@@ -126,6 +126,7 @@ type ButtonProps = {
 	name?: string
 	value?: string
 	disabled?: boolean
+	ariaLabel?: string
 }
 
 function buttonCss(variant: ButtonVariant, size: 'sm' | 'md') {
@@ -150,6 +151,7 @@ export function SubmitButton(handle: Handle<ButtonProps>) {
 			name={handle.props.name}
 			value={handle.props.value}
 			disabled={handle.props.disabled}
+			aria-label={handle.props.ariaLabel}
 			mix={css(
 				buttonCss(handle.props.variant ?? 'primary', handle.props.size ?? 'sm'),
 			)}
@@ -197,6 +199,7 @@ export function ActionForm(
 		csrf: string
 		fields: Record<string, string>
 		label: string
+		ariaLabel?: string
 		disabled?: boolean
 	}>,
 ) {
@@ -206,7 +209,11 @@ export function ActionForm(
 			{Object.entries(handle.props.fields).map(([name, value]) => (
 				<Hidden key={name} name={name} value={value} />
 			))}
-			<SubmitButton variant="secondary" disabled={handle.props.disabled}>
+			<SubmitButton
+				variant="secondary"
+				disabled={handle.props.disabled}
+				ariaLabel={handle.props.ariaLabel}
+			>
 				{handle.props.label}
 			</SubmitButton>
 		</form>

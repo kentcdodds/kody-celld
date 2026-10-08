@@ -47,7 +47,7 @@ import {
 	type SecretProviderBinding,
 	type SecretProviderGrant,
 } from '../secrets/provider-store.ts'
-import type { ErrorTriageFilter, RunTriageBulkInput, RunTriageUpdate } from '../runs/triage-args.ts'
+import type { ErrorTriageFilter, RunKind, RunTriageBulkInput, RunTriageUpdate } from '../runs/triage-args.ts'
 import {
 	ensureRunTriageColumns,
 	errorTriageWhere,
@@ -113,7 +113,7 @@ export type JobRunRecord = {
 
 export type RunRecord = {
 	id: string
-	kind: 'execute' | 'package' | 'job' | 'webhook' | 'subscription' | 'secret-provider'
+	kind: RunKind
 	packageName: string | null
 	idempotencyKey: string | null
 	status: 'running' | 'success' | 'error'
@@ -1768,7 +1768,7 @@ export class UserCell extends DurableObject<Env> {
 				.exec(
 					`SELECT id, kind, package_name, idempotency_key, status, created_at, finished_at, duration_ms, error_json, warnings_json,
 						error_triage, triage_note, triaged_at, triaged_by, job_id
-					FROM runs WHERE ${errorTriageWhere(filter.errorTriage ?? 'all')} ORDER BY created_at DESC LIMIT ?`,
+					FROM runs WHERE ${errorTriageWhere(filter.errorTriage ?? 'all')} ORDER BY created_at DESC, id DESC LIMIT ?`,
 					limit,
 				)
 				.toArray() as Array<{
