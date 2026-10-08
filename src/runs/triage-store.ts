@@ -198,14 +198,18 @@ export class RunTriageStore {
 		return { matchedRunIds, updatedCount, hasMore, dryRun: false }
 	}
 
+	// Only failures that started before the successful run: a later-started
+	// failure (an overlapping manual run) is newer evidence and stays open.
 	autoResolveJob(input: { runId: string; jobId: string }): number {
 		return this.sql.exec(
 			`UPDATE runs SET error_triage = 'resolved', triage_note = ?, triaged_at = ?, triaged_by = ?
-			WHERE status = 'error' AND error_triage IS NULL AND kind = 'job' AND job_id = ? AND id != ?`,
+			WHERE status = 'error' AND error_triage IS NULL AND kind = 'job' AND job_id = ? AND id != ?
+				AND created_at < (SELECT created_at FROM runs WHERE id = ?)`,
 			autoResolveNote,
 			this.now(),
 			autoResolveBy,
 			input.jobId,
+			input.runId,
 			input.runId,
 		).rowsWritten
 	}

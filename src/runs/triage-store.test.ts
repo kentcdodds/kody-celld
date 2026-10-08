@@ -370,6 +370,19 @@ describe('RunTriageStore.autoResolveJob', () => {
 	})
 })
 
+describe('RunTriageStore.autoResolveJob ordering', () => {
+	it('leaves errors of the same job that started after the successful run open', () => {
+		const { store, row } = setup([
+			{ id: 'early', kind: 'job', status: 'error', createdAt: '2026-10-08T01:00:00Z', jobId: '@a/b#tick' },
+			{ id: 'ok', kind: 'job', status: 'success', createdAt: '2026-10-08T02:00:00Z', jobId: '@a/b#tick' },
+			{ id: 'later', kind: 'job', status: 'error', createdAt: '2026-10-08T02:00:30Z', jobId: '@a/b#tick' },
+		])
+		assert.equal(store.autoResolveJob({ runId: 'ok', jobId: '@a/b#tick' }), 1)
+		assert.equal(triageFieldsFromRow(row('early')).errorTriage, 'resolved')
+		assert.equal(triageFieldsFromRow(row('later')).errorTriage, null)
+	})
+})
+
 describe('errorTriageWhere', () => {
 	it('selects the right rows for each filter', () => {
 		const { sql } = setup([
