@@ -101,6 +101,47 @@ async function rewriteImports(source: string, fromPath: string, rewrite: Rewrite
 	return replaceImportSpecifiers(source, fromPath, (specifier) => replacements.get(specifier) ?? null)
 }
 
+/**
+ * celld links only what the entry reaches through static imports. Walk that
+ * graph and name the first module that cannot be read or the first static
+ * relative import that resolves to nothing, instead of celld's opaque
+ * `instantiate: <none>`. Unreached files and dynamic `import()`s stay as
+ * they were: they never fail the isolate up front.
+ */
+function assertReachableImportsResolve(
+	modules: Record<string, string>,
+	entryPath: string,
+	unreadable: Map<string, KodyError>,
+) {
+	const known = new Set([...Object.keys(modules), RUNTIME_MODULE_PATH])
+	const queue = [entryPath]
+	const seen = new Set<string>()
+	while (queue.length > 0) {
+		const path = queue.shift() as string
+		if (seen.has(path)) continue
+		seen.add(path)
+		const failure = unreadable.get(path)
+		if (failure) throw failure
+		if (path === RUNTIME_MODULE_PATH || path.endsWith('.json')) continue
+		for (const { specifier, kind } of lexImportSpecifiers(modules[path] ?? '', path)) {
+			if (kind !== 'static' || !isRelative(specifier)) continue
+			let target: string
+			try {
+				target = resolveRelative(path, specifier)
+			} catch {
+				throw new KodyError(
+					'invalid_import',
+					`Cannot resolve "${specifier}" from ${describeModule(path)}: it points outside the package.`,
+				)
+			}
+			if (!known.has(target)) {
+				throw new KodyError('invalid_import', `Cannot resolve "${specifier}" from ${describeModule(path)}.`)
+			}
+			queue.push(target)
+		}
+	}
+}
+
 /** "lib/main.js in package @scope/pkg", or "your execute code" for the ad hoc module. */
 function describeModule(path: string) {
 	if (path === ADHOC_MODULE_PATH) return 'your execute code'
@@ -170,13 +211,18 @@ export async function buildModuleGraph(input: {
 		}
 		if (isBuiltin(specifier)) return specifier
 		if (isRelative(specifier)) {
-			const target = resolveRelative(fromPath, specifier)
+			let target: string
+			try {
+				target = resolveRelative(fromPath, specifier)
+			} catch {
+				return specifier
+			}
 			for (const candidate of relativeImportCandidates(target)) {
 				if (!(candidate in modules)) continue
 				return importTarget(fromPath, candidate)
 			}
-			// Left as is, celld fails the whole isolate with an opaque `instantiate: <none>`.
-			throw new KodyError('invalid_import', `Cannot resolve "${specifier}" from ${describeModule(fromPath)}.`)
+			// Left as written; assertReachableImportsResolve names it if the entry reaches it.
+			return specifier
 		}
 		if (!input.allowNpm) {
 			throw new KodyError(
@@ -188,14 +234,31 @@ export async function buildModuleGraph(input: {
 		return specifier
 	}
 
+	// Modules the lexer cannot read (e.g. JSX in client files) stay as written
+	// and only fail the run if the entry reaches them.
+	const unreadable = new Map<string, KodyError>()
+	const rewriteModule = async (source: string, path: string) => {
+		try {
+			return await rewriteImports(source, path, rewriter)
+		} catch (error) {
+			const kody = KodyError.fromUnknown(error)
+			if (!kody || kody.code !== 'invalid_module') throw error
+			unreadable.set(path, kody)
+			return source
+		}
+	}
+
 	const includeFiles = async (files: PackageFiles, toPath: (file: string) => string) => {
-		// Register paths first so relative-import checks see sibling modules.
-		for (const file of Object.keys(files)) modules[toPath(file)] = ''
+		// Register module paths first so relative-import checks see sibling
+		// modules; files that never become modules (docs, .txt) are not targets.
+		for (const file of Object.keys(files)) {
+			if (/\.(?:m?js|ts|json)$/.test(file)) modules[toPath(file)] = ''
+		}
 		for (const [file, source] of Object.entries(files)) {
 			const path = toPath(file)
 			// celld's Worker Loader accepts only JS/wasm modules, so JSON becomes an
 			// ES module and docs/other assets stay out of the isolate entirely.
-			if (/\.(?:m?js|ts)$/.test(file)) modules[path] = await rewriteImports(source, path, rewriter)
+			if (/\.(?:m?js|ts)$/.test(file)) modules[path] = await rewriteModule(source, path)
 			else if (/\.json$/.test(file)) modules[path] = `export default ${JSON.stringify(JSON.parse(source))}`
 			else delete modules[path]
 		}
@@ -219,7 +282,7 @@ export async function buildModuleGraph(input: {
 	if (input.entry.kind === 'adhoc') {
 		entryPath = ADHOC_MODULE_PATH
 		modules[entryPath] = ''
-		modules[entryPath] = await rewriteImports(input.entry.code, entryPath, rewriter)
+		modules[entryPath] = await rewriteModule(input.entry.code, entryPath)
 	} else {
 		packageName = input.entry.packageName
 		const pkg = await loadPackage(packageName)
@@ -236,6 +299,7 @@ export async function buildModuleGraph(input: {
 		}
 	}
 	if (sealedStubNeeded) modules[SEALED_MODULE_PATH] = SEALED_MODULE_SOURCE
+	assertReachableImportsResolve(modules, entryPath, unreadable)
 
 	if (npmSpecifiers.size > 0) {
 		const resolved = await resolveNpmModules([...npmSpecifiers], input.npm)
@@ -243,7 +307,7 @@ export async function buildModuleGraph(input: {
 		warnings.push(...resolved.warnings)
 		const npmPaths = new Map<string, string>(resolved.entryPaths)
 		for (const modulePath of Object.keys(modules)) {
-			if (modulePath.startsWith('npm/')) continue
+			if (modulePath.startsWith('npm/') || unreadable.has(modulePath)) continue
 			modules[modulePath] = replaceImportSpecifiers(sourceOf(modulePath), modulePath, (specifier) => {
 				const path = npmPaths.get(specifier)
 				return path ? relativeSpecifier(modulePath, path) : null

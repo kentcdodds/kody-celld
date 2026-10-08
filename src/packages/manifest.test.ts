@@ -85,6 +85,51 @@ describe('parsePackageManifest relative imports', () => {
 		)
 	})
 
+	it('accepts files the exports never reach and optional dynamic imports, as celld links only reachable static imports', () => {
+		assert.doesNotThrow(() =>
+			parsePackageManifest(
+				withFiles({
+					'index.js':
+						"export default async () => { try { await import('./optional.js'); return 1 } catch { return 0 } }",
+					'test/unused.test.js': "import helper from '../src/helper.js'\nexport default helper",
+					'client/view.js': 'export default () => <div>hi</div>',
+				}),
+			),
+		)
+	})
+
+	it('checks files reached from job entries, not only exports', () => {
+		assert.throws(
+			() =>
+				parsePackageManifest({
+					'package.json': JSON.stringify({
+						name: '@scope/pkg',
+						version: '1.0.0',
+						exports: './index.js',
+						kody: { jobs: { nightly: { entry: './jobs/nightly.js', schedule: { type: 'interval', every: '1h' } } } },
+					}),
+					'README.md': '# pkg',
+					'AGENTS.md': 'Use it.',
+					'index.js': 'export default () => 1',
+					'jobs/nightly.js': "import { run } from './run.js'\nexport default run",
+				}),
+			/Cannot resolve "\.\/run\.js" from jobs\/nightly\.js/,
+		)
+	})
+
+	it('names the file when an import escapes the package root', () => {
+		assert.throws(
+			() => parsePackageManifest(withFiles({ 'index.js': "import x from '../../outside.js'\nexport default x" })),
+			(error: unknown) => {
+				const e = error as { code?: string; message?: string }
+				return (
+					e.code === 'invalid_import' &&
+					e.message === 'Cannot resolve "../../outside.js" from index.js: it points outside the package.'
+				)
+			},
+		)
+	})
+
 	it('refuses a relative import that resolves to nothing, naming the file', () => {
 		assert.throws(
 			() =>

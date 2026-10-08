@@ -405,8 +405,7 @@ export function parsePackageManifest(files: PackageFiles): PackageManifest {
 	if (!readme) throw new KodyError('invalid_manifest', 'A non-empty README.md is required.')
 	if (!agents) throw new KodyError('invalid_manifest', 'A non-empty AGENTS.md is required.')
 
-	assertRelativeImportsResolve(files)
-	return {
+	const manifest: PackageManifest = {
 		name,
 		version: typeof json.version === 'string' ? json.version : '0.0.0',
 		description:
@@ -424,6 +423,12 @@ export function parsePackageManifest(files: PackageFiles): PackageManifest {
 		hidden: kody.hidden === true,
 		keywords: Array.isArray(json.keywords) ? json.keywords.filter((k): k is string => typeof k === 'string') : [],
 	}
+	assertRelativeImportsResolve(files, [
+		...Object.values(manifest.exports),
+		...Object.values(manifest.jobs).map((job) => job.entry),
+		...manifest.subscriptions.map((subscription) => subscription.handler),
+	])
+	return manifest
 }
 
 /** Resolves `kody:@scope/pkg/export` or `kody:pkg` into package + export name. */
@@ -459,27 +464,50 @@ export function resolvePackageExport(manifest: PackageManifest, exportName: stri
 }
 
 /**
- * kody-celld: relative imports must name a module in the package, using the
- * module graph's lookup (`x`, `x.js`, `.ts` as `.js`, `x/index.js`; code and
- * JSON only). A broken import is refused at save time instead of failing the
- * whole isolate as `instantiate: <none>` after the next restart. Imports are
- * found by the lexer, so text in strings and comments is not checked.
+ * kody-celld: static relative imports reached from the package's entry points
+ * (exports, job entries, subscription handlers) must name a module in the
+ * package, using the module graph's lookup (`x`, `x.js`, `.ts` as `.js`,
+ * `x/index.js`; code and JSON only). celld links exactly those, so a broken
+ * one is refused here instead of failing as `instantiate: <none>` after the
+ * next restart. Files nothing reaches (tests, client code) and dynamic
+ * `import()`s are not checked: celld never links them up front, and a failed
+ * `import()` stays catchable. Imports come from the lexer, so text in strings
+ * and comments is never checked.
  */
-function assertRelativeImportsResolve(files: PackageFiles) {
-	const modulePaths = new Set(
-		Object.keys(files)
-			.filter((path) => /\.(?:m?js|ts|json)$/.test(path))
-			.map((path) => normalizeModulePath(path)),
-	)
+function assertRelativeImportsResolve(files: PackageFiles, entries: Array<string>) {
+	const sources = new Map<string, string>()
 	for (const [file, source] of Object.entries(files)) {
-		if (!/\.(?:m?js|ts)$/.test(file)) continue
-		const path = normalizeModulePath(file)
+		if (/\.(?:m?js|ts|json)$/.test(file)) sources.set(normalizeModulePath(file), source)
+	}
+	const queue = [...entries]
+	const seen = new Set<string>()
+	while (queue.length > 0) {
+		const path = queue.shift() as string
+		if (seen.has(path)) continue
+		seen.add(path)
+		const source = sources.get(path)
+		if (source === undefined || path.endsWith('.json')) continue
 		const base = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : ''
-		for (const { specifier } of lexImportSpecifiers(source, path)) {
+		for (const { specifier, kind } of lexImportSpecifiers(source, path)) {
+			if (kind !== 'static') continue
 			if (!specifier.startsWith('./') && !specifier.startsWith('../') && !specifier.startsWith('/')) continue
-			const target = normalizeModulePath(base ? `${base}/${specifier}` : specifier)
-			if (relativeImportCandidates(target).some((candidate) => modulePaths.has(candidate))) continue
-			throw new KodyError('invalid_import', `Cannot resolve "${specifier}" from ${path}: no such file in the package.`)
+			let target: string
+			try {
+				target = normalizeModulePath(base ? `${base}/${specifier}` : specifier)
+			} catch {
+				throw new KodyError(
+					'invalid_import',
+					`Cannot resolve "${specifier}" from ${path}: it points outside the package.`,
+				)
+			}
+			const found = relativeImportCandidates(target).find((candidate) => sources.has(candidate))
+			if (!found) {
+				throw new KodyError(
+					'invalid_import',
+					`Cannot resolve "${specifier}" from ${path}: no such file in the package.`,
+				)
+			}
+			queue.push(found)
 		}
 	}
 }

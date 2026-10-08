@@ -9,7 +9,13 @@ import { KodyError } from '../lib/errors.ts'
  * Worker. Text inside strings, template literals and comments is never an
  * import, so it is never reported or rewritten.
  */
-export type ImportSpecifierRange = { specifier: string; start: number; end: number }
+export type ImportSpecifierRange = {
+	specifier: string
+	start: number
+	end: number
+	/** `static` imports are linked with the module; `dynamic` ones load (and can fail) at call time. */
+	kind: 'static' | 'dynamic'
+}
 
 export function lexImportSpecifiers(source: string, modulePath: string): Array<ImportSpecifierRange> {
 	let imports
@@ -26,13 +32,13 @@ export function lexImportSpecifiers(source: string, modulePath: string): Array<I
 		// d === -2 is import.meta; a dynamic import of a computed value has no name.
 		if (entry.d === -2 || entry.n === undefined) continue
 		if (entry.d === -1) {
-			ranges.push({ specifier: entry.n, start: entry.s, end: entry.e })
+			ranges.push({ specifier: entry.n, start: entry.s, end: entry.e, kind: 'static' })
 			continue
 		}
 		// A literal dynamic import's range includes its quotes.
 		const quote = source[entry.s]
 		if ((quote === "'" || quote === '"' || quote === '`') && source[entry.e - 1] === quote) {
-			ranges.push({ specifier: entry.n, start: entry.s + 1, end: entry.e - 1 })
+			ranges.push({ specifier: entry.n, start: entry.s + 1, end: entry.e - 1, kind: 'dynamic' })
 		}
 	}
 	return ranges

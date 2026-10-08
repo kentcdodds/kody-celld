@@ -56,11 +56,41 @@ const brokenFiles = {
 	'lib/main.js': "import { packageStorage } from './kody-runtime.js'\nexport default async () => typeof packageStorage",
 }
 
+// Files celld never links (an unused test, a JSX client file) and an optional
+// dynamic import must not stop the package from running: celld instantiates
+// only what the entry reaches through static imports.
+const tolerantFiles = {
+	'package.json': JSON.stringify({ name: '@t/tolerant', version: '1.0.0', exports: { '.': './index.js' } }),
+	'README.md': 'tolerant',
+	'AGENTS.md': 'tolerant',
+	'index.js':
+		"export default async () => { try { await import('./optional.js'); return 'loaded' } catch { return 'fallback' } }",
+	'test/unused.test.js': "import helper from '../src/helper.js'\nexport default helper",
+	'client/view.js': 'export default () => <div>hi</div>',
+}
+
+const textImportFiles = {
+	'package.json': JSON.stringify({ name: '@t/text-import', version: '1.0.0', exports: { '.': './index.js' } }),
+	'README.md': 'text import',
+	'AGENTS.md': 'text import',
+	'index.js': "import notes from './notes.txt'\nexport default () => notes",
+	'notes.txt': 'not a module',
+}
+
 const packages: Record<string, Record<string, string>> = {
+	'@t/tolerant': tolerantFiles,
+	'@t/text-import': textImportFiles,
 	'@t/counter': counterFiles,
 	'@t/vault': vaultFiles,
 	'@t/text': textFiles,
 	'@t/broken': brokenFiles,
+}
+
+// Saved before packageSave checked relative imports: their stored manifests
+// exist even though parsing these files now refuses them.
+const savedBeforeImportCheck: Record<string, Record<string, string>> = {
+	'@t/broken': { 'lib/main.js': 'export default 1' },
+	'@t/text-import': { 'index.js': 'export default 1' },
 }
 
 const fakeUserCell = {
@@ -72,7 +102,9 @@ const fakeUserCell = {
 			version: '1.0.0',
 			// @t/broken was saved before packageSave checked relative imports, so its
 			// stored manifest exists even though parsing its files now refuses them.
-			manifest: parsePackageManifest(name === '@t/broken' ? { ...files, 'lib/main.js': 'export default 1' } : files),
+			manifest: parsePackageManifest(
+				savedBeforeImportCheck[name] ? { ...files, ...savedBeforeImportCheck[name] } : files,
+			),
 			files,
 			source: 'test',
 			createdAt: '',
@@ -162,6 +194,28 @@ describe('buildModuleGraph', () => {
 				allowNpm: false,
 			}),
 			/Cannot resolve "\.\/nope\.js" from your execute code\./,
+		)
+	})
+
+	it('ignores files the entry never reaches and keeps optional dynamic imports catchable', async () => {
+		const graph = await buildModuleGraph({
+			entry: { kind: 'package', packageName: '@t/tolerant' },
+			userCell: fakeUserCell,
+			allowNpm: false,
+		})
+		assert.equal(graph.modules['packages/@t/tolerant/index.js'], tolerantFiles['index.js'])
+		assert.equal(graph.modules['packages/@t/tolerant/test/unused.test.js'], tolerantFiles['test/unused.test.js'])
+		assert.equal(graph.modules['packages/@t/tolerant/client/view.js'], tolerantFiles['client/view.js'])
+	})
+
+	it('does not resolve imports to files that never become modules', async () => {
+		await assert.rejects(
+			buildModuleGraph({
+				entry: { kind: 'package', packageName: '@t/text-import' },
+				userCell: fakeUserCell,
+				allowNpm: false,
+			}),
+			/Cannot resolve "\.\/notes\.txt" from index\.js in package @t\/text-import\./,
 		)
 	})
 
