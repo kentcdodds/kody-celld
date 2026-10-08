@@ -276,6 +276,70 @@ describe('RunTriageStore.bulk', () => {
 	})
 })
 
+describe('RunTriageStore.bulk termination', () => {
+	const fiveErrors = Array.from({ length: 5 }, (_, i) => ({
+		id: `t${i}`,
+		kind: 'job',
+		status: 'error' as const,
+		createdAt: `2026-10-08T01:00:0${i}Z`,
+	}))
+
+	it('repeating a filter that also matches already-triaged rows terminates', () => {
+		const { store } = setup(fiveErrors)
+		const input = {
+			runIds: null,
+			filter: { kind: 'job' as const, errorTriage: 'all' as const },
+			triage: 'resolved' as const,
+			note: undefined,
+			limit: 2,
+			dryRun: false,
+			by: 'u',
+		}
+		const updated: Array<number> = []
+		for (let call = 0; call < 10; call++) {
+			const result = store.bulk(input)
+			updated.push(result.updatedCount)
+			if (!result.hasMore) break
+		}
+		assert.deepEqual(updated, [2, 2, 1])
+		assert.equal(store.summary(null).resolved, 5)
+	})
+
+	it('runIds beyond the limit make progress on repeat', () => {
+		const { store } = setup(fiveErrors)
+		const input = {
+			runIds: fiveErrors.map((row) => row.id),
+			filter: null,
+			triage: 'ignored' as const,
+			note: undefined,
+			limit: 2,
+			dryRun: false,
+			by: 'u',
+		}
+		const updated: Array<number> = []
+		for (let call = 0; call < 10; call++) {
+			const result = store.bulk(input)
+			updated.push(result.updatedCount)
+			if (!result.hasMore) break
+		}
+		assert.deepEqual(updated, [2, 2, 1])
+	})
+
+	it('reopening rows that are already open matches nothing (kody)', () => {
+		const { store } = setup(fiveErrors.slice(0, 1))
+		const result = store.bulk({
+			runIds: ['t0'],
+			filter: null,
+			triage: 'open',
+			note: undefined,
+			limit: 100,
+			dryRun: false,
+			by: 'u',
+		})
+		assert.deepEqual(result, { matchedRunIds: [], updatedCount: 0, hasMore: false, dryRun: false })
+	})
+})
+
 describe('RunTriageStore.autoResolveJob', () => {
 	it('resolves only open errors of the same job and leaves ignored, other jobs and other kinds alone', () => {
 		const { store, row } = setup([

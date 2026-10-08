@@ -143,6 +143,15 @@ export class RunTriageStore {
 	bulk(input: RunTriageBulkInput & { by: string }): RunTriageBulkResult {
 		const params: Array<string | number> = []
 		const where: Array<string> = [`status = 'error'`]
+		// Skip rows already in the target state, so repeating a call while
+		// hasMore is true always makes progress (kody skips no-op reopens; this
+		// applies the same rule to set-triage too).
+		if (input.triage === 'open') {
+			where.push('error_triage IS NOT NULL')
+		} else {
+			where.push('(error_triage IS NULL OR error_triage != ?)')
+			params.push(input.triage)
+		}
 		if (input.runIds) {
 			where.push(`id IN (${input.runIds.map(() => '?').join(', ')})`)
 			params.push(...input.runIds)
