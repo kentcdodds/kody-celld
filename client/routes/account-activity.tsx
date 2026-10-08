@@ -152,45 +152,47 @@ export function AccountActivity(
 				<AccountManagementPanel
 					ariaLabel={d.view === 'errors' ? 'Open errors' : 'Recent runs'}
 				>
-					<RecordTable
-						mode="expand"
-						ariaLabel="Runs"
-						selectedId={d.selectedId}
-						record={runRecord}
-						emptyLabel={
-							d.view === 'errors' ? 'No open errors.' : 'No runs yet.'
-						}
-						countLabel={`${d.runs.length} shown`}
-						columns={[
-							{ key: 'when', label: 'When', primary: true },
-							// No `drop` columns: the expanded run's row spans every column,
-							// and dropped ones would still take width. Kind and duration
-							// are in the expanded run.
-							{ key: 'package', label: 'Package' },
-							{ key: 'status', label: 'Status' },
-							{ key: 'error', label: 'Error' },
-							{ key: 'triage', label: 'Triage' },
-						]}
-						rows={d.runs.map((run) => ({
-							id: run.id,
-							href: runHref(run.id),
-							cells: {
-								when: <TimestampValue value={run.createdAt} />,
-								package: run.packageName ?? <Muted>ad hoc {run.kind}</Muted>,
-								status: (
-									<Badge tone={statusTone(run.status)}>{run.status}</Badge>
-								),
-								error: run.error ? (
-									<span mix={css(oneLineCss)} title={run.error}>
-										<Muted small>{run.error}</Muted>
-									</span>
-								) : (
-									''
-								),
-								triage: triageActions(run) ?? '',
-							},
-						}))}
-					/>
+					<div mix={css(wholeRowLinkCss)}>
+						<RecordTable
+							mode="expand"
+							ariaLabel="Runs"
+							selectedId={d.selectedId}
+							record={runRecord}
+							emptyLabel={
+								d.view === 'errors' ? 'No open errors.' : 'No runs yet.'
+							}
+							countLabel={`${d.runs.length} shown`}
+							columns={[
+								{ key: 'when', label: 'When', primary: true },
+								// No `drop` columns: the expanded run's row spans every column,
+								// and dropped ones would still take width. Kind and duration
+								// are in the expanded run.
+								{ key: 'package', label: 'Package' },
+								{ key: 'status', label: 'Status' },
+								{ key: 'error', label: 'Error' },
+								{ key: 'triage', label: 'Triage' },
+							]}
+							rows={d.runs.map((run) => ({
+								id: run.id,
+								href: runHref(run.id),
+								cells: {
+									when: <TimestampValue value={run.createdAt} />,
+									package: run.packageName ?? <Muted>ad hoc {run.kind}</Muted>,
+									status: (
+										<Badge tone={statusTone(run.status)}>{run.status}</Badge>
+									),
+									error: run.error ? (
+										<span mix={css(oneLineCss)} title={run.error}>
+											<Muted small>{run.error}</Muted>
+										</span>
+									) : (
+										''
+									),
+									triage: triageActions(run) ?? '',
+								},
+							}))}
+						/>
+					</div>
 				</AccountManagementPanel>
 			</AccountManagementShell>
 		)
@@ -369,4 +371,20 @@ const oneLineCss = {
 	whiteSpace: 'nowrap' as const,
 	overflow: 'hidden',
 	textOverflow: 'ellipsis',
+}
+
+// The whole row opens the run: the row's own link (the When cell) is
+// stretched over the row, and the triage forms sit above it so their buttons
+// still submit. CSS only, so it works with JavaScript off.
+const wholeRowLinkCss = {
+	'& tbody tr:has(a[aria-expanded])': {
+		position: 'relative',
+		cursor: 'pointer',
+	},
+	'& tbody tr a[aria-expanded]::after': {
+		content: "''",
+		position: 'absolute',
+		inset: 0,
+	},
+	'& tbody tr form': { position: 'relative', zIndex: 1 },
 }
