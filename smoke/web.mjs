@@ -325,10 +325,16 @@ export async function smokeWeb({ user, mcp }) {
 		const browse = /href="(\/account\/package-preview\/[A-Za-z0-9_-]+\/files)"/.exec(previewed.text)?.[1]
 		assert(previewed.status === 200 && browse, 'package preview links to the files explorer', previewed.status)
 		const previewRoot = await browser.get(browse)
+		// Scope to the summary (`aria-label="Package preview"`) — the README on
+		// the same page can share description wording, so a full-page includes
+		// would pass even if the summary never rendered `p.description`.
+		const previewSummary = /<section[^>]*aria-label="Package preview"[^>]*>([\s\S]*?)<\/section>/.exec(
+			previewRoot.text,
+		)?.[1]
 		assert(
 			previewRoot.status === 200 &&
 				previewRoot.text.includes('data-testid="package-files-markdown"') &&
-				previewRoot.text.includes('Calls an HTTP endpoint with a secret placeholder header.'),
+				Boolean(previewSummary?.includes('Calls an HTTP endpoint with a secret placeholder header.')),
 			'preview explorer opens on the README under the package description',
 			previewRoot.status,
 		)
