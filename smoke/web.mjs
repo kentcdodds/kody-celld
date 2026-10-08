@@ -304,7 +304,9 @@ export async function smokeWeb({ user, mcp }) {
 	log('pages', 'packages, jobs, activity, memories, webhooks, integrations, email, clients, sessions render')
 
 	// Activity triage: summary line, Open errors view, Ignore POST, Recent runs badge.
-	const triageFail = await mcp.execute(`export default async function main() { throw new Error('web triage smoke') }`)
+	const triageFail = await mcp.execute(
+		`export default async function main() { console.log('web triage smoke log line'); throw new Error('web triage smoke') }`,
+	)
 	assert(!triageFail.ok && triageFail.runId, 'a failing execute records an error run for the Activity page', triageFail)
 	const errorsView = await browser.get('/account/runs?view=errors')
 	assert(
@@ -314,6 +316,23 @@ export async function smokeWeb({ user, mcp }) {
 			errorsView.text.includes('name="triage" value="ignored"'),
 		'Activity open-errors view shows the summary and an Ignore form for the failing run',
 		errorsView.status,
+	)
+	const runDetail = await browser.get(`/account/runs/${triageFail.runId}?view=errors`)
+	assert(
+		errorsView.text.includes(`href="/account/runs/${triageFail.runId}?view=errors"`) &&
+			runDetail.status === 200 &&
+			runDetail.text.includes('data-testid="run-detail"') &&
+			runDetail.text.includes('web triage smoke log line') &&
+			runDetail.text.includes(`Kody run ${triageFail.runId} failed (ad hoc execute): Error: web triage smoke.`) &&
+			runDetail.text.includes('Look at my open Kody activity errors.'),
+		'an error row links to its expanded run with logs and a fix prompt',
+		runDetail.status,
+	)
+	const missingRun = await browser.get('/account/runs/run_does_not_exist')
+	assert(
+		missingRun.status === 200 && missingRun.text.includes('Run not found'),
+		'an unknown run id shows Run not found inline',
+		missingRun.status,
 	)
 	const noCsrfTriage = await browser.post('/account/runs', {
 		action: 'triage',

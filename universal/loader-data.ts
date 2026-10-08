@@ -183,6 +183,31 @@ export type RunSummaryView = {
 	running: number
 }
 
+export type RunDetailView = {
+	id: string
+	kind: string
+	packageName: string | null
+	jobId: string | null
+	status: string
+	createdAt: string
+	durationMs: number | null
+	error: string | null
+	errorTriage: 'ignored' | 'resolved' | null
+	triageNote: string | null
+	triagedAt: string | null
+	triagedBy: string | null
+	logs: Array<string>
+	result: string | null
+	warnings: Array<string>
+	gateway: Array<{
+		method: string
+		host: string
+		outcome: string
+		status: number | null
+		reason: string | null
+	}>
+}
+
 export type IntegrationView = {
 	name: string
 	provider: string
@@ -431,6 +456,8 @@ export type AppLoaderData =
 			error: string | null
 			summary: RunSummaryView
 			runs: Array<RunView>
+			selectedId: string | null
+			selected: RunDetailView | null
 	  }
 	| {
 			page: 'accountIntegrations'
