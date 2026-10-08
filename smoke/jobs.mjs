@@ -8,22 +8,33 @@ export async function smokeJobs({ mcp, user, waitForCron }) {
 	const backfill = jobs.jobs.find((job) => job.jobName === 'backfill')
 	assert(tick && backfill, 'counter package jobs should exist', jobs)
 	assert(tick.schedule.type === 'interval' && tick.nextRunAt, 'interval job should have a next run', tick)
+	// Scheduled celld cron may already have picked up the past-due once job between
+	// packageSave and this list; either still-due or already-exhausted is fine.
+	const backfillAlreadyRan = backfill.nextRunAt === null && backfill.lastStatus === 'success'
 	assert(
-		backfill.schedule.type === 'once' && backfill.nextRunAt && Date.parse(backfill.nextRunAt) <= Date.now(),
-		'past "once" job should be due immediately',
+		backfill.schedule.type === 'once' &&
+			(backfillAlreadyRan || (backfill.nextRunAt && Date.parse(backfill.nextRunAt) <= Date.now())),
+		'past "once" job should be due immediately (or already run by cron)',
 		backfill,
 	)
-	log('jobs registered from manifest', { tick: tick.nextRunAt, backfill: backfill.nextRunAt })
+	log('jobs registered from manifest', {
+		tick: tick.nextRunAt,
+		backfill: backfill.nextRunAt,
+		backfillAlreadyRan,
+	})
 
 	const manual = await mcp.callDirect('jobRunNow', { id: tick.id })
 	assert(manual.ok && manual.result.trigger === 'manual' && manual.result.ticks >= 1, 'manual job run failed', manual)
 	log('jobRunNow', { ticks: manual.result.ticks, trigger: manual.result.trigger })
 
-	// Simulate the cron trigger firing now: the past-due "once" job must run exactly once.
-	const dispatch = await admin.dispatchJobs()
-	assert(dispatch.status === 200, 'admin dispatch failed', dispatch.json)
-	const ranBackfill = dispatch.json.ran.find((entry) => entry.jobId === backfill.id)
-	assert(ranBackfill?.ok, 'dispatcher should have run the past-due once job', dispatch.json)
+	// Simulate the cron trigger firing now: the past-due "once" job must run exactly once
+	// (skip the force-dispatch when scheduled cron already exhausted it).
+	if (!backfillAlreadyRan) {
+		const dispatch = await admin.dispatchJobs()
+		assert(dispatch.status === 200, 'admin dispatch failed', dispatch.json)
+		const ranBackfill = dispatch.json.ran.find((entry) => entry.jobId === backfill.id)
+		assert(ranBackfill?.ok, 'dispatcher should have run the past-due once job', dispatch.json)
+	}
 	const again = await admin.dispatchJobs()
 	assert(!again.json.ran.some((entry) => entry.jobId === backfill.id), '"once" job must not run twice', again.json)
 	const backfillAfter = await mcp.call('jobGet', { id: backfill.id, runs: 5 })

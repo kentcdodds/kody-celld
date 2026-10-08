@@ -10,16 +10,16 @@ import {
 /**
  * kody-celld: the package-preview explorer GETs once per file click. Without a
  * cache that re-downloads the whole remote (up to 8 MB / 24 MB unpacked) on
- * every navigation. Entries are stored only under immutable keys (URL sources
- * or commit-pinned `github:`/`kody:` refs) so a warm isolate never serves a
- * stale HEAD/branch as if it were current. In-flight promises coalesce concurrent
- * clicks on the same key. Small and in-process — cold isolates just refetch.
+ * every navigation. Settled entries are stored only under immutable keys (URL
+ * sources or commit-pinned `github:`/`kody:` refs) so a warm isolate never
+ * serves a stale HEAD/branch. A separate in-flight map coalesces concurrent
+ * clicks for any key (including mutable ones) without lasting mutable entries.
  */
 const maxEntries = 3
 const fullCommitSha = /^[0-9a-f]{40}$/i
 
-/** Resolved entries (and in-flight promises) keyed by describePackageSource. */
 const cache = new Map<string, Promise<FetchedPackage>>()
+const inflight = new Map<string, Promise<FetchedPackage>>()
 
 export function fetchedPackageCacheKey(source: PackageSource): string {
 	return describePackageSource(source)
@@ -27,13 +27,14 @@ export function fetchedPackageCacheKey(source: PackageSource): string {
 
 export function clearFetchedPackageCache() {
 	cache.clear()
+	inflight.clear()
 }
 
 export function fetchedPackageCacheSize() {
 	return cache.size
 }
 
-/** Only URL sources and full-SHA refs are safe to return from cache on lookup. */
+/** Only URL sources and full-SHA refs are safe to return from the settled cache. */
 function isImmutableCacheKey(source: PackageSource): boolean {
 	if (source.kind === 'url') return true
 	if (source.kind === 'github' || source.kind === 'kody') {
@@ -48,7 +49,7 @@ function storeKeyFor(source: PackageSource, fetched: FetchedPackage): string | n
 	return null
 }
 
-function put(key: string, value: Promise<FetchedPackage>) {
+function putSettled(key: string, value: Promise<FetchedPackage>) {
 	if (cache.has(key)) cache.delete(key)
 	else if (cache.size >= maxEntries) {
 		const oldest = cache.keys().next().value
@@ -69,23 +70,19 @@ export async function fetchPackageSourceCached(
 			cache.set(key, hit)
 			return hit
 		}
-	} else {
-		// Coalesce concurrent fetches for the same mutable key, but do not treat
-		// a settled mutable entry as a lasting cache hit (Bugbot: stale HEAD).
-		const inflight = cache.get(key)
-		if (inflight) return inflight
 	}
 
+	const pendingHit = inflight.get(key)
+	if (pendingHit) return pendingHit
+
 	const pending = fetchPackageSource(source, options)
-	put(key, pending)
+	inflight.set(key, pending)
 	try {
 		const fetched = await pending
-		cache.delete(key)
 		const storeKey = storeKeyFor(source, fetched)
-		if (storeKey) put(storeKey, Promise.resolve(fetched))
+		if (storeKey) putSettled(storeKey, Promise.resolve(fetched))
 		return fetched
-	} catch (error) {
-		if (cache.get(key) === pending) cache.delete(key)
-		throw error
+	} finally {
+		if (inflight.get(key) === pending) inflight.delete(key)
 	}
 }
