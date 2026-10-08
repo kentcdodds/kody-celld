@@ -382,6 +382,7 @@ export type AppLoaderData =
 			page: 'accountPackageDetail'
 			csrf: string
 			pkg: PackageDetailView
+			files: PackageFilesLoaderData
 			error: string | null
 	  }
 	| {

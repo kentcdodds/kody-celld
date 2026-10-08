@@ -1,8 +1,8 @@
 import { css, type Handle } from 'remix/component'
+import { PackageFilesExplorerIsland } from '#client/package-files-explorer-island.tsx'
 import { type AppLoaderData } from '#universal/loader-data.ts'
 import { routes } from '#universal/routes.ts'
 import { mutedLinkCss } from '#universal/styles/style-primitives.ts'
-import { colors, spacing } from '#universal/styles/tokens.ts'
 import {
 	AccountManagementMessage,
 	AccountManagementPanel,
@@ -116,6 +116,8 @@ export function AccountPackageDetail(
 					/>
 					{pkg.description ? null : <Lede>No description.</Lede>}
 				</AccountManagementPanel>
+				{/* kody: a package's page opens on its files (tree + README). */}
+				<PackageFilesExplorerIsland data={data.files} embedded />
 				<AccountManagementPanel title="Exports">
 					<RecordTable
 						mode="none"
@@ -216,31 +218,6 @@ export function AccountPackageDetail(
 						/>
 					</AccountManagementPanel>
 				) : null}
-				<AccountManagementPanel title="Files">
-					<ul
-						mix={css({
-							margin: 0,
-							paddingLeft: '1.2rem',
-							display: 'grid',
-							gap: spacing.xs,
-							color: colors.text,
-						})}
-					>
-						{pkg.files.map((file) => (
-							<li key={file.path}>
-								<a
-									href={routes.accountPackageFiles.href({
-										name: pkg.name,
-										relativePath: file.path,
-									})}
-								>
-									<Code>{file.path}</Code>
-								</a>
-								<Muted small> {file.bytes} bytes</Muted>
-							</li>
-						))}
-					</ul>
-				</AccountManagementPanel>
 			</AccountManagementShell>
 		)
 	}

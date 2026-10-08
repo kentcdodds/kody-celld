@@ -385,8 +385,10 @@ export async function smokeWeb({ user, mcp }) {
 			packageDetail.text.includes(pkgName) &&
 			packageDetail.text.includes('web smoke') &&
 			packageDetail.text.includes(jobHref) &&
-			packageDetail.text.includes(`${packageHref}/files/lib/util.js`),
-		'package detail links its job and nested files',
+			packageDetail.text.includes('data-testid="package-files"') &&
+			packageDetail.text.includes('data-testid="package-files-markdown"') &&
+			packageDetail.text.includes(`href="${packageHref}/files/lib"`),
+		'package detail links its job and shows the files explorer with the README',
 		packageDetail.status,
 	)
 	const filesRoot = await browser.get(`${packageHref}/files`)

@@ -60,7 +60,13 @@ function countLines(value: string) {
 }
 
 export function PackageFilesExplorer(
-	handle: Handle<{ data: PackageFilesLoaderData; busy?: boolean }>,
+	// kody-celld: embedded drops the back link and title when the explorer
+	// sits inside a page that already has them (the package detail page).
+	handle: Handle<{
+		data: PackageFilesLoaderData
+		busy?: boolean
+		embedded?: boolean
+	}>,
 ) {
 	// Directory open/closed state is the visitor's, so it survives navigation
 	// between files; each newly selected path opens its own ancestors on top of
@@ -129,12 +135,16 @@ export function PackageFilesExplorer(
 			>
 				{/* kody-celld: kody renders its community repo chrome here when the data names
 				    an owner (`username` + `kodyId`); self-hosted packages have no public repo page. */}
-				<a href={data.backHref} mix={css(backLinkCss)}>
-					{arrowLeftIcon()} {data.backLabel}
-				</a>
-				<header mix={css(headCss)}>
-					<h1 mix={css(titleCss)}>{data.title}</h1>
-				</header>
+				{handle.props.embedded ? null : (
+					<>
+						<a href={data.backHref} mix={css(backLinkCss)}>
+							{arrowLeftIcon()} {data.backLabel}
+						</a>
+						<header mix={css(headCss)}>
+							<h1 mix={css(titleCss)}>{data.title}</h1>
+						</header>
+					</>
+				)}
 				<div mix={css(layoutCss)}>
 					<nav aria-label="Files" mix={css(treeCss)}>
 						<div mix={css(treeHeadCss)}>

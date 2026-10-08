@@ -179,6 +179,19 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 				bytes: new TextEncoder().encode(content).byteLength,
 			}))
 			.sort((a, b) => a.path.localeCompare(b.path))
+		// kody: the package page is its files view (tree + README at the root).
+		const explorer = await loadPackageFilesData({
+			env: inProcessHighlightEnv(),
+			files: pkg.files,
+			selectedPath: '',
+			title: pkg.name,
+			backHref: routes.accountPackages.href(),
+			backLabel: 'Packages',
+			filesBasePath: routes.accountPackageFiles.href({ name: pkg.name }),
+		})
+		if (!explorer) {
+			throw new KodyError('package_file_not_found', 'Package file was not found.', { status: 404 })
+		}
 		return view(session, {
 			title: pkg.name,
 			current: url.pathname,
@@ -187,6 +200,7 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 				page: 'accountPackageDetail',
 				csrf: session.csrf,
 				error,
+				files: explorer,
 				pkg: {
 					name: pkg.name,
 					version: pkg.version,
