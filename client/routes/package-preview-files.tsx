@@ -43,6 +43,12 @@ export function PackagePreviewFiles(
 							{p.name}@{p.version}
 						</strong>{' '}
 						— not installed.
+						{p.description ? (
+							<>
+								<br />
+								{p.description}
+							</>
+						) : null}
 						<br />
 						<Muted small>
 							Source <Code>{p.source}</Code>

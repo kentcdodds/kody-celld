@@ -326,8 +326,10 @@ export async function smokeWeb({ user, mcp }) {
 		assert(previewed.status === 200 && browse, 'package preview links to the files explorer', previewed.status)
 		const previewRoot = await browser.get(browse)
 		assert(
-			previewRoot.status === 200 && previewRoot.text.includes('data-testid="package-files-markdown"'),
-			'preview explorer opens on the README',
+			previewRoot.status === 200 &&
+				previewRoot.text.includes('data-testid="package-files-markdown"') &&
+				previewRoot.text.includes('Calls an HTTP endpoint with a secret placeholder header.'),
+			'preview explorer opens on the README under the package description',
 			previewRoot.status,
 		)
 		const previewProbe = await browser.get(`${browse}/probe.js`)
@@ -339,6 +341,27 @@ export async function smokeWeb({ user, mcp }) {
 			'preview explorer highlights a remote file and offers install',
 			previewProbe.status,
 		)
+		// The subdir field travels inside the :source segment and back out to Install.
+		const subdirPreview = await browser.post('/account/packages', {
+			action: 'preview',
+			source: 'github:kentcdodds/kody-celld#main',
+			subdir: 'examples/packages/http-probe',
+			csrf,
+		})
+		const subdirBrowse = /href="(\/account\/package-preview\/[A-Za-z0-9_-]+\/files)"/.exec(subdirPreview.text)?.[1]
+		assert(
+			subdirPreview.status === 200 && subdirBrowse,
+			'subdir preview links to the files explorer',
+			subdirPreview.status,
+		)
+		const subdirProbe = await browser.get(`${subdirBrowse}/probe.js`)
+		assert(
+			subdirProbe.status === 200 &&
+				subdirProbe.text.includes('data-testid="package-files-code"') &&
+				subdirProbe.text.includes('name="subdir" value="examples/packages/http-probe"'),
+			'subdir preview round-trips: opens the subdir file and keeps the subdir for install',
+			subdirProbe.status,
+		)
 	}
 	const junkPreview = await browser.get('/account/package-preview/not*base64/files')
 	assert(junkPreview.status === 400, 'undecodable preview link is a 400', junkPreview.status)
@@ -349,6 +372,14 @@ export async function smokeWeb({ user, mcp }) {
 		privatePreview.status >= 400 && privatePreview.text.includes('private host'),
 		'preview explorer refuses private hosts',
 		privatePreview.status,
+	)
+	const unlistedPreview = await browser.get(
+		`/account/package-preview/${Buffer.from(JSON.stringify(['https://example.com/pkg.tgz'])).toString('base64url')}/files`,
+	)
+	assert(
+		unlistedPreview.status >= 400 && unlistedPreview.text.includes('KODY_PACKAGE_SOURCE_HOSTS'),
+		'preview explorer refuses public hosts outside the allowlist',
+		unlistedPreview.status,
 	)
 	const pkgName = `@kody-smoke/web-${randomBytes(3).toString('hex')}`
 	await mcp.call('packageSave', {
