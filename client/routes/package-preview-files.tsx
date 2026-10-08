@@ -31,7 +31,7 @@ const summaryCss = {
 	gap: spacing.md,
 }
 
-/** `/account/packages/preview/:source/files/*` — review a remote package in kody's explorer before installing it. */
+/** `/account/package-preview/:source/files/*` — review a remote package in kody's explorer before installing it. */
 export function PackagePreviewFiles(
 	handle: Handle<{ data: Data; pathname: string }>,
 ) {

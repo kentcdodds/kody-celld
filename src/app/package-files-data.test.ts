@@ -29,6 +29,24 @@ function load(
 }
 
 describe('loadPackageFilesData', () => {
+	it('opens files whose names contain % (route params arrive decoded)', async () => {
+		const percentFiles = {
+			'100%.txt': 'full\n',
+			'a%41.txt': 'literal\n',
+			'aA.txt': 'decoded\n',
+		}
+		const full = await load('100%.txt', { files: percentFiles })
+		assert.equal(full?.contentPath, '100%.txt')
+		const literal = await load('a%41.txt', { files: percentFiles })
+		assert.equal(literal?.contentPath, 'a%41.txt')
+		assert.equal(literal?.content, 'literal\n')
+	})
+
+	it('still refuses traversal after the decoded path is re-encoded', async () => {
+		assert.equal(await load('../README.md'), null)
+		assert.equal(await load('src/../../README.md'), null)
+	})
+
 	it('opens the root on the README with highlighted fences', async () => {
 		const data = await load('')
 		assert.ok(data)

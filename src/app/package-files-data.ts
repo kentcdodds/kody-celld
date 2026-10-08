@@ -128,7 +128,12 @@ export async function loadPackageFilesData(input: {
 	filesBasePath: string
 	serverTiming?: Array<ServerTimingEntry>
 }): Promise<PackageFilesLoaderData | null> {
-	const selectedPath = normalizePackageFilesPath(input.selectedPath)
+	// kody-celld: route params arrive decoded, while kody's normalizer takes a
+	// URL path and decodes it; re-encode each segment so it decodes exactly once
+	// (`100%.txt` opens, `a%41.txt` stays itself). Traversal checks still apply.
+	const selectedPath = normalizePackageFilesPath(
+		input.selectedPath.split('/').map(encodeURIComponent).join('/'),
+	)
 	if (selectedPath === null) return null
 	const view = buildPackageFilesView({ files: input.files, selectedPath })
 	if (!view) return null

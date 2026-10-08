@@ -38,6 +38,30 @@ describe('matchAccountDetailPath', () => {
 		})
 	})
 
+	it('keeps preview URLs apart from a saved package named preview', () => {
+		const savedHref = routes.accountPackageFiles.href({ name: 'preview', relativePath: 'files/x.js' })
+		assert.deepEqual(matchAccountDetailPath(new URL(savedHref, 'http://localhost')), {
+			kind: 'packageFiles',
+			name: 'preview',
+			relativePath: 'files/x.js',
+		})
+		const previewHref = routes.accountPackagePreviewFiles.href({ source: 'WyJ4Il0', relativePath: 'a.js' })
+		assert.deepEqual(matchAccountDetailPath(new URL(previewHref, 'http://localhost')), {
+			kind: 'packagePreviewFiles',
+			source: 'WyJ4Il0',
+			relativePath: 'a.js',
+		})
+	})
+
+	it('hands file paths over decoded, once', () => {
+		const href = routes.accountPackageFiles.href({ name: '@oz/ops-jobs', relativePath: 'docs/100%.txt' })
+		assert.deepEqual(matchAccountDetailPath(new URL(href, 'http://localhost')), {
+			kind: 'packageFiles',
+			name: '@oz/ops-jobs',
+			relativePath: 'docs/100%.txt',
+		})
+	})
+
 	it('does not match package or job list paths', () => {
 		assert.equal(matchAccountDetailPath(new URL('/account/packages', 'http://localhost')), null)
 		assert.equal(matchAccountDetailPath(new URL('/account/jobs', 'http://localhost')), null)

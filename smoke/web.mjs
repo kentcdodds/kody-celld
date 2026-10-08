@@ -322,7 +322,7 @@ export async function smokeWeb({ user, mcp }) {
 			source: 'github:kentcdodds/kody-celld/examples/packages/http-probe#main',
 			csrf,
 		})
-		const browse = /href="(\/account\/packages\/preview\/[A-Za-z0-9_-]+\/files)"/.exec(previewed.text)?.[1]
+		const browse = /href="(\/account\/package-preview\/[A-Za-z0-9_-]+\/files)"/.exec(previewed.text)?.[1]
 		assert(previewed.status === 200 && browse, 'package preview links to the files explorer', previewed.status)
 		const previewRoot = await browser.get(browse)
 		assert(
@@ -340,10 +340,10 @@ export async function smokeWeb({ user, mcp }) {
 			previewProbe.status,
 		)
 	}
-	const junkPreview = await browser.get('/account/packages/preview/not*base64/files')
+	const junkPreview = await browser.get('/account/package-preview/not*base64/files')
 	assert(junkPreview.status === 400, 'undecodable preview link is a 400', junkPreview.status)
 	const privatePreview = await browser.get(
-		`/account/packages/preview/${Buffer.from(JSON.stringify(['https://10.0.0.7/pkg.tgz'])).toString('base64url')}/files`,
+		`/account/package-preview/${Buffer.from(JSON.stringify(['https://10.0.0.7/pkg.tgz'])).toString('base64url')}/files`,
 	)
 	assert(
 		privatePreview.status >= 400 && privatePreview.text.includes('private host'),
