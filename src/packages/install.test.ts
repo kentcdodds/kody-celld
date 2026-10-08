@@ -328,6 +328,27 @@ describe('fetchPackageSource', () => {
 		assert.equal(result.fetchedFrom, `https://codeload.github.com/o/hello/tar.gz/${exampleCommit}`)
 	})
 
+	it('resolves the commit via the GitHub API when codeload returns 200 for HEAD', async () => {
+		const fetchImpl = fetchFor({
+			'https://codeload.github.com/o/hello/tar.gz/HEAD': tgzResponse(githubTarball(packageFiles)),
+			'https://api.github.com/repos/o/hello/commits/HEAD': () =>
+				new Response(exampleCommit, {
+					status: 200,
+					headers: { 'content-type': 'application/vnd.github.sha' },
+				}),
+		})
+		const result = await fetchPackageSource(parsePackageSource('github:o/hello'), {
+			allowedHosts: defaultPackageSourceHosts,
+			fetch: fetchImpl,
+		})
+		assert.equal(result.commit, exampleCommit)
+		assert.equal(result.fetchedFrom, 'https://codeload.github.com/o/hello/tar.gz/HEAD')
+		assert.deepEqual(fetchImpl.calls, [
+			'https://codeload.github.com/o/hello/tar.gz/HEAD',
+			'https://api.github.com/repos/o/hello/commits/HEAD',
+		])
+	})
+
 	it('roots the package at subdir and suggests directories when package.json is elsewhere', async () => {
 		const nested = Object.fromEntries(Object.entries(packageFiles).map(([p, c]) => [`packages/hello/${p}`, c]))
 		nested['packages/other/package.json'] = '{}'

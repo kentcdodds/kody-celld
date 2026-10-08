@@ -22,6 +22,7 @@ export type PackageSourceEnv = {
 
 export const defaultPackageSourceHosts = [
 	'github.com',
+	'api.github.com',
 	'codeload.github.com',
 	'raw.githubusercontent.com',
 	'gist.githubusercontent.com',
@@ -239,6 +240,39 @@ export function commitShaFromCodeloadUrl(url: string): string | undefined {
 		const tar = parts.findIndex((part) => part === 'tar.gz' || part === 'legacy.tar.gz')
 		const ref = tar >= 0 ? parts[tar + 1] : undefined
 		return ref && fullCommitSha.test(ref) ? ref.toLowerCase() : undefined
+	} catch {
+		return undefined
+	}
+}
+
+/**
+ * Codeload often answers 200 for HEAD/branch without putting the SHA in the URL
+ * (root dir is `repo-ref/`). Resolve via the commits API so preview can pin Install.
+ */
+export async function resolveGithubCommitSha(
+	source: GithubSource,
+	options: { allowedHosts: Array<string>; fetch?: FetchLike | undefined },
+): Promise<string | undefined> {
+	const ref = source.ref ?? 'HEAD'
+	if (fullCommitSha.test(ref)) return ref.toLowerCase()
+	const apiUrl = `https://api.github.com/repos/${source.owner}/${source.repo}/commits/${encodeURIComponent(ref)}`
+	try {
+		assertAllowedSourceUrl(apiUrl, options.allowedHosts)
+	} catch {
+		return undefined
+	}
+	try {
+		const fetchImpl = options.fetch ?? ((input, init) => fetch(input, init))
+		const response = await fetchImpl(apiUrl, {
+			headers: {
+				accept: 'application/vnd.github.sha',
+				'user-agent': 'kody-celld/0.1 (package-install)',
+			},
+			signal: AbortSignal.timeout(packageSourceLimits.timeoutMs),
+		})
+		if (!response.ok) return undefined
+		const sha = (await response.text()).trim()
+		return fullCommitSha.test(sha) ? sha.toLowerCase() : undefined
 	} catch {
 		return undefined
 	}
@@ -562,11 +596,13 @@ export async function fetchPackageSource(
 		}
 		result = filesFromJson(text, source.subdir)
 	}
-	const commit =
-		source.kind === 'github'
-			? (commitShaFromCodeloadUrl(downloaded.url) ??
-				(source.ref && fullCommitSha.test(source.ref) ? source.ref.toLowerCase() : undefined))
-			: undefined
+	let commit: string | undefined
+	if (source.kind === 'github') {
+		commit =
+			commitShaFromCodeloadUrl(downloaded.url) ??
+			(source.ref && fullCommitSha.test(source.ref) ? source.ref.toLowerCase() : undefined)
+		if (!commit) commit = await resolveGithubCommitSha(source, options)
+	}
 	return {
 		...result,
 		source: describePackageSource(source),
