@@ -127,7 +127,7 @@ export function PackageFilesExplorer(
 
 		return (
 			<article
-				mix={css(articleCss)}
+				mix={css(handle.props.embedded ? embeddedArticleCss : articleCss)}
 				data-testid="package-files"
 				// The previous file stays on screen while the next one loads, so
 				// assistive tech is told the region is mid-update.
@@ -531,6 +531,11 @@ const articleCss = {
 	[mq.tablet]: {
 		padding: `${spacing.md} ${pageGutter} ${spacing.xl}`,
 	},
+}
+
+// kody-celld: embedded in a page that already supplies width and gutters.
+const embeddedArticleCss = {
+	minWidth: 0,
 }
 
 const backLinkCss = {
