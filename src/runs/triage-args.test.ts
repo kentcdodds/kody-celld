@@ -35,7 +35,7 @@ describe('parseTriageNote', () => {
 		assert.equal(parseTriageNote('flaky upstream'), 'flaky upstream')
 	})
 	it('refuses notes over the limit and non-strings', () => {
-		assert.equal(parseTriageNote('x'.repeat(runTriageMaxNoteLength)).length, runTriageMaxNoteLength)
+		assert.equal(parseTriageNote('x'.repeat(runTriageMaxNoteLength))?.length, runTriageMaxNoteLength)
 		invalidArgs(() => parseTriageNote('x'.repeat(runTriageMaxNoteLength + 1)), /at most 2000/)
 		invalidArgs(() => parseTriageNote(42), /note must be a string/)
 	})
