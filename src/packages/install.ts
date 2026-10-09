@@ -35,8 +35,7 @@ export const packageSourceLimits = {
 	maxDownloadBytes: 8 * 1024 * 1024,
 	/** After gunzip. */
 	maxArchiveBytes: 24 * 1024 * 1024,
-	/** Whole-archive / clone ceiling (monorepo github: tarballs count every path). */
-	maxFiles: 2_000,
+	maxFiles: 400,
 	maxRedirects: 3,
 	timeoutMs: 20_000,
 }

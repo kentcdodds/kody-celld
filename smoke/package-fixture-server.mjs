@@ -1,6 +1,7 @@
 // Local HTTP server that serves a deterministic package JSON file-map for the
-// web Packages preview smoke. Avoids live GitHub/codeload fetches, which flake
-// under CI rate limits and still leave status 200 with no browse link.
+// web Packages preview and install smokes. Avoids live GitHub/codeload fetches
+// (CI flakes; this monorepo's tarball can also exceed the product 400-file
+// archive ceiling, which is unrelated to the install path under test).
 import { createServer } from 'node:http'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'

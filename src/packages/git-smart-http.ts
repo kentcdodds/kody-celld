@@ -33,7 +33,7 @@ export type GitCloneLimits = {
 
 const defaultLimits: GitCloneLimits = {
 	maxDownloadBytes: 8 * 1024 * 1024,
-	maxFiles: 2_000,
+	maxFiles: 400,
 	maxTotalBytes: 24 * 1024 * 1024,
 	timeoutMs: 20_000,
 	maxRedirects: 3,

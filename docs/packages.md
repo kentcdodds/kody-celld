@@ -139,7 +139,7 @@ The same preview → install / fork flow is on the account **Packages** page. Ru
   addresses and `.local` / `.internal` / single-label names are refused unless
   the operator lists that exact host — do that for a Gitea/Forgejo/GitLab on
   your LAN. Every redirect hop is re-checked (max 3).
-- Limits: 8 MiB download, 24 MiB after gunzip / unpacked git tree, 2_000 files,
+- Limits: 8 MiB download, 24 MiB after gunzip / unpacked git tree, 400 files,
   20 s. `.git/` and `node_modules/` are skipped, non-UTF-8 files are skipped
   with a warning.
 - `packagePreview` returns declared surfaces (jobs, webhooks, subscriptions,
