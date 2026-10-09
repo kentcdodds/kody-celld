@@ -1,7 +1,7 @@
 import { KodyError } from '../lib/errors.ts'
 import type { PackageFiles, PackageManifest } from './manifest.ts'
 import {
-	assertPackageTotalBytes,
+	assertPackageFileSizes,
 	communityPackagesIndexesDdl,
 	communityPackagesTableDdl,
 	countPackageFiles,
@@ -133,14 +133,7 @@ export class CommunityStore {
 		if (input.manifest.hidden) {
 			throw new KodyError('invalid_package', `"${input.name}" is marked hidden in package.json; unhide it to publish.`)
 		}
-		let totalBytes = 0
-		for (const [path, content] of Object.entries(input.files)) {
-			if (typeof content !== 'string') {
-				throw new KodyError('invalid_package', `File "${path}" must be a string.`)
-			}
-			totalBytes += content.length
-		}
-		assertPackageTotalBytes(totalBytes)
+		assertPackageFileSizes(input.files)
 		const existing = this.sql
 			.exec<{ user_id: string }>('SELECT user_id FROM community_packages WHERE name = ?', input.name)
 			.toArray()[0]

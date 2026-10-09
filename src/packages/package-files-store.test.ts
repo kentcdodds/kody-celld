@@ -3,9 +3,11 @@ import { DatabaseSync } from 'node:sqlite'
 import { describe, it } from 'node:test'
 import { KodyError } from '../lib/errors.ts'
 import {
+	assertPackageFileSizes,
 	assertPackageTotalBytes,
 	countPackageFiles,
 	deletePackageFiles,
+	maxPackageFileBytes,
 	maxPackageTotalBytes,
 	migrateCommunityPackageFiles,
 	migrateUserPackageFiles,
@@ -197,6 +199,20 @@ describe('package-files-store', () => {
 				assert.equal(error.code, 'invalid_package')
 				assert.match(error.message, /at most 4 MiB/)
 				assert.match(error.message, /limit is 4 MiB/)
+				return true
+			},
+		)
+	})
+
+	it('assertPackageFileSizes refuses a single file over the SQLite bind cap', () => {
+		assertPackageFileSizes({ 'ok.txt': 'x'.repeat(maxPackageFileBytes) })
+		assert.throws(
+			() => assertPackageFileSizes({ 'huge.txt': 'x'.repeat(maxPackageFileBytes + 1) }),
+			(error: unknown) => {
+				assert.ok(error instanceof KodyError)
+				assert.equal(error.code, 'invalid_package')
+				assert.match(error.message, /File "huge\.txt"/)
+				assert.match(error.message, /Durable Object SQLite bind limit/)
 				return true
 			},
 		)

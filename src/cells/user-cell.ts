@@ -30,7 +30,7 @@ import {
 	type WebhookVerification,
 } from '../packages/manifest.ts'
 import {
-	assertPackageTotalBytes,
+	assertPackageFileSizes,
 	countPackageFiles,
 	deletePackageFiles,
 	migrateUserPackageFiles,
@@ -908,15 +908,13 @@ export class UserCell extends DurableObject<Env> {
 
 	async packageSave(input: { files: PackageFiles; source?: string | undefined }): Promise<PackageSummary> {
 		const files: PackageFiles = {}
-		let totalBytes = 0
 		for (const [path, content] of Object.entries(input.files ?? {})) {
 			if (typeof content !== 'string') {
 				throw new KodyError('invalid_package', `File "${path}" must be a string.`)
 			}
-			totalBytes += content.length
 			files[path.replace(/^\.\//, '')] = content
 		}
-		assertPackageTotalBytes(totalBytes)
+		assertPackageFileSizes(files)
 		const manifest = parsePackageManifest(files)
 		for (const [jobName, job] of Object.entries(manifest.jobs)) {
 			try {

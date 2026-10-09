@@ -254,16 +254,19 @@ export default async function main({ expect }) {
 	assert(largeRun === 'large-ok', 'large package must still execute', largeRun)
 	log('large package', { bytes: largeTotal, files: largeSaved.fileCount, run: largeRun })
 
+	// Over the 4 MiB total while each file stays under the ~1.8 MiB bind cap.
 	const overLimit = await mcp.execute(`import { kody } from 'kody:runtime'
 export default async function main() {
-  const huge = 'x'.repeat(4 * 1024 * 1024 + 1)
+  const chunk = 'x'.repeat(1_500_000)
   return await kody.packageSave({
     files: {
       'package.json': JSON.stringify({ name: '@kody-smoke/too-big', version: '1.0.0', exports: './index.js' }),
       'README.md': '# too-big',
       'AGENTS.md': 'Too big.',
       'index.js': 'export default async () => 1',
-      'blob.txt': huge,
+      'a.txt': chunk,
+      'b.txt': chunk,
+      'c.txt': chunk,
     },
   })
 }`)
@@ -275,4 +278,26 @@ export default async function main() {
 		overLimit.error,
 	)
 	log('over-limit package rejected', overLimit.error.message.slice(0, 120))
+
+	const overFile = await mcp.execute(`import { kody } from 'kody:runtime'
+export default async function main() {
+  const huge = 'x'.repeat(1_800_001)
+  return await kody.packageSave({
+    files: {
+      'package.json': JSON.stringify({ name: '@kody-smoke/file-too-big', version: '1.0.0', exports: './index.js' }),
+      'README.md': '# file-too-big',
+      'AGENTS.md': 'File too big.',
+      'index.js': 'export default async () => 1',
+      'blob.txt': huge,
+    },
+  })
+}`)
+	assert(
+		!overFile.ok &&
+			/invalid_package:.*File "blob\.txt"/.test(overFile.error?.message ?? '') &&
+			/SQLite bind limit/.test(overFile.error?.message ?? ''),
+		'a single file over the SQLite bind cap must be rejected naming the file and limit',
+		overFile.error,
+	)
+	log('over-file package rejected', overFile.error.message.slice(0, 140))
 }

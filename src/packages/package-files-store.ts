@@ -4,6 +4,12 @@ import type { PackageFiles } from './manifest.ts'
 /** Documented packageSave / install total size cap. */
 export const maxPackageTotalBytes = 4 * 1024 * 1024
 
+/**
+ * Per-file cap. Durable Object / celld SQLite rejects a single TEXT/BLOB bind
+ * near 2 MiB (`string or blob too big`); same headroom as `npmCacheMaxModuleBytes`.
+ */
+export const maxPackageFileBytes = 1_800_000
+
 export const packageFilesSchema = `
 	CREATE TABLE IF NOT EXISTS package_files (
 		package_name TEXT NOT NULL,
@@ -187,8 +193,30 @@ export function assertPackageTotalBytes(totalBytes: number) {
 	}
 }
 
+/**
+ * Enforce per-file and total size caps before any SQLite bind.
+ * Per-file failures name the path and the ~1.8 MiB celld bind limit.
+ */
+export function assertPackageFileSizes(files: PackageFiles) {
+	let totalBytes = 0
+	for (const [path, content] of Object.entries(files)) {
+		if (typeof content !== 'string') {
+			throw new KodyError('invalid_package', `File "${path}" must be a string.`)
+		}
+		if (content.length > maxPackageFileBytes) {
+			throw new KodyError(
+				'invalid_package',
+				`File "${path}" is ${formatMiB(content.length)}; each package file must be at most ${formatMiB(maxPackageFileBytes)} (Durable Object SQLite bind limit).`,
+			)
+		}
+		totalBytes += content.length
+	}
+	assertPackageTotalBytes(totalBytes)
+}
+
 function formatMiB(bytes: number): string {
-	return `${(bytes / (1024 * 1024)).toFixed(2)} MiB`
+	if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MiB`
+	return `${Math.round(bytes / 1024)} KiB`
 }
 
 /** Replace every file row for a package (delete-then-insert). */
