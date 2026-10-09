@@ -43,6 +43,7 @@
     "esbuild@0.27.7": true
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
     "es-module-lexer": "2.3.2",
     "marked": "^18.1.0",
     "pako": "3.0.2",

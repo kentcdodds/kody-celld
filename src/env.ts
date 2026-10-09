@@ -9,6 +9,7 @@ import type { UserCell } from './cells/user-cell.ts'
 import type { EmailEnv } from './email/config.ts'
 import type { NpmEnv } from './execute/npm-config.ts'
 import type { LimitEnv } from './lib/limits.ts'
+import type { McpEnv } from './mcp-client/policy.ts'
 import type { PackageSourceEnv } from './packages/install.ts'
 
 export type Env = LimitEnv &
@@ -16,6 +17,7 @@ export type Env = LimitEnv &
 	BlobEnv &
 	BrowserEnv &
 	EmailEnv &
+	McpEnv &
 	NpmEnv &
 	PackageSourceEnv & {
 		LOADER: WorkerLoader
