@@ -77,7 +77,89 @@ const textImportFiles = {
 	'notes.txt': 'not a module',
 }
 
+// A kody.codes-style TypeScript package: annotations, an enum, a parameter
+// property, a generic packageStorage call, a type-only sibling, a named import
+// used only as a type from a file that does not exist, an .mts export, a JS
+// file importing TS, a declaration file and an unreached broken file.
+const typedFiles = {
+	'package.json': JSON.stringify({
+		name: '@t/typed',
+		version: '1.0.0',
+		exports: { '.': './src/index.ts', './extra': './src/extra.mts', './js': './src/bridge.js' },
+	}),
+	'README.md': 'typed',
+	'AGENTS.md': 'typed',
+	'src/index.ts': [
+		"import { packageStorage } from 'kody:runtime'",
+		"import type { Shape } from './types.ts'",
+		"import { Missing } from './missing-types.ts'",
+		"import { area } from './area.ts'",
+		"enum Unit { Cm = 'cm' }",
+		'class Box {',
+		'\tconstructor(private readonly size: number) {}',
+		'\tget area(): number { return area({ w: this.size, h: this.size } satisfies Shape) }',
+		'}',
+		'export const storage = () => packageStorage<{ n: number }>()',
+		'export default async (params: { size?: number } = {}): Promise<string> => {',
+		'\tconst none: Missing | null = null',
+		'\treturn `${new Box(params.size ?? 2).area}${Unit.Cm}${none ?? ""}`',
+		'}',
+	].join('\n'),
+	'src/types.ts': 'export type Shape = { w: number; h: number }',
+	'src/area.ts': "import type { Shape } from './types.ts'\nexport const area = (s: Shape): number => s.w * s.h",
+	'src/extra.mts': 'export default (n: number): number => n + 1',
+	'src/bridge.js': "import { area } from './area.ts'\nexport default () => area({ w: 1, h: 3 })",
+	'src/globals.d.ts': 'declare const injected: string',
+	'src/unused-broken.ts': 'export const broken = (x: ) => 1',
+}
+
+const typedBrokenFiles = {
+	'package.json': JSON.stringify({ name: '@t/typed-broken', version: '1.0.0', exports: { '.': './src/index.ts' } }),
+	'README.md': 'typed broken',
+	'AGENTS.md': 'typed broken',
+	'src/index.ts': "import { broken } from './bad.ts'\nexport default () => broken",
+	'src/bad.ts': 'export const broken = (x: ) => 1',
+}
+
+// A package app: JSONC tsconfig choosing remix/component's automatic runtime,
+// a classic-pragma file with a local createElement, and a .jsx file.
+const tsxFiles = {
+	'package.json': JSON.stringify({
+		name: '@t/tsx',
+		version: '1.0.0',
+		exports: { '.': './src/view.tsx', './classic': './src/classic.tsx', './plain': './src/plain.jsx' },
+	}),
+	'README.md': 'tsx',
+	'AGENTS.md': 'tsx',
+	'tsconfig.json':
+		'{\n\t// package app\n\t"compilerOptions": { "jsx": "react-jsx", "jsxImportSource": "remix/component", },\n}',
+	'src/view.tsx':
+		"import { label } from './label.ts'\nexport default (p: { n: number }) => (\n\t<b>{label}{p.n}</b>\n)",
+	'src/label.ts': "export const label: string = 'n='",
+	'src/classic.tsx':
+		"/** @jsxRuntime classic */\nimport * as React from './h.ts'\nexport default (): string => <b n={1}>{'x'}</b>",
+	'src/h.ts':
+		'export const createElement = (tag: string, props: unknown, ...children: Array<unknown>): string => `<${tag}>${children.join("")}</${tag}>`\nexport const Fragment = "frag"',
+	'src/plain.jsx': "import * as React from './h.ts'\nexport default () => <i>{'y'}</i>",
+}
+
+const tsxClassicFiles = {
+	'package.json': JSON.stringify({ name: '@t/tsx-classic', version: '1.0.0', exports: { '.': './src/classic.tsx' } }),
+	'README.md': 'tsx classic',
+	'AGENTS.md': 'tsx classic',
+	'tsconfig.json': '{ "compilerOptions": { "jsx": "react-jsx", "jsxImportSource": "remix/component" } }',
+	'src/classic.tsx':
+		"/** @jsxRuntime classic */\nimport * as React from './h.ts'\nexport default (): string => <b n={1}>{'x'}</b>",
+	'src/h.ts':
+		'export const createElement = (tag: string, props: unknown, ...children: Array<unknown>): string => `<${tag}>${children.join("")}</${tag}>`\nexport const Fragment = "frag"',
+	'src/plain.jsx': "/** @jsxRuntime classic */\nimport * as React from './h.ts'\nexport default () => <i>{'y'}</i>",
+}
+
 const packages: Record<string, Record<string, string>> = {
+	'@t/typed': typedFiles,
+	'@t/typed-broken': typedBrokenFiles,
+	'@t/tsx': tsxFiles,
+	'@t/tsx-classic': tsxClassicFiles,
 	'@t/tolerant': tolerantFiles,
 	'@t/text-import': textImportFiles,
 	'@t/counter': counterFiles,
@@ -206,7 +288,7 @@ describe('buildModuleGraph', () => {
 			userCell: fakeUserCell,
 			allowNpm: false,
 		})
-		assert.match(graph.modules[graph.entryPath] ?? '', /import type \{ X \} from/)
+		assert.doesNotMatch(graph.modules[graph.entryPath] ?? '', /missing\.js/)
 		// Bare type-only must not trip unsupported_import when npm is disabled.
 		await buildModuleGraph({
 			entry: {
@@ -220,7 +302,7 @@ describe('buildModuleGraph', () => {
 			buildModuleGraph({
 				entry: {
 					kind: 'adhoc',
-					code: "import { X } from './missing.js'\nexport default (): number => 1",
+					code: "import { X } from './missing.js'\nexport default () => X",
 				},
 				userCell: fakeUserCell,
 				allowNpm: false,
@@ -265,7 +347,7 @@ describe('buildModuleGraph', () => {
 	it('refuses bare npm imports when npm is disabled and unknown packages always', async () => {
 		await assert.rejects(
 			buildModuleGraph({
-				entry: { kind: 'adhoc', code: "import x from 'lodash'" },
+				entry: { kind: 'adhoc', code: "import x from 'lodash'\nexport default () => x" },
 				userCell: fakeUserCell,
 				allowNpm: false,
 			}),
@@ -273,7 +355,7 @@ describe('buildModuleGraph', () => {
 		)
 		await assert.rejects(
 			buildModuleGraph({
-				entry: { kind: 'adhoc', code: "import x from 'kody:@t/nope'" },
+				entry: { kind: 'adhoc', code: "import x from 'kody:@t/nope'\nexport default () => x" },
 				userCell: fakeUserCell,
 				allowNpm: false,
 			}),
@@ -324,5 +406,113 @@ describe('buildModuleGraph', () => {
 		})
 		assert.equal(status.entryPath, 'packages/@t/vault/status.js')
 		assert.equal(SEALED_MODULE_PATH in graph.modules, true, 'the sealed graph still stubs sibling imports')
+	})
+
+	it('runs TypeScript packages: types removed before linking, sources stored as written', async () => {
+		const graph = await buildModuleGraph({
+			entry: { kind: 'package', packageName: '@t/typed' },
+			userCell: fakeUserCell,
+			allowNpm: false,
+		})
+		const index = graph.modules['packages/@t/typed/src/index.ts'] ?? ''
+		assert.doesNotMatch(index, /: number|: Promise|satisfies|private readonly|enum Unit|missing-types|\.\/types\.ts/)
+		assert.match(index, /var Unit; \(function \(Unit\)/)
+		assert.match(index, /this\.size = size/)
+		assert.match(index, /from '\.\/area\.ts'/)
+		assert.match(index, /packageStorage\("@t\/typed"\)/, 'the generic packageStorage call is stamped')
+		assert.equal(index.split('\n').length, typedFiles['src/index.ts'].split('\n').length, 'line numbers kept')
+		assert.doesNotMatch(graph.modules['packages/@t/typed/src/area.ts'] ?? '', /Shape|: number/)
+		assert.equal('packages/@t/typed/src/globals.d.ts' in graph.modules, false, '.d.ts is never a module')
+		assert.equal(graph.modules['packages/@t/typed/src/unused-broken.ts'], typedFiles['src/unused-broken.ts'])
+	})
+
+	it('runs .mts exports and JS files that import TypeScript', async () => {
+		const extra = await buildModuleGraph({
+			entry: { kind: 'package', packageName: '@t/typed', exportName: './extra' },
+			userCell: fakeUserCell,
+			allowNpm: false,
+		})
+		assert.equal(extra.entryPath, 'packages/@t/typed/src/extra.mts')
+		assert.doesNotMatch(extra.modules[extra.entryPath] ?? '', /: number/)
+		assert.match(extra.modules[extra.entryPath] ?? '', /export default \(n\) => n \+ 1/)
+		const bridge = await buildModuleGraph({
+			entry: { kind: 'package', packageName: '@t/typed', exportName: './js' },
+			userCell: fakeUserCell,
+			allowNpm: false,
+		})
+		assert.equal(bridge.modules['packages/@t/typed/src/bridge.js'], typedFiles['src/bridge.js'])
+	})
+
+	it('names a reachable TypeScript file it cannot read', async () => {
+		await assert.rejects(
+			buildModuleGraph({
+				entry: { kind: 'package', packageName: '@t/typed-broken' },
+				userCell: fakeUserCell,
+				allowNpm: false,
+			}),
+			/Cannot read the TypeScript in src\/bad\.ts in package @t\/typed-broken: Unexpected token \(1:\d+\)\./,
+		)
+	})
+
+	it('compiles .tsx with the JSX runtime from tsconfig.json, per-file pragmas winning', async () => {
+		// The automatic runtime's import is a bare npm import: with npm off the
+		// graph names it, which proves the import source came from tsconfig.json.
+		await assert.rejects(
+			buildModuleGraph({
+				entry: { kind: 'package', packageName: '@t/tsx' },
+				userCell: fakeUserCell,
+				allowNpm: false,
+			}),
+			/Bare import "remix\/component\/jsx-runtime"/,
+		)
+	})
+
+	it('uses a classic pragma over the tsconfig runtime, and compiles .jsx', async () => {
+		const graph = await buildModuleGraph({
+			entry: { kind: 'package', packageName: '@t/tsx-classic' },
+			userCell: fakeUserCell,
+			allowNpm: false,
+		})
+		const classic = graph.modules['packages/@t/tsx-classic/src/classic.tsx'] ?? ''
+		assert.match(classic, /React\.createElement\('b', \{ n: 1,\}, 'x'\)/)
+		assert.doesNotMatch(classic, /jsx-runtime|: string/)
+		assert.match(graph.modules['packages/@t/tsx-classic/src/plain.jsx'] ?? '', /React\.createElement\('i'/)
+		// tsconfig.json is JSON a run never imports: registering it as a module must not fail.
+		assert.equal(typeof graph.modules['packages/@t/tsx-classic/tsconfig.json'], 'string')
+	})
+
+	it('does not fail a run over a JSONC tsconfig.json the entry never imports', async () => {
+		await assert.rejects(
+			buildModuleGraph({
+				entry: { kind: 'package', packageName: '@t/tsx' },
+				userCell: fakeUserCell,
+				allowNpm: false,
+			}),
+			(error: unknown) => {
+				assert.doesNotMatch(String(error), /JSON|tsconfig/, 'the JSONC tsconfig must not be the failure')
+				return true
+			},
+		)
+	})
+
+	it('removes types from ad hoc code (no JSX) and imports TypeScript packages', async () => {
+		const graph = await buildModuleGraph({
+			entry: {
+				kind: 'adhoc',
+				code: "import typed from 'kody:@t/typed'\nexport default async (p: { size: number }): Promise<string> => typed(p)",
+			},
+			userCell: fakeUserCell,
+			allowNpm: false,
+		})
+		assert.doesNotMatch(graph.modules['main.js'] ?? '', /: \{ size|Promise<string>/)
+		assert.match(graph.modules['main.js'] ?? '', /from '\.\/packages\/@t\/typed\/src\/index\.ts'/)
+		await assert.rejects(
+			buildModuleGraph({
+				entry: { kind: 'adhoc', code: 'export default (x: ) => 1' },
+				userCell: fakeUserCell,
+				allowNpm: false,
+			}),
+			/Cannot read the TypeScript in your execute code: Unexpected token/,
+		)
 	})
 })

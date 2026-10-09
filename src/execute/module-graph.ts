@@ -9,6 +9,14 @@ import {
 import { lexImportSpecifiers, relativeImportCandidates, replaceImportSpecifiers } from './import-specifiers.ts'
 import { resolveNpmModules, type NpmResolverOptions } from './npm-resolver.ts'
 import { RUNTIME_MODULE_SOURCE } from './runtime-module.ts'
+import {
+	isCodeModulePath,
+	jsxOptionsFromFiles,
+	stripTypes,
+	transpileKind,
+	type JsxOptions,
+	type TranspileKind,
+} from './strip-types.ts'
 import { buildWrapperModule } from './wrapper-module.ts'
 
 export const RUNTIME_MODULE_PATH = 'kody-runtime.js'
@@ -239,12 +247,15 @@ export async function buildModuleGraph(input: {
 		return specifier
 	}
 
-	// Modules the lexer cannot read (e.g. JSX in client files) stay as written
-	// and only fail the run if the entry reaches them.
+	// Modules that cannot be read (JSX in .js client files, TypeScript or JSX
+	// sucrase cannot parse) stay as written and only fail the run if the entry
+	// reaches them. TypeScript and JSX are compiled first, so imports used only
+	// as types are gone before the import rewrite and the reachability check.
 	const unreadable = new Map<string, KodyError>()
-	const rewriteModule = async (source: string, path: string) => {
+	const rewriteModule = async (source: string, path: string, kind: TranspileKind | null, jsx?: JsxOptions) => {
 		try {
-			return await rewriteImports(source, path, rewriter)
+			const code = kind ? stripTypes(source, describeModule(path), kind, jsx) : source
+			return await rewriteImports(code, path, rewriter)
 		} catch (error) {
 			const kody = KodyError.fromUnknown(error)
 			if (!kody || kody.code !== 'invalid_module') throw error
@@ -253,18 +264,34 @@ export async function buildModuleGraph(input: {
 		}
 	}
 
+	// JSON that does not parse (a JSONC tsconfig.json) only fails a run that imports it.
+	const jsonModule = (source: string, path: string) => {
+		try {
+			return `export default ${JSON.stringify(JSON.parse(source))}`
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error)
+			unreadable.set(
+				path,
+				new KodyError('invalid_module', `Cannot read the JSON in ${describeModule(path)}: ${message}.`),
+			)
+			return 'export default undefined'
+		}
+	}
+
 	const includeFiles = async (files: PackageFiles, toPath: (file: string) => string) => {
+		const jsx = jsxOptionsFromFiles(files)
 		// Register module paths first so relative-import checks see sibling
-		// modules; files that never become modules (docs, .txt) are not targets.
+		// modules; files that never become modules (docs, .d.ts) are not targets.
 		for (const file of Object.keys(files)) {
-			if (/\.(?:m?js|ts|json)$/.test(file)) modules[toPath(file)] = ''
+			if (isCodeModulePath(file) || file.endsWith('.json')) modules[toPath(file)] = ''
 		}
 		for (const [file, source] of Object.entries(files)) {
 			const path = toPath(file)
-			// celld's Worker Loader accepts only JS/wasm modules, so JSON becomes an
-			// ES module and docs/other assets stay out of the isolate entirely.
-			if (/\.(?:m?js|ts)$/.test(file)) modules[path] = await rewriteModule(source, path)
-			else if (/\.json$/.test(file)) modules[path] = `export default ${JSON.stringify(JSON.parse(source))}`
+			// celld's Worker Loader accepts only JS/wasm modules: TypeScript and JSX
+			// are compiled, JSON becomes an ES module, and docs, declaration files and
+			// other assets stay out of the isolate entirely.
+			if (isCodeModulePath(file)) modules[path] = await rewriteModule(source, path, transpileKind(file), jsx)
+			else if (file.endsWith('.json')) modules[path] = jsonModule(source, path)
 			else delete modules[path]
 		}
 	}
@@ -276,7 +303,7 @@ export async function buildModuleGraph(input: {
 		if (pkg.manifest.secretProvider) providerEntryPaths.add(packageModulePath(name, pkg.manifest.secretProvider.entry))
 		await includeFiles(pkg.files, (file) => packageModulePath(name, file))
 		for (const file of Object.keys(pkg.files)) {
-			if (!/\.(?:m?js|ts)$/.test(file)) continue
+			if (!isCodeModulePath(file)) continue
 			const path = packageModulePath(name, file)
 			modules[path] = stampPackageStorage(sourceOf(path), name)
 		}
@@ -287,7 +314,8 @@ export async function buildModuleGraph(input: {
 	if (input.entry.kind === 'adhoc') {
 		entryPath = ADHOC_MODULE_PATH
 		modules[entryPath] = ''
-		modules[entryPath] = await rewriteModule(input.entry.code, entryPath)
+		// Ad hoc code is read as TypeScript (not JSX: it has no tsconfig.json to choose a runtime).
+		modules[entryPath] = await rewriteModule(input.entry.code, entryPath, 'ts')
 	} else {
 		packageName = input.entry.packageName
 		const pkg = await loadPackage(packageName)
