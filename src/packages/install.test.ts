@@ -328,24 +328,31 @@ describe('fetchPackageSource', () => {
 		assert.equal(result.fetchedFrom, `https://codeload.github.com/o/hello/tar.gz/${exampleCommit}`)
 	})
 
-	it('resolves the commit via the GitHub API when codeload returns 200 for HEAD', async () => {
+	it('resolves the commit via the GitHub API before downloading when codeload would return 200 for HEAD', async () => {
 		const fetchImpl = fetchFor({
-			'https://codeload.github.com/o/hello/tar.gz/HEAD': tgzResponse(githubTarball(packageFiles)),
 			'https://api.github.com/repos/o/hello/commits/HEAD': () =>
 				new Response(exampleCommit, {
 					status: 200,
 					headers: { 'content-type': 'application/vnd.github.sha' },
 				}),
+			[`https://codeload.github.com/o/hello/tar.gz/${exampleCommit}`]: tgzResponse(
+				githubTarball(packageFiles, `hello-${exampleCommit}`),
+			),
+			// Must not be used: downloading HEAD then resolving SHA can pin a different tree.
+			'https://codeload.github.com/o/hello/tar.gz/HEAD': tgzResponse(
+				githubTarball({ 'package.json': '{"name":"@t/stale"}' }, 'hello-HEAD'),
+			),
 		})
 		const result = await fetchPackageSource(parsePackageSource('github:o/hello'), {
 			allowedHosts: defaultPackageSourceHosts,
 			fetch: fetchImpl,
 		})
 		assert.equal(result.commit, exampleCommit)
-		assert.equal(result.fetchedFrom, 'https://codeload.github.com/o/hello/tar.gz/HEAD')
+		assert.equal(result.fetchedFrom, `https://codeload.github.com/o/hello/tar.gz/${exampleCommit}`)
+		assert.equal(result.files['package.json'], manifest)
 		assert.deepEqual(fetchImpl.calls, [
-			'https://codeload.github.com/o/hello/tar.gz/HEAD',
 			'https://api.github.com/repos/o/hello/commits/HEAD',
+			`https://codeload.github.com/o/hello/tar.gz/${exampleCommit}`,
 		])
 	})
 

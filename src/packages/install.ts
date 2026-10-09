@@ -247,7 +247,8 @@ export function commitShaFromCodeloadUrl(url: string): string | undefined {
 
 /**
  * Codeload often answers 200 for HEAD/branch without putting the SHA in the URL
- * (root dir is `repo-ref/`). Resolve via the commits API so preview can pin Install.
+ * (root dir is `repo-ref/`). Resolve via the commits API *before* downloading so
+ * preview pins the same tree Install will save.
  */
 export async function resolveGithubCommitSha(
 	source: GithubSource,
@@ -571,7 +572,18 @@ export async function fetchPackageSource(
 			commit: cloned.commit,
 		}
 	}
-	const url = source.kind === 'github' ? githubTarballUrl(source) : source.url
+	// Resolve mutable github refs to a SHA *before* downloading so the pin
+	// names the same tree the tarball contains (codeload often returns 200 for
+	// HEAD/branch without embedding the SHA; a later commits API call can race).
+	let githubCommit: string | undefined
+	let downloadSource = source
+	if (source.kind === 'github') {
+		githubCommit = source.ref && fullCommitSha.test(source.ref) ? source.ref.toLowerCase() : undefined
+		if (!githubCommit) githubCommit = await resolveGithubCommitSha(source, options)
+		if (githubCommit) downloadSource = { ...source, ref: githubCommit }
+	}
+
+	const url = downloadSource.kind === 'github' ? githubTarballUrl(downloadSource) : downloadSource.url
 	const downloaded = await fetchAllowed(url, options.allowedHosts, options.fetch)
 	let result: { files: PackageFiles; warnings: Array<string> }
 	if (isGzip(downloaded.bytes)) {
@@ -598,10 +610,7 @@ export async function fetchPackageSource(
 	}
 	let commit: string | undefined
 	if (source.kind === 'github') {
-		commit =
-			commitShaFromCodeloadUrl(downloaded.url) ??
-			(source.ref && fullCommitSha.test(source.ref) ? source.ref.toLowerCase() : undefined)
-		if (!commit) commit = await resolveGithubCommitSha(source, options)
+		commit = commitShaFromCodeloadUrl(downloaded.url) ?? githubCommit
 	}
 	return {
 		...result,

@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict'
-import { describe, it } from 'node:test'
-import { clearFetchedPackageCache, fetchPackageSourceCached, fetchedPackageCacheSize } from './fetched-package-cache.ts'
+import { describe, it, mock } from 'node:test'
+import {
+	clearFetchedPackageCache,
+	fetchPackageSourceCached,
+	fetchedPackageCacheSize,
+	urlFetchedPackageCacheTtlMs,
+} from './fetched-package-cache.ts'
 import { parsePackageSource, type FetchLike } from './install.ts'
 
 const sha = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
@@ -124,5 +129,47 @@ describe('fetchPackageSourceCached', () => {
 			fetch: fetchImpl,
 		})
 		assert.equal(n, 5)
+	})
+
+	it('refetches a URL source after the freshness window expires', async () => {
+		clearFetchedPackageCache()
+		mock.timers.enable({ apis: ['Date'], now: 1_000_000 })
+		try {
+			let calls = 0
+			const fetchImpl: FetchLike = async () => {
+				calls += 1
+				return new Response(
+					JSON.stringify({
+						'package.json': manifest,
+						'main.js': `export const n = ${calls}\n`,
+					}),
+					{ status: 200 },
+				)
+			}
+			const source = parsePackageSource('https://example.com/pkg.json')
+			const first = await fetchPackageSourceCached(source, {
+				allowedHosts: ['example.com'],
+				fetch: fetchImpl,
+			})
+			assert.equal(calls, 1)
+			assert.equal(first.files['main.js'], 'export const n = 1\n')
+			mock.timers.tick(urlFetchedPackageCacheTtlMs - 1)
+			const warm = await fetchPackageSourceCached(source, {
+				allowedHosts: ['example.com'],
+				fetch: fetchImpl,
+			})
+			assert.equal(calls, 1)
+			assert.equal(warm.files['main.js'], 'export const n = 1\n')
+			mock.timers.tick(2)
+			const refreshed = await fetchPackageSourceCached(source, {
+				allowedHosts: ['example.com'],
+				fetch: fetchImpl,
+			})
+			assert.equal(calls, 2)
+			assert.equal(refreshed.files['main.js'], 'export const n = 2\n')
+		} finally {
+			mock.timers.reset()
+			clearFetchedPackageCache()
+		}
 	})
 })
