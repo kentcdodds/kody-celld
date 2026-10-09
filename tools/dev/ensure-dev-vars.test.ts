@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, it } from 'node:test'
@@ -27,26 +27,36 @@ describe('mergeLocalPackageSourceHosts', () => {
 		assert.ok(merged)
 		assert.match(merged, /KODY_PACKAGE_SOURCE_HOSTS=github\.com.*,127\.0\.0\.1,localhost/)
 	})
+
+	it('preserves CRLF when rewriting an existing allowlist', () => {
+		const older = 'KODY_PACKAGE_SOURCE_HOSTS=github.com,kody.codes\r\n'
+		const merged = mergeLocalPackageSourceHosts(older, exampleBody)
+		assert.equal(merged, `KODY_PACKAGE_SOURCE_HOSTS=github.com,kody.codes,${localPackageSourceHosts.join(',')}\r\n`)
+	})
 })
 
 describe('ensureDevVars', () => {
 	it('copies the example when missing, then merges into an older file', () => {
 		const dir = mkdtempSync(join(tmpdir(), 'kody-dev-vars-'))
-		const examplePath = join(dir, '.dev.vars.example')
-		const targetPath = join(dir, '.dev.vars')
-		writeFileSync(examplePath, exampleBody)
+		try {
+			const examplePath = join(dir, '.dev.vars.example')
+			const targetPath = join(dir, '.dev.vars')
+			writeFileSync(examplePath, exampleBody)
 
-		const first = ensureDevVars({ targetPath, examplePath })
-		assert.equal(first.wrote, true)
-		assert.equal(readFileSync(targetPath, 'utf8'), exampleBody)
+			const first = ensureDevVars({ targetPath, examplePath })
+			assert.equal(first.wrote, true)
+			assert.equal(readFileSync(targetPath, 'utf8'), exampleBody)
 
-		writeFileSync(targetPath, 'KODY_PACKAGE_SOURCE_HOSTS=github.com\n')
-		const second = ensureDevVars({ targetPath, examplePath })
-		assert.equal(second.wrote, false)
-		assert.equal(second.mergedHosts, true)
-		assert.equal(
-			readFileSync(targetPath, 'utf8'),
-			`KODY_PACKAGE_SOURCE_HOSTS=github.com,${localPackageSourceHosts.join(',')}\n`,
-		)
+			writeFileSync(targetPath, 'KODY_PACKAGE_SOURCE_HOSTS=github.com\n')
+			const second = ensureDevVars({ targetPath, examplePath })
+			assert.equal(second.wrote, false)
+			assert.equal(second.mergedHosts, true)
+			assert.equal(
+				readFileSync(targetPath, 'utf8'),
+				`KODY_PACKAGE_SOURCE_HOSTS=github.com,${localPackageSourceHosts.join(',')}\n`,
+			)
+		} finally {
+			rmSync(dir, { recursive: true, force: true })
+		}
 	})
 })

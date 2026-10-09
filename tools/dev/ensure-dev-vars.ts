@@ -11,6 +11,10 @@ const packageSourceHostsKey = 'KODY_PACKAGE_SOURCE_HOSTS'
 /** Exact private hosts the local package-fixture smoke must be able to fetch. */
 export const localPackageSourceHosts = ['127.0.0.1', 'localhost'] as const
 
+function newlineOf(contents: string): '\r\n' | '\n' {
+	return contents.includes('\r\n') ? '\r\n' : '\n'
+}
+
 function readEnvAssignment(contents: string, key: string): { index: number; value: string } | null {
 	const lines = contents.split(/\r?\n/)
 	const index = lines.findIndex((line) => {
@@ -24,6 +28,7 @@ function readEnvAssignment(contents: string, key: string): { index: number; valu
 
 /** Merge loopback package-source hosts into a `.dev.vars` body; null if unchanged. */
 export function mergeLocalPackageSourceHosts(contents: string, exampleContents: string): string | null {
+	const nl = newlineOf(contents)
 	const existing = readEnvAssignment(contents, packageSourceHostsKey)
 	if (!existing) {
 		const fromExample = readEnvAssignment(exampleContents, packageSourceHostsKey)
@@ -31,7 +36,9 @@ export function mergeLocalPackageSourceHosts(contents: string, exampleContents: 
 			? `${packageSourceHostsKey}=${fromExample.value}`
 			: `${packageSourceHostsKey}=${localPackageSourceHosts.join(',')}`
 		const next =
-			contents.endsWith('\n') || contents.length === 0 ? `${contents}${addition}\n` : `${contents}\n${addition}\n`
+			contents.endsWith('\n') || contents.length === 0
+				? `${contents}${addition}${nl}`
+				: `${contents}${nl}${addition}${nl}`
 		return next
 	}
 	const hosts = existing.value
@@ -42,7 +49,7 @@ export function mergeLocalPackageSourceHosts(contents: string, exampleContents: 
 	if (missing.length === 0) return null
 	const lines = contents.split(/\r?\n/)
 	lines[existing.index] = `${packageSourceHostsKey}=${[...hosts, ...missing].join(',')}`
-	return lines.join('\n')
+	return lines.join(nl)
 }
 
 export function ensureDevVars(options: { targetPath: string; examplePath: string }): {
