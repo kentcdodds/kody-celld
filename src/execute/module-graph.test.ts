@@ -45,8 +45,7 @@ const deferredSealFiles = {
 	}),
 	'README.md': 'deferred seal',
 	'AGENTS.md': 'deferred seal',
-	'index.js':
-		"export default async () => (await import('./helper.js')).default()",
+	'index.js': "export default async () => (await import('./helper.js')).default()",
 	'helper.js':
 		"import provider from './provider.js'\nvoid import('lodash')\nexport default async () => provider({ ref: 'x' })",
 	'provider.js': "export default async ({ ref }) => ({ value: 'v-' + ref })",
