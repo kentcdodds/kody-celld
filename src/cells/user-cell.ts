@@ -40,6 +40,7 @@ import {
 	userPackagesTableDdl,
 } from '../packages/package-files-store.ts'
 import type { IntegrationConfig, IntegrationUsage } from '../integrations/oauth.ts'
+import { McpServerStore, mcpServerSchema, type McpDiscoveryOutcome, type McpServerRecord } from '../mcp-client/store.ts'
 import {
 	IntegrationStore,
 	integrationSchema,
@@ -146,6 +147,8 @@ export type GatewayEvent = {
 	status: number | null
 	secrets: Array<string>
 	reason?: string
+	/** Set for host-side MCP tool calls (method 'MCP'). */
+	mcp?: { server: string; tool: string; ms: number }
 }
 
 export type DailyUsage = {
@@ -546,6 +549,7 @@ export class UserCell extends DurableObject<Env> {
 		`)
 		this.ctx.storage.sql.exec(integrationSchema)
 		this.ctx.storage.sql.exec(secretProviderSchema)
+		this.ctx.storage.sql.exec(mcpServerSchema)
 		this.limits = limitsFromEnv(env)
 		this.defaultQuotas = quotasFromEnv(env)
 		this.integrations = new IntegrationStore({
@@ -556,6 +560,11 @@ export class UserCell extends DurableObject<Env> {
 			fetch: (input, init) => fetch(input, init),
 		})
 		this.secretProviders = new SecretProviderStore(this.ctx.storage.sql)
+		this.mcpServers = new McpServerStore({
+			sql: this.ctx.storage.sql,
+			userId: () => this.userId,
+			keyring: () => this.keyring(),
+		})
 		const secretColumns = this.ctx.storage.sql
 			.exec<{ name: string }>(`SELECT name FROM pragma_table_info('secrets')`)
 			.toArray()
@@ -582,6 +591,7 @@ export class UserCell extends DurableObject<Env> {
 	private readonly defaultQuotas: Quotas
 	private readonly integrations: IntegrationStore
 	private readonly secretProviders: SecretProviderStore
+	private readonly mcpServers: McpServerStore
 	private readonly runTriage: RunTriageStore
 
 	private keyringPromise: Promise<MasterKeyring> | undefined
@@ -616,7 +626,16 @@ export class UserCell extends DurableObject<Env> {
 	}
 
 	private count(
-		table: 'packages' | 'secrets' | 'jobs' | 'runs' | 'blobs' | 'email_messages' | 'webhooks' | 'integrations',
+		table:
+			| 'packages'
+			| 'secrets'
+			| 'jobs'
+			| 'runs'
+			| 'blobs'
+			| 'email_messages'
+			| 'webhooks'
+			| 'integrations'
+			| 'mcp_servers',
 	) {
 		return Number(this.ctx.storage.sql.exec<{ n: number }>(`SELECT COUNT(*) AS n FROM ${table}`).toArray()[0]?.n ?? 0)
 	}
@@ -867,9 +886,10 @@ export class UserCell extends DurableObject<Env> {
 			.exec<{ c: number }>('SELECT count(*) AS c FROM secrets WHERE key_id != ?', keyring.current.id)
 			.toArray()[0]
 		const integrations = await this.integrations.rekey()
+		const mcpServers = await this.mcpServers.rekey()
 		return {
-			resealed: resealed + integrations.resealed,
-			remaining: (remaining?.c ?? 0) + integrations.remaining,
+			resealed: resealed + integrations.resealed + mcpServers.resealed,
+			remaining: (remaining?.c ?? 0) + integrations.remaining + mcpServers.remaining,
 			currentKeyId: keyring.current.id,
 		}
 	}
@@ -1171,6 +1191,41 @@ export class UserCell extends DurableObject<Env> {
 		forceRefresh?: boolean
 	}): Promise<TokenResolution> {
 		return this.integrations.tokenResolve(input)
+	}
+
+	// ----------------------------------------------------------- mcp servers
+
+	async mcpServerList(): Promise<Array<McpServerRecord>> {
+		return this.mcpServers.list()
+	}
+
+	async mcpServerGet(name: string): Promise<McpServerRecord | null> {
+		return this.mcpServers.get(name)
+	}
+
+	async mcpServerSave(input: Parameters<McpServerStore['save']>[0]): Promise<McpServerRecord> {
+		if (!this.mcpServers.get(input.name)) this.assertQuota('mcpServers', this.count('mcp_servers'), 'MCP server')
+		return this.mcpServers.save(input)
+	}
+
+	async mcpServerSetDiscovery(input: { name: string; outcome: McpDiscoveryOutcome }): Promise<McpServerRecord> {
+		return this.mcpServers.setDiscovery(input.name, input.outcome)
+	}
+
+	async mcpServerSetEnabled(input: { name: string; enabled: boolean }): Promise<McpServerRecord> {
+		return this.mcpServers.setEnabled(input.name, input.enabled)
+	}
+
+	async mcpServerSetUsage(input: { name: string; usage: IntegrationUsage }): Promise<McpServerRecord> {
+		return this.mcpServers.setUsage(input.name, input.usage)
+	}
+
+	async mcpServerRemove(name: string): Promise<{ removed: boolean }> {
+		return this.mcpServers.remove(name)
+	}
+
+	async mcpServerAuthorization(name: string): Promise<string | null> {
+		return this.mcpServers.authorization(name)
 	}
 
 	// -------------------------------------------------------- secret providers

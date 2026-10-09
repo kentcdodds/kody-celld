@@ -51,6 +51,8 @@ export type Quotas = {
 	webhooks: number
 	/** OAuth integrations (app + connection) per user. */
 	integrations: number
+	/** Remote MCP servers per user. */
+	mcpServers: number
 }
 
 export type LimitEnv = Partial<
@@ -75,7 +77,8 @@ export type LimitEnv = Partial<
 		| 'KODY_QUOTA_EMAIL_SENDS_PER_DAY'
 		| 'KODY_QUOTA_EMAIL_RECEIVES_PER_DAY'
 		| 'KODY_QUOTA_WEBHOOKS'
-		| 'KODY_QUOTA_INTEGRATIONS',
+		| 'KODY_QUOTA_INTEGRATIONS'
+		| 'KODY_QUOTA_MCP_SERVERS',
 		string | undefined
 	>
 >
@@ -106,6 +109,7 @@ export const defaultQuotas: Quotas = {
 	emailReceivesPerDay: 0,
 	webhooks: 0,
 	integrations: 0,
+	mcpServers: 0,
 }
 
 export const quotaKeys = Object.keys(defaultQuotas) as Array<keyof Quotas>
@@ -183,6 +187,7 @@ export function quotasFromEnv(env: LimitEnv): Quotas {
 		),
 		webhooks: read('KODY_QUOTA_WEBHOOKS', env, (raw) => nonNegative(raw, defaultQuotas.webhooks)),
 		integrations: read('KODY_QUOTA_INTEGRATIONS', env, (raw) => nonNegative(raw, defaultQuotas.integrations)),
+		mcpServers: read('KODY_QUOTA_MCP_SERVERS', env, (raw) => nonNegative(raw, defaultQuotas.mcpServers)),
 	}
 }
 

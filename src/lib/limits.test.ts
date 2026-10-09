@@ -42,6 +42,11 @@ describe('limits', () => {
 		assert.deepEqual(effectiveQuotas(defaults, null), defaults)
 	})
 
+	it('reads the MCP server quota', () => {
+		assert.equal(quotasFromEnv({ KODY_QUOTA_MCP_SERVERS: '5' }).mcpServers, 5)
+		assert.equal(quotasFromEnv({}).mcpServers, 0)
+	})
+
 	it('treats 0 as unlimited', () => {
 		assert.equal(withinQuota(0, 1_000_000), true)
 		assert.equal(withinQuota(3, 2), true)
