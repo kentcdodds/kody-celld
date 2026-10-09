@@ -110,8 +110,22 @@ KODY_MCP_ALLOW_PRIVATE_HOSTS=homeassistant.lan,*.home.arpa,172.30.0.0/16,10.0.0.
   ranges (`/0`–`/32` for IPv4, `/0`–`/128` for IPv6). IPv4-mapped IPv6
   literals (`[::ffff:172.30.1.5]`) match the IPv4 range.
 - Plain `http:` is allowed **only** for listed hosts.
-- **Names are not DNS-resolved.** A CIDR entry matches IP-literal URLs only;
-  list a LAN name by its name or by a `*.suffix`.
+- **Resolved addresses are checked.** Before every hop (the first request and
+  each redirect), Kody looks up the host's A and AAAA records through
+  DNS-over-HTTPS (`KODY_DNS_RESOLVER_URL`, default
+  `https://cloudflare-dns.com/dns-query`) and refuses the hop if any answer is a
+  private address that no IP/CIDR entry allows, or if the lookup fails or
+  returns nothing. IP-literal URLs and names that match a name or `*.suffix`
+  entry skip the lookup. A public resolver cannot see your LAN, so for a LAN
+  name either list the name itself (or a `*.suffix`), or point
+  `KODY_DNS_RESOLVER_URL` at a resolver you run (for example your Pi-hole's
+  DoH endpoint) so `.home` names resolve and the CIDR entries apply to them.
+- **Limit: fast DNS rebinding.** The check is separate from the connection, and
+  `fetch` resolves the name again when it connects, so a name that changes its
+  answer between the check and the connect is not excluded. Closing this needs
+  the connected IP to be checked; that is tracked in
+  [kody-celld#45](https://github.com/kentcdodds/kody-celld/issues/45), after
+  which this pre-check is removed.
 - URLs with credentials (`https://user:pass@…`) are refused; use
   `bearerToken`.
 - Redirects are followed by hand, at most 5, and every hop is checked against

@@ -114,6 +114,13 @@ request shapes, so packages behave identically.
   keep the browser on an isolated network (the compose overlay does this: the
   browser shares only the compose network with Kody) if untrusted users can
   render arbitrary URLs.
+
+  MCP server URLs (`mcpServerAdd`) get a stronger check: the hostname is
+  resolved through DNS-over-HTTPS before every hop and private answers are
+  refused ([mcp-servers.md](./mcp-servers.md)). It has the same fast-rebinding
+  gap, because `fetch` resolves the name again when it connects; tracked in
+  [kody-celld#45](https://github.com/kentcdodds/kody-celld/issues/45).
+
 - **The browser is not the gateway.** Pages are fetched by Chromium, so
   `{{secret:…}}` placeholders are never resolved in browser requests and
   approved-host rules do not apply — the browser sees whatever a public visitor

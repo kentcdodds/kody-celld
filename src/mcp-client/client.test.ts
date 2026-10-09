@@ -128,6 +128,21 @@ describe('redirect policy', () => {
 		assert.ok(!server.requests.some((r) => r.url.includes('192.168.1.1')))
 	})
 
+	it('runs the resolved-IP check before each hop', async () => {
+		const server = startTestMcpServer({ tools: [], dns: { 'rebind.example.com': '10.0.0.5' } })
+		server.setRespond((u) =>
+			u.hostname === 'mcp.example.com'
+				? new Response(null, { status: 307, headers: { location: 'https://rebind.example.com/mcp' } })
+				: null,
+		)
+		await assert.rejects(
+			discoverServer({ url: 'https://mcp.example.com/mcp', authorization: null }, { config, fetch: server.fetch }),
+			/mcp_host_not_allowed|10\.0\.0\.5/,
+		)
+		assert.ok(server.requests.some((r) => r.url.startsWith('https://mcp.example.com')))
+		assert.ok(!server.requests.some((r) => r.url.includes('rebind.example.com')))
+	})
+
 	it('stops after the redirect limit', async () => {
 		const server = startTestMcpServer({ tools: [] })
 		let n = 0

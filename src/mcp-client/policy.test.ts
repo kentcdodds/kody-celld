@@ -6,7 +6,19 @@ const config = mcpConfigFromEnv({ KODY_MCP_ALLOW_PRIVATE_HOSTS: '172.30.0.0/16,h
 
 describe('mcpConfigFromEnv', () => {
 	it('defaults to an empty list and 30 s', () => {
-		assert.deepEqual(mcpConfigFromEnv({}), { allowPrivateHosts: [], callTimeoutMs: 30_000 })
+		assert.deepEqual(mcpConfigFromEnv({}), {
+			allowPrivateHosts: [],
+			callTimeoutMs: 30_000,
+			dnsResolverUrl: 'https://cloudflare-dns.com/dns-query',
+		})
+		assert.equal(
+			mcpConfigFromEnv({ KODY_DNS_RESOLVER_URL: 'https://pihole.home/dns-query' }).dnsResolverUrl,
+			'https://pihole.home/dns-query',
+		)
+		assert.throws(
+			() => mcpConfigFromEnv({ KODY_DNS_RESOLVER_URL: 'http://1.1.1.1/dns-query' }),
+			/KODY_DNS_RESOLVER_URL/,
+		)
 	})
 	it('reports bad values as config_error', () => {
 		assert.throws(

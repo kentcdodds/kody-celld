@@ -11,9 +11,29 @@ export type TestTool = {
 	handler: (args: Record<string, unknown>) => McpToolResult | Promise<McpToolResult>
 }
 
+/** Fake DoH answers for `fetch` in tests: `*.example.com` resolves to a public address unless `dns` says otherwise. */
+function answerDns(url: URL, dns: Record<string, string>) {
+	const name = url.searchParams.get('name') ?? ''
+	const type = url.searchParams.get('type')
+	const address = dns[name] ?? (name.endsWith('.example.com') ? '93.184.216.34' : undefined)
+	const wanted = type === 'AAAA' ? address?.includes(':') : address && !address.includes(':')
+	return Response.json({
+		Status: 0,
+		Answer: wanted ? [{ name, type: type === 'AAAA' ? 28 : 1, TTL: 60, data: address }] : [],
+	})
+}
+
 export function startTestMcpServer(
-	options: { bearer?: string; pageSize?: number; tools?: Array<TestTool>; instructions?: string } = {},
+	options: {
+		bearer?: string
+		pageSize?: number
+		tools?: Array<TestTool>
+		instructions?: string
+		/** hostname → address returned by the fake resolver */
+		dns?: Record<string, string>
+	} = {},
 ) {
+	const dns = options.dns ?? {}
 	const tools: Array<TestTool> = [...(options.tools ?? [])]
 	const requests: Array<{ url: string; authorization: string | null }> = []
 	const state: { respond: ((url: URL) => Response | null) | null } = { respond: null }
@@ -45,6 +65,7 @@ export function startTestMcpServer(
 	const fetchImpl = async (input: RequestInfo | URL, init?: RequestInit) => {
 		const request = new Request(input, init)
 		const url = new URL(request.url)
+		if (url.hostname === 'cloudflare-dns.com') return answerDns(url, dns)
 		requests.push({ url: request.url, authorization: request.headers.get('authorization') })
 		const custom = state.respond?.(url)
 		if (custom) return custom

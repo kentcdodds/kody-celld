@@ -4,6 +4,7 @@ import type { jsonSchemaValidator, JsonSchemaValidatorResult } from '@modelconte
 import { KODY_CELLD_VERSION } from '../env.ts'
 import { KodyError } from '../lib/errors.ts'
 import { assertMcpUrl, type McpConfig } from './policy.ts'
+import { assertResolvedHostAllowed } from './resolve.ts'
 
 export type McpTool = {
 	name: string
@@ -106,6 +107,7 @@ function policyFetch(
 		for (let hop = 0; ; hop++) {
 			try {
 				url = assertMcpUrl(url.href, config)
+				await assertResolvedHostAllowed(url, config, base)
 			} catch (error) {
 				const kody = KodyError.fromUnknown(error)!
 				onPolicyError(kody)
