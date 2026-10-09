@@ -1,6 +1,6 @@
 import { KodyError } from '../lib/errors.ts'
 import { isPrivateHostname } from '../lib/private-hosts.ts'
-import { hostMatchesApproval } from '../secrets/host-policy.ts'
+import { hostMatchesAllowlist } from '../lib/host-allowlist.ts'
 import type { BrowserConfig } from './config.ts'
 
 export type WaitUntil = 'load' | 'domcontentloaded' | 'networkidle0' | 'networkidle2'
@@ -65,7 +65,7 @@ export function assertRenderableUrl(raw: unknown, config: NonNullable<BrowserCon
 		throw new KodyError('invalid_args', 'URLs with embedded credentials cannot be rendered.')
 	}
 	const host = url.hostname.toLowerCase()
-	const allowed = config.allowPrivateHosts.some((entry) => hostMatchesApproval(host, entry))
+	const allowed = hostMatchesAllowlist(host, config.allowPrivateHosts)
 	if (allowed) return url.toString()
 	if (isPrivateHostname(host)) {
 		throw new KodyError(

@@ -34,6 +34,18 @@ describe('browser config', () => {
 		)
 	})
 
+	it('rejects an invalid private-host entry, naming it', () => {
+		assert.throws(
+			() =>
+				browserConfigFromEnv({
+					KODY_BROWSER_PROVIDER: 'browserless',
+					KODY_BROWSER_URL: 'http://b:3000',
+					KODY_BROWSER_ALLOW_PRIVATE_HOSTS: 'ok.home,10.0.0.0/99',
+				}),
+			/KODY_BROWSER_ALLOW_PRIVATE_HOSTS: "10\.0\.0\.0\/99"/,
+		)
+	})
+
 	it('describes the cloudflare provider without the token', () => {
 		const config = browserConfigFromEnv({
 			KODY_BROWSER_PROVIDER: 'cloudflare',
@@ -88,6 +100,9 @@ describe('assertRenderableUrl', () => {
 		assert.equal(assertRenderableUrl('http://dash.home.lan/', allowing), 'http://dash.home.lan/')
 		assert.equal(assertRenderableUrl('http://192.168.1.10/', allowing), 'http://192.168.1.10/')
 		assert.throws(() => assertRenderableUrl('http://192.168.1.11/', allowing), /browser_private_host/)
+		const cidr = { ...config, allowPrivateHosts: ['172.30.0.0/16'] }
+		assert.equal(assertRenderableUrl('http://172.30.1.108:8123/', cidr), 'http://172.30.1.108:8123/')
+		assert.throws(() => assertRenderableUrl('http://172.31.0.1/', cidr), /browser_private_host/)
 	})
 })
 
