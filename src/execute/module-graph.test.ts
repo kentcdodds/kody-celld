@@ -155,7 +155,24 @@ const tsxClassicFiles = {
 	'src/plain.jsx': "/** @jsxRuntime classic */\nimport * as React from './h.ts'\nexport default () => <i>{'y'}</i>",
 }
 
+// A package app: the server export is plain TS; client .tsx files under the
+// automatic runtime import npm packages and are never reached from the entry.
+const appShapeFiles = {
+	'package.json': JSON.stringify({
+		name: '@t/app-shape',
+		version: '1.0.0',
+		exports: { '.': './src/index.ts', './client': './client/app.tsx' },
+	}),
+	'README.md': 'app shape',
+	'AGENTS.md': 'app shape',
+	'tsconfig.json': '{ "compilerOptions": { "jsx": "react-jsx", "jsxImportSource": "remix/component" } }',
+	'src/index.ts': 'export default (): number => 1',
+	'client/app.tsx':
+		"import { renderToString } from 'react-dom/server'\nimport other from 'kody:@t/not-saved'\nexport default () => <b>{String(renderToString)}{other}</b>",
+}
+
 const packages: Record<string, Record<string, string>> = {
+	'@t/app-shape': appShapeFiles,
 	'@t/typed': typedFiles,
 	'@t/typed-broken': typedBrokenFiles,
 	'@t/tsx': tsxFiles,
@@ -513,6 +530,33 @@ describe('buildModuleGraph', () => {
 				allowNpm: false,
 			}),
 			/Cannot read the TypeScript in your execute code: Unexpected token/,
+		)
+	})
+
+	it('never fails or fetches npm for files the entry does not reach (client .tsx)', async () => {
+		const graph = await buildModuleGraph({
+			entry: { kind: 'package', packageName: '@t/app-shape' },
+			userCell: fakeUserCell,
+			allowNpm: false,
+		})
+		assert.equal(graph.entryPath, 'packages/@t/app-shape/src/index.ts')
+		// With npm on, an unreached client file must not trigger CDN fetches:
+		// the dead CDN origin makes any fetch fail the build.
+		const withNpm = await buildModuleGraph({
+			entry: { kind: 'package', packageName: '@t/app-shape' },
+			userCell: fakeUserCell,
+			allowNpm: true,
+			npm: { config: { enabled: true, cdnOrigin: 'http://127.0.0.1:9', cacheMaxBytes: 0, cacheTtlMs: 0 }, cache: null },
+		})
+		assert.deepEqual(withNpm.npmModules, [])
+		// Reached, the same file still names its problem.
+		await assert.rejects(
+			buildModuleGraph({
+				entry: { kind: 'package', packageName: '@t/app-shape', exportName: './client' },
+				userCell: fakeUserCell,
+				allowNpm: false,
+			}),
+			/Bare import "remix\/component\/jsx-runtime" is not available/,
 		)
 	})
 })

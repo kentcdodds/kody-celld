@@ -155,6 +155,38 @@ function assertReachableImportsResolve(
 	}
 }
 
+/**
+ * Modules the entry can load: reached through static or literal dynamic
+ * relative imports (after rewriting, `kody:` package imports are relative
+ * too). Only these fetch their npm imports, so unreached client files of a
+ * package app cost nothing.
+ */
+function loadableModules(modules: Record<string, string>, entryPath: string) {
+	const queue = [entryPath]
+	const seen = new Set<string>()
+	while (queue.length > 0) {
+		const path = queue.shift() as string
+		if (seen.has(path) || !(path in modules)) continue
+		seen.add(path)
+		if (path.endsWith('.json')) continue
+		let ranges
+		try {
+			ranges = lexImportSpecifiers(modules[path] ?? '', path)
+		} catch {
+			continue
+		}
+		for (const { specifier, typeOnly } of ranges) {
+			if (typeOnly || !isRelative(specifier)) continue
+			try {
+				queue.push(resolveRelative(path, specifier))
+			} catch {
+				// Points outside the package: assertReachableImportsResolve names static ones.
+			}
+		}
+	}
+	return seen
+}
+
 /** "lib/main.js in package @scope/pkg", or "your execute code" for the ad hoc module. */
 function describeModule(path: string) {
 	if (path === ADHOC_MODULE_PATH) return 'your execute code'
@@ -186,7 +218,8 @@ export async function buildModuleGraph(input: {
 	const sourceOf = (path: string) => modules[path] ?? ''
 	const warnings: Array<string> = []
 	const includedPackages = new Set<string>()
-	const npmSpecifiers = new Set<string>()
+	// Bare npm specifiers per importing module: only modules the entry can load fetch theirs.
+	const npmByModule = new Map<string, Set<string>>()
 	const packageCache = new Map<string, Awaited<ReturnType<UserCell['packageGet']>>>()
 
 	const loadPackage = async (name: string) => {
@@ -243,14 +276,17 @@ export async function buildModuleGraph(input: {
 				`Bare import "${specifier}" is not available: npm imports are disabled on this host.`,
 			)
 		}
-		npmSpecifiers.add(specifier)
+		const set = npmByModule.get(fromPath) ?? new Set<string>()
+		set.add(specifier)
+		npmByModule.set(fromPath, set)
 		return specifier
 	}
 
-	// Modules that cannot be read (JSX in .js client files, TypeScript or JSX
-	// sucrase cannot parse) stay as written and only fail the run if the entry
-	// reaches them. TypeScript and JSX are compiled first, so imports used only
-	// as types are gone before the import rewrite and the reachability check.
+	// Modules that cannot be read or linked (JSX in .js client files, TypeScript
+	// or JSX sucrase cannot parse, an import this host refuses) stay as written
+	// and only fail the run if the entry reaches them. TypeScript and JSX are
+	// compiled first, so imports used only as types are gone before the import
+	// rewrite and the reachability check.
 	const unreadable = new Map<string, KodyError>()
 	const rewriteModule = async (source: string, path: string, kind: TranspileKind | null, jsx?: JsxOptions) => {
 		try {
@@ -258,7 +294,7 @@ export async function buildModuleGraph(input: {
 			return await rewriteImports(code, path, rewriter)
 		} catch (error) {
 			const kody = KodyError.fromUnknown(error)
-			if (!kody || kody.code !== 'invalid_module') throw error
+			if (!kody) throw error
 			unreadable.set(path, kody)
 			return source
 		}
@@ -334,6 +370,10 @@ export async function buildModuleGraph(input: {
 	if (sealedStubNeeded) modules[SEALED_MODULE_PATH] = SEALED_MODULE_SOURCE
 	assertReachableImportsResolve(modules, entryPath, unreadable)
 
+	const npmSpecifiers = new Set<string>()
+	for (const path of loadableModules(modules, entryPath)) {
+		for (const specifier of npmByModule.get(path) ?? []) npmSpecifiers.add(specifier)
+	}
 	if (npmSpecifiers.size > 0) {
 		const resolved = await resolveNpmModules([...npmSpecifiers], input.npm)
 		for (const [path, source] of Object.entries(resolved.modules)) modules[path] = source
