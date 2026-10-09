@@ -3,10 +3,17 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, it } from 'node:test'
-import { ensureDevVars, localPackageSourceHosts, mergeLocalPackageSourceHosts } from './ensure-dev-vars.ts'
+import {
+	ensureDevVars,
+	localMcpHosts,
+	localPackageSourceHosts,
+	mergeLocalMcpHosts,
+	mergeLocalPackageSourceHosts,
+} from './ensure-dev-vars.ts'
 
 const exampleBody = `# example
 KODY_ALLOW_INSECURE_SECRET_HOSTS=127.0.0.1,localhost
+KODY_MCP_ALLOW_PRIVATE_HOSTS=127.0.0.1,localhost,host.docker.internal
 KODY_PACKAGE_SOURCE_HOSTS=github.com,api.github.com,codeload.github.com,raw.githubusercontent.com,gist.githubusercontent.com,objects.githubusercontent.com,kody.codes,127.0.0.1,localhost,host.docker.internal
 `
 
@@ -35,6 +42,28 @@ describe('mergeLocalPackageSourceHosts', () => {
 	})
 })
 
+describe('mergeLocalMcpHosts', () => {
+	it('is a no-op when loopback hosts are already listed', () => {
+		assert.equal(mergeLocalMcpHosts(exampleBody, exampleBody), null)
+	})
+
+	it('appends missing loopback hosts to an existing MCP allowlist', () => {
+		const older = 'KODY_MCP_ALLOW_PRIVATE_HOSTS=10.0.0.0/8\n'
+		assert.equal(
+			mergeLocalMcpHosts(older, exampleBody),
+			`KODY_MCP_ALLOW_PRIVATE_HOSTS=10.0.0.0/8,${localMcpHosts.join(',')}\n`,
+		)
+	})
+
+	it('copies the example MCP allowlist when the key is missing entirely', () => {
+		const older = 'KODY_ALLOW_INSECURE_SECRET_HOSTS=127.0.0.1,localhost\n'
+		assert.equal(
+			mergeLocalMcpHosts(older, exampleBody),
+			`${older}KODY_MCP_ALLOW_PRIVATE_HOSTS=127.0.0.1,localhost,host.docker.internal\n`,
+		)
+	})
+})
+
 describe('ensureDevVars', () => {
 	it('copies the example when missing, then merges into an older file', () => {
 		const dir = mkdtempSync(join(tmpdir(), 'kody-dev-vars-'))
@@ -47,13 +76,13 @@ describe('ensureDevVars', () => {
 			assert.equal(first.wrote, true)
 			assert.equal(readFileSync(targetPath, 'utf8'), exampleBody)
 
-			writeFileSync(targetPath, 'KODY_PACKAGE_SOURCE_HOSTS=github.com\n')
+			writeFileSync(targetPath, 'KODY_PACKAGE_SOURCE_HOSTS=github.com\nKODY_MCP_ALLOW_PRIVATE_HOSTS=\n')
 			const second = ensureDevVars({ targetPath, examplePath })
 			assert.equal(second.wrote, false)
 			assert.equal(second.mergedHosts, true)
 			assert.equal(
 				readFileSync(targetPath, 'utf8'),
-				`KODY_PACKAGE_SOURCE_HOSTS=github.com,${localPackageSourceHosts.join(',')}\n`,
+				`KODY_PACKAGE_SOURCE_HOSTS=github.com,${localPackageSourceHosts.join(',')}\nKODY_MCP_ALLOW_PRIVATE_HOSTS=${localMcpHosts.join(',')}\n`,
 			)
 		} finally {
 			rmSync(dir, { recursive: true, force: true })

@@ -70,6 +70,11 @@ services:
       KODY_QUOTA_BLOBS: ${KODY_QUOTA_BLOBS:-}
       KODY_QUOTA_BLOB_BYTES: ${KODY_QUOTA_BLOB_BYTES:-}
       KODY_MCP_CONTENT_LIMIT_BYTES: ${KODY_MCP_CONTENT_LIMIT_BYTES:-}
+      # External MCP servers (docs/mcp-servers.md); empty = public https only, Cloudflare DoH, 30 s calls, no count limit.
+      KODY_MCP_ALLOW_PRIVATE_HOSTS: ${KODY_MCP_ALLOW_PRIVATE_HOSTS:-}
+      KODY_MCP_CALL_TIMEOUT_MS: ${KODY_MCP_CALL_TIMEOUT_MS:-}
+      KODY_DNS_RESOLVER_URL: ${KODY_DNS_RESOLVER_URL:-}
+      KODY_QUOTA_MCP_SERVERS: ${KODY_QUOTA_MCP_SERVERS:-}
       # Browser rendering (docs/browser.md); empty = off. compose.browser.yaml adds browserless.
       KODY_BROWSER_PROVIDER: ${KODY_BROWSER_PROVIDER:-}
       KODY_BROWSER_URL: ${KODY_BROWSER_URL:-}

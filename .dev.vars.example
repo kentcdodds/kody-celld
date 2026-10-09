@@ -10,7 +10,8 @@ KODY_BROWSER_ALLOW_PRIVATE_HOSTS=127.0.0.1,localhost,host.docker.internal
 KODY_MCP_ALLOW_PRIVATE_HOSTS=127.0.0.1,localhost,host.docker.internal
 # Defaults plus loopback so `npm run smoke` can preview a local package fixture
 # (smoke/package-fixture-server.mjs). host.docker.internal is for Docker CI.
-# `npm run dev` merges 127.0.0.1,localhost into an existing `.dev.vars` if missing.
+# `npm run dev` merges 127.0.0.1,localhost into an existing `.dev.vars` if missing
+# (here and in KODY_MCP_ALLOW_PRIVATE_HOSTS).
 KODY_PACKAGE_SOURCE_HOSTS=github.com,api.github.com,codeload.github.com,raw.githubusercontent.com,gist.githubusercontent.com,objects.githubusercontent.com,kody.codes,127.0.0.1,localhost,host.docker.internal
 
 # Email smoke (smoke/email.mjs): inboxes on kody.local.test, fake bridge on :9796.

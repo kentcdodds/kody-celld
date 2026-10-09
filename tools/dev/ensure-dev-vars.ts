@@ -2,7 +2,8 @@
 // `.dev.vars.example` when missing so loopback smoke defaults never need to live
 // in wrangler.jsonc (which single-node Docker would inherit). When the file
 // already exists (copy-on-missing), still merge the loopback package-source
-// hosts smoke needs — older checkouts otherwise refuse `127.0.0.1` fixtures.
+// hosts smoke needs — older checkouts otherwise refuse `127.0.0.1` fixtures —
+// and the loopback MCP hosts the mcp-servers smoke's mock server needs.
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -10,6 +11,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 const packageSourceHostsKey = 'KODY_PACKAGE_SOURCE_HOSTS'
 /** Exact private hosts the local package-fixture smoke must be able to fetch. */
 export const localPackageSourceHosts = ['127.0.0.1', 'localhost'] as const
+const mcpHostsKey = 'KODY_MCP_ALLOW_PRIVATE_HOSTS'
+/** Exact private hosts the local mcp-servers smoke mock must be reachable on. */
+export const localMcpHosts = ['127.0.0.1', 'localhost'] as const
 
 function newlineOf(contents: string): '\r\n' | '\n' {
 	return contents.includes('\r\n') ? '\r\n' : '\n'
@@ -26,15 +30,17 @@ function readEnvAssignment(contents: string, key: string): { index: number; valu
 	return { index, value: line.slice(line.indexOf('=') + 1) }
 }
 
-/** Merge loopback package-source hosts into a `.dev.vars` body; null if unchanged. */
-export function mergeLocalPackageSourceHosts(contents: string, exampleContents: string): string | null {
+function mergeLocalHosts(
+	contents: string,
+	exampleContents: string,
+	key: string,
+	localHosts: readonly string[],
+): string | null {
 	const nl = newlineOf(contents)
-	const existing = readEnvAssignment(contents, packageSourceHostsKey)
+	const existing = readEnvAssignment(contents, key)
 	if (!existing) {
-		const fromExample = readEnvAssignment(exampleContents, packageSourceHostsKey)
-		const addition = fromExample
-			? `${packageSourceHostsKey}=${fromExample.value}`
-			: `${packageSourceHostsKey}=${localPackageSourceHosts.join(',')}`
+		const fromExample = readEnvAssignment(exampleContents, key)
+		const addition = fromExample ? `${key}=${fromExample.value}` : `${key}=${localHosts.join(',')}`
 		const next =
 			contents.endsWith('\n') || contents.length === 0
 				? `${contents}${addition}${nl}`
@@ -45,11 +51,21 @@ export function mergeLocalPackageSourceHosts(contents: string, exampleContents: 
 		.split(',')
 		.map((h) => h.trim().toLowerCase())
 		.filter(Boolean)
-	const missing = localPackageSourceHosts.filter((host) => !hosts.includes(host))
+	const missing = localHosts.filter((host) => !hosts.includes(host))
 	if (missing.length === 0) return null
 	const lines = contents.split(/\r?\n/)
-	lines[existing.index] = `${packageSourceHostsKey}=${[...hosts, ...missing].join(',')}`
+	lines[existing.index] = `${key}=${[...hosts, ...missing].join(',')}`
 	return lines.join(nl)
+}
+
+/** Merge loopback package-source hosts into a `.dev.vars` body; null if unchanged. */
+export function mergeLocalPackageSourceHosts(contents: string, exampleContents: string): string | null {
+	return mergeLocalHosts(contents, exampleContents, packageSourceHostsKey, localPackageSourceHosts)
+}
+
+/** Merge loopback MCP allowlist hosts into a `.dev.vars` body; null if unchanged. */
+export function mergeLocalMcpHosts(contents: string, exampleContents: string): string | null {
+	return mergeLocalHosts(contents, exampleContents, mcpHostsKey, localMcpHosts)
 }
 
 export function ensureDevVars(options: { targetPath: string; examplePath: string }): {
@@ -67,8 +83,9 @@ export function ensureDevVars(options: { targetPath: string; examplePath: string
 	}
 	const exampleContents = readFileSync(options.examplePath, 'utf8')
 	const before = readFileSync(options.targetPath, 'utf8')
-	const after = mergeLocalPackageSourceHosts(before, exampleContents)
-	if (after !== null && after !== before) {
+	const withPackageHosts = mergeLocalPackageSourceHosts(before, exampleContents) ?? before
+	const after = mergeLocalMcpHosts(withPackageHosts, exampleContents) ?? withPackageHosts
+	if (after !== before) {
 		writeFileSync(options.targetPath, after)
 		mergedHosts = true
 	}
@@ -90,7 +107,7 @@ if (invokedAsMain) {
 			console.error('[kody-celld] wrote .dev.vars from .dev.vars.example (loopback smoke defaults)')
 		} else if (result.mergedHosts) {
 			console.error(
-				`[kody-celld] added ${localPackageSourceHosts.join(', ')} to ${packageSourceHostsKey} in .dev.vars (local package smoke)`,
+				`[kody-celld] added loopback hosts to ${packageSourceHostsKey} / ${mcpHostsKey} in .dev.vars (local smoke)`,
 			)
 		}
 	} catch (error) {
