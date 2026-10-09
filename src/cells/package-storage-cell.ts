@@ -1,6 +1,7 @@
 import { DurableObject } from 'cloudflare:workers'
 import type { Env } from '../env.ts'
 import { KodyError } from '../lib/errors.ts'
+import { reservedTableExclusionSql, reservedTablePrefixes, touchesReservedTable } from './package-storage-reserved.ts'
 
 export type StorageListOptions = {
 	prefix?: string | undefined
@@ -15,8 +16,6 @@ export type SqlResult = {
 	rowsRead: number
 	rowsWritten: number
 }
-
-const reservedTablePrefix = '__kody_'
 
 /**
  * `packageStorage()` backing store: one SQLite cell per (user, package). The
@@ -91,24 +90,35 @@ export class PackageStorageCell extends DurableObject<Env> {
 		}
 	}
 
+	/**
+	 * Wipe KV rows and drop every package-created table. Reserved prefixes
+	 * (sqlite / __kody / _cf / _litestream) are never dropped. Runs inside
+	 * `transactionSync` so a mid-clear failure rolls back instead of leaving
+	 * half-cleared storage (#40).
+	 */
 	async clear() {
-		this.ctx.storage.sql.exec('DELETE FROM __kody_kv')
-		const tables = this.ctx.storage.sql
-			.exec<{ name: string }>(
-				`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '__kody_%' AND name NOT LIKE '\\_cf\\_%' ESCAPE '\\'`,
-			)
-			.toArray()
-		for (const table of tables) {
-			this.ctx.storage.sql.exec(`DROP TABLE IF EXISTS "${table.name.replaceAll('"', '""')}"`)
-		}
+		this.ctx.storage.transactionSync(() => {
+			this.ctx.storage.sql.exec('DELETE FROM __kody_kv')
+			const tables = this.ctx.storage.sql
+				.exec<{ name: string }>(
+					`SELECT name FROM sqlite_master WHERE type = 'table' AND ${reservedTableExclusionSql('name')}`,
+				)
+				.toArray()
+			for (const table of tables) {
+				this.ctx.storage.sql.exec(`DROP TABLE IF EXISTS "${table.name.replaceAll('"', '""')}"`)
+			}
+		})
 	}
 
 	async sql(query: string, params: Array<SqlStorageValue> = []): Promise<SqlResult> {
 		if (typeof query !== 'string' || !query.trim()) {
 			throw new KodyError('invalid_sql', 'A SQL statement is required.')
 		}
-		if (/\b(?:__kody_|sqlite_master|_cf_)/i.test(query) && !/^\s*select/i.test(query)) {
-			throw new KodyError('reserved_table', `Statements may not modify tables prefixed with ${reservedTablePrefix}.`)
+		if (touchesReservedTable(query) && !/^\s*select/i.test(query)) {
+			throw new KodyError(
+				'reserved_table',
+				`Statements may not modify tables prefixed with ${reservedTablePrefixes.join(', ')}.`,
+			)
 		}
 		const cursor = this.ctx.storage.sql.exec(query, ...params)
 		const rows = cursor.toArray() as Array<Record<string, SqlStorageValue>>
@@ -125,7 +135,7 @@ export class PackageStorageCell extends DurableObject<Env> {
 		const kv = this.ctx.storage.sql.exec<{ c: number }>('SELECT count(*) AS c FROM __kody_kv').toArray()[0]
 		const tables = this.ctx.storage.sql
 			.exec<{ name: string }>(
-				"SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE '__kody_%' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name NOT LIKE '_litestream_%' ORDER BY name",
+				`SELECT name FROM sqlite_master WHERE type = 'table' AND ${reservedTableExclusionSql('name')} ORDER BY name`,
 			)
 			.toArray()
 			.map((row) => row.name)

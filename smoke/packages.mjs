@@ -95,6 +95,46 @@ export default async function main() { return await packageStorage().get('count'
 	assert(inspect.stats.tables.includes('events'), 'packageStorageInspect should list custom SQL tables', inspect.stats)
 	log('packageStorageInspect', { keys: inspect.items.map((item) => item.key), tables: inspect.stats.tables })
 
+	// packageStorageClear must wipe KV and package tables atomically, including
+	// on celld where _litestream_* durability tables must not be dropped (#40).
+	await mcp.call('packageSave', {
+		files: {
+			'package.json': JSON.stringify({
+				name: '@kody-smoke/storage-clear',
+				version: '1.0.0',
+				description: 'smoke packageStorageClear',
+				exports: './seed.js',
+			}),
+			'README.md': '# storage-clear',
+			'AGENTS.md': 'Smoke for packageStorageClear.',
+			'seed.js': `import { packageStorage } from 'kody:runtime'
+export default async function main() {
+  const s = packageStorage()
+  await s.set('k', 1)
+  await s.sql('CREATE TABLE IF NOT EXISTS notes (id TEXT)')
+  await s.sql("INSERT INTO notes VALUES ('a')")
+  return 'seeded'
+}`,
+		},
+	})
+	const seeded = await mcp.callDirect('packageRun', { name: '@kody-smoke/storage-clear', export: '.' })
+	assert(seeded.ok && seeded.result === 'seeded', 'storage-clear seed run failed', seeded)
+	const beforeClear = await mcp.call('packageStorageInspect', { packageName: '@kody-smoke/storage-clear' })
+	assert(
+		beforeClear.stats.keys === 1 && beforeClear.stats.tables.includes('notes'),
+		'storage-clear should seed a key and notes table',
+		beforeClear.stats,
+	)
+	const cleared = await mcp.call('packageStorageClear', { packageName: '@kody-smoke/storage-clear' })
+	assert(cleared.cleared === true, 'packageStorageClear should report cleared', cleared)
+	const afterClear = await mcp.call('packageStorageInspect', { packageName: '@kody-smoke/storage-clear' })
+	assert(
+		afterClear.stats.keys === 0 && Array.isArray(afterClear.stats.tables) && afterClear.stats.tables.length === 0,
+		'packageStorageClear must leave keys: 0, tables: []',
+		afterClear.stats,
+	)
+	log('packageStorageClear', afterClear.stats)
+
 	const got = await mcp.call('packageGet', { name: '@kody-smoke/counter' })
 	assert(
 		got.readme.includes('@kody-smoke/counter') && got.agents.length > 0,
