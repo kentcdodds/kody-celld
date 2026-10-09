@@ -68,6 +68,14 @@ type Row = {
 
 const nowIso = () => new Date().toISOString()
 
+function sameOrigin(a: string, b: string) {
+	try {
+		return new URL(a).origin === new URL(b).origin
+	} catch {
+		return false
+	}
+}
+
 function toRecord(row: Row): McpServerRecord {
 	return {
 		id: row.id,
@@ -144,7 +152,8 @@ export class McpServerStore {
 				{ status: 409 },
 			)
 		}
-		// replace without a new token keeps the sealed bearer (clearing is remove + re-add).
+		// replace without a new token keeps the sealed bearer only for the same origin
+		// (otherwise discovery would send it to a new host). Clearing is remove + re-add.
 		let sealed: { iv: string | null; ciphertext: string | null; keyId: string | null; kind: 'none' | 'bearer' } = {
 			iv: null,
 			ciphertext: null,
@@ -155,7 +164,7 @@ export class McpServerStore {
 			const { current } = await this.host.keyring()
 			const encrypted = await encryptSecretValue(current.key, this.host.userId(), input.authorization)
 			sealed = { iv: encrypted.iv, ciphertext: encrypted.ciphertext, keyId: current.id, kind: 'bearer' }
-		} else if (existing?.bearer_ciphertext) {
+		} else if (existing?.bearer_ciphertext && sameOrigin(existing.url, input.url)) {
 			sealed = {
 				iv: existing.bearer_iv,
 				ciphertext: existing.bearer_ciphertext,

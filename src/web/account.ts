@@ -925,7 +925,11 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 				const record = name ? await cell.mcpServerGet(name) : null
 				if (record) {
 					if (form.action === 'refresh') {
-						await refreshMcpServer(mcpDeps({ env, userCell }), name)
+						try {
+							await refreshMcpServer(mcpDeps({ env, userCell }), name)
+						} catch (error) {
+							if (!KodyError.fromUnknown(error)) throw error
+						}
 					} else if (form.action === 'enable' || form.action === 'disable') {
 						await cell.mcpServerSetEnabled({ name, enabled: form.action === 'enable' })
 						await audit('mcp_server.enabled', name, { enabled: form.action === 'enable', via: 'web' })

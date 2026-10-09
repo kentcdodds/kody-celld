@@ -32,10 +32,11 @@ export default async () =>
   `lastError`; fix the server (or the allowlist) and call
   `mcpServerRefresh({ name })`.
 - An existing name is refused with `mcp_server_exists`; pass `replace: true`
-  to overwrite it. A replace keeps the server's stored lock, enabled state and
-  bearer token unless you pass `usage` / `enabled` / `bearerToken`, and a
-  `usage` looser than the stored lock (back to `any`, or dropping a granted
-  package) is refused with `mcp_server_locked`.
+  to overwrite it. A replace keeps the server's stored lock and enabled state
+  unless you pass `usage` / `enabled`, and keeps the bearer token only when
+  the URL origin is unchanged (or you pass `bearerToken`). A `usage` looser
+  than the stored lock (back to `any`, or dropping a granted package) is
+  refused with `mcp_server_locked`.
 
 `mcpServerList()` lists your servers (never the token). `mcpServerRefresh`
 re-lists the tools, `mcpServerSetEnabled({ name, enabled })` turns a server

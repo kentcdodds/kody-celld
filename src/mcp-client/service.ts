@@ -77,7 +77,16 @@ export async function addMcpServer(
 export async function refreshMcpServer(deps: McpDeps, name: string): Promise<McpServerRecord> {
 	const record = await deps.cell.mcpServerGet(assertMcpServerName(name))
 	if (!record) throw new KodyError('mcp_server_not_found', `MCP server "${name}" was not found.`, { status: 404 })
-	assertMcpUrl(record.url, deps.config)
+	try {
+		assertMcpUrl(record.url, deps.config)
+	} catch (error) {
+		const kody = KodyError.fromUnknown(error)
+		if (!kody) throw error
+		return deps.cell.mcpServerSetDiscovery({
+			name: record.name,
+			outcome: { error: { phase: 'connect', message: kody.message, at: new Date().toISOString() } },
+		})
+	}
 	return discover(deps, record)
 }
 

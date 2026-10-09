@@ -118,7 +118,9 @@ export const mcpServerRefresh = defineCapability<{ name: string }>({
 	inputSchema: { type: 'object', properties: { name: nameSchema }, required: ['name'] },
 	async handler(args, ctx) {
 		guardManagement(ctx)
-		return publicMcpServer(await refreshMcpServer(mcpDeps(ctx), args.name))
+		const record = await refreshMcpServer(mcpDeps(ctx), args.name)
+		await audit(ctx, 'mcp_server.refresh', record.name, { status: record.status })
+		return publicMcpServer(record)
 	},
 })
 
