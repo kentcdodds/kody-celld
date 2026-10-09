@@ -38,6 +38,7 @@ Rotation is a three-step, zero-downtime process:
    It walks every user cell and re-encrypts rows whose `key_id` differs from
    the current key. Rows it cannot decrypt are left in place, counted in
    `remaining`, and logged by name (never value).
+   `POST /admin/secrets/rekey` also re-seals MCP server bearer tokens.
 3. When `remaining` is `0`, remove `KODY_MASTER_KEY_PREVIOUS` and redeploy.
 
 Docker single-node: set both variables in `.env`, `docker compose up -d`, run

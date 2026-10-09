@@ -7,6 +7,7 @@
 
 KODY_ALLOW_INSECURE_SECRET_HOSTS=127.0.0.1,localhost
 KODY_BROWSER_ALLOW_PRIVATE_HOSTS=127.0.0.1,localhost,host.docker.internal
+KODY_MCP_ALLOW_PRIVATE_HOSTS=127.0.0.1,localhost,host.docker.internal
 # Defaults plus loopback so `npm run smoke` can preview a local package fixture
 # (smoke/package-fixture-server.mjs). host.docker.internal is for Docker CI.
 # `npm run dev` merges 127.0.0.1,localhost into an existing `.dev.vars` if missing.

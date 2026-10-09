@@ -52,15 +52,15 @@ signed download `url`) for large captures.
 
 ## Configuration
 
-| Variable                           | Default  | Notes                                                                                                                                            |
-| ---------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `KODY_BROWSER_PROVIDER`            | `none`   | `none` (capabilities answer `browser_not_configured`, 501), `browserless`, `cloudflare`.                                                         |
-| `KODY_BROWSER_URL`                 | —        | browserless base URL, e.g. `http://browserless:3000` (compose) or `http://192.168.1.20:3000`. For cloudflare, optional API base override.        |
-| `KODY_BROWSER_TOKEN`               | —        | browserless `TOKEN` (query-string auth) or a Cloudflare API token with Browser Rendering permission. Operator-only; surfaced as `hasToken`.      |
-| `KODY_BROWSER_CF_ACCOUNT_ID`       | —        | Required for `cloudflare`.                                                                                                                       |
-| `KODY_BROWSER_TIMEOUT_MS`          | `30000`  | Per render request (1 s – 5 min). Also the default in-page navigation timeout.                                                                   |
-| `KODY_BROWSER_ALLOW_PRIVATE_HOSTS` | —        | Comma-separated hostnames/IPs the browser may render although they are loopback/private/link-local (a LAN dashboard, `host.docker.internal`, …). |
-| `KODY_MCP_CONTENT_LIMIT_BYTES`     | `512000` | Cap for `__mcpContent` returned by `execute` (see above).                                                                                        |
+| Variable                           | Default  | Notes                                                                                                                                                                                                                                                            |
+| ---------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `KODY_BROWSER_PROVIDER`            | `none`   | `none` (capabilities answer `browser_not_configured`, 501), `browserless`, `cloudflare`.                                                                                                                                                                         |
+| `KODY_BROWSER_URL`                 | —        | browserless base URL, e.g. `http://browserless:3000` (compose) or `http://192.168.1.20:3000`. For cloudflare, optional API base override.                                                                                                                        |
+| `KODY_BROWSER_TOKEN`               | —        | browserless `TOKEN` (query-string auth) or a Cloudflare API token with Browser Rendering permission. Operator-only; surfaced as `hasToken`.                                                                                                                      |
+| `KODY_BROWSER_CF_ACCOUNT_ID`       | —        | Required for `cloudflare`.                                                                                                                                                                                                                                       |
+| `KODY_BROWSER_TIMEOUT_MS`          | `30000`  | Per render request (1 s – 5 min). Also the default in-page navigation timeout.                                                                                                                                                                                   |
+| `KODY_BROWSER_ALLOW_PRIVATE_HOSTS` | —        | Comma-separated hostnames/IPs the browser may render although they are loopback/private/link-local (a LAN dashboard, `host.docker.internal`, …). Entries may also be `*.suffix` wildcards or CIDR ranges (`172.30.0.0/16`); a CIDR matches IP-literal URLs only. |
+| `KODY_MCP_CONTENT_LIMIT_BYTES`     | `512000` | Cap for `__mcpContent` returned by `execute` (see above).                                                                                                                                                                                                        |
 
 `GET /admin/browser` returns the parsed provider (no token).
 
@@ -108,7 +108,8 @@ request shapes, so packages behave identically.
   its host may not be loopback, RFC 1918 / CGNAT / link-local (including
   `169.254.169.254` cloud metadata and IPv4-mapped IPv6 like `::ffff:10.0.0.1`),
   `.local`/`.internal`/single-label names, or `file:`/`data:` schemes — unless
-  the exact host is in `KODY_BROWSER_ALLOW_PRIVATE_HOSTS`. The check is on the
+  the host is in `KODY_BROWSER_ALLOW_PRIVATE_HOSTS` (an exact host, or an IP
+  literal inside a listed CIDR range such as `172.30.0.0/16`). The check is on the
   literal URL; DNS names that resolve to private addresses are not detected, so
   keep the browser on an isolated network (the compose overlay does this: the
   browser shares only the compose network with Kody) if untrusted users can

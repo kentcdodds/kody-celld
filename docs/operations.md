@@ -14,16 +14,17 @@ startup rather than silently falling back.
 
 ## Runtime limits
 
-| Variable                       | Default    | Range           | Effect                                                                                                            |
-| ------------------------------ | ---------- | --------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `KODY_EXECUTE_TIMEOUT_MS`      | `60000`    | 1 s … 15 min    | Wall-clock cap per run (`execute`, `packageRun`, jobs). Exceeding it → `execute_timeout` (504).                   |
-| `KODY_RUN_RETENTION_COUNT`     | `500`      | 10 … 100 000    | Newest runs kept per user; older finished rows are pruned as runs start and finish.                               |
-| `KODY_RUN_RETENTION_DAYS`      | `0`        | 0 … 3650        | Also drop runs older than N days (`0` = count-only).                                                              |
-| `KODY_RUN_LOG_LIMIT`           | `200`      | 0 … 10 000      | Console entries persisted per run (the run response is capped the same way).                                      |
-| `KODY_RESPONSE_LIMIT_BYTES`    | `100000`   | 1 KB … 10 MB    | Default `responseLimit` for `execute` results; callers may pass a smaller one.                                    |
-| `KODY_AUDIT_RETENTION_COUNT`   | `10000`    | 100 … 1 000 000 | Admin audit entries kept in the registry cell.                                                                    |
-| `KODY_MCP_CONTENT_LIMIT_BYTES` | `512000`   | 10 KB … 50 MB   | Serialized cap for `__mcpContent` blocks (images/audio) an `execute` run may return ([browser.md](./browser.md)). |
-| `KODY_BLOB_MAX_BYTES`          | `26214400` | 1 KB … 1 GiB    | Per-object size cap for blob uploads ([blobs.md](./blobs.md)).                                                    |
+| Variable                       | Default    | Range           | Effect                                                                                                                                                                                          |
+| ------------------------------ | ---------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `KODY_EXECUTE_TIMEOUT_MS`      | `60000`    | 1 s … 15 min    | Wall-clock cap per run (`execute`, `packageRun`, jobs). Exceeding it → `execute_timeout` (504).                                                                                                 |
+| `KODY_RUN_RETENTION_COUNT`     | `500`      | 10 … 100 000    | Newest runs kept per user; older finished rows are pruned as runs start and finish.                                                                                                             |
+| `KODY_RUN_RETENTION_DAYS`      | `0`        | 0 … 3650        | Also drop runs older than N days (`0` = count-only).                                                                                                                                            |
+| `KODY_RUN_LOG_LIMIT`           | `200`      | 0 … 10 000      | Console entries persisted per run (the run response is capped the same way).                                                                                                                    |
+| `KODY_RESPONSE_LIMIT_BYTES`    | `100000`   | 1 KB … 10 MB    | Default `responseLimit` for `execute` results; callers may pass a smaller one.                                                                                                                  |
+| `KODY_AUDIT_RETENTION_COUNT`   | `10000`    | 100 … 1 000 000 | Admin audit entries kept in the registry cell.                                                                                                                                                  |
+| `KODY_MCP_CONTENT_LIMIT_BYTES` | `512000`   | 10 KB … 50 MB   | Serialized cap for `__mcpContent` blocks (images/audio) an `execute` run may return ([browser.md](./browser.md)).                                                                               |
+| `KODY_MCP_CALL_TIMEOUT_MS`     | `30000`    | 1 s … 10 min    | Timeout for each MCP request of `kody.mcp[server].tool()` and discovery (connect, each tools/list page, the call); exceeding it → `mcp_call_failed` (502) ([mcp-servers.md](./mcp-servers.md)). |
+| `KODY_BLOB_MAX_BYTES`          | `26214400` | 1 KB … 1 GiB    | Per-object size cap for blob uploads ([blobs.md](./blobs.md)).                                                                                                                                  |
 
 `GET /admin/limits` returns the effective limits and quota defaults so you can
 confirm what a node actually loaded.
@@ -34,15 +35,16 @@ Quotas protect a shared node from one user (or one runaway agent). Defaults come
 from the environment; an admin can override any subset per user. `0` means
 unlimited everywhere.
 
-| Variable                        | Counts                                                       |
-| ------------------------------- | ------------------------------------------------------------ |
-| `KODY_QUOTA_RUNS_PER_DAY`       | Runs started per UTC day (`execute`, `packageRun`, job runs) |
-| `KODY_QUOTA_EXECUTE_MS_PER_DAY` | Summed run duration per UTC day                              |
-| `KODY_QUOTA_PACKAGES`           | Saved packages                                               |
-| `KODY_QUOTA_SECRETS`            | Stored secrets (updating an existing secret never counts)    |
-| `KODY_QUOTA_JOBS`               | Jobs registered from package manifests                       |
-| `KODY_QUOTA_BLOBS`              | Stored blobs (objects) per user                              |
-| `KODY_QUOTA_BLOB_BYTES`         | Total blob bytes per user (overwrites count the size delta)  |
+| Variable                        | Counts                                                                                  |
+| ------------------------------- | --------------------------------------------------------------------------------------- |
+| `KODY_QUOTA_RUNS_PER_DAY`       | Runs started per UTC day (`execute`, `packageRun`, job runs)                            |
+| `KODY_QUOTA_EXECUTE_MS_PER_DAY` | Summed run duration per UTC day                                                         |
+| `KODY_QUOTA_PACKAGES`           | Saved packages                                                                          |
+| `KODY_QUOTA_SECRETS`            | Stored secrets (updating an existing secret never counts)                               |
+| `KODY_QUOTA_JOBS`               | Jobs registered from package manifests                                                  |
+| `KODY_QUOTA_BLOBS`              | Stored blobs (objects) per user                                                         |
+| `KODY_QUOTA_BLOB_BYTES`         | Total blob bytes per user (overwrites count the size delta)                             |
+| `KODY_QUOTA_MCP_SERVERS`        | External MCP servers per user (`mcpServerAdd`; replacing an existing name never counts) |
 
 Enforcement happens in the user's Durable Object, before the work starts:
 
@@ -142,11 +144,12 @@ Per-webhook rate limits come from the package manifest
 
 ## Integrations and secret providers
 
-| Variable                             | Default | Notes                                                                                                                                    |
-| ------------------------------------ | ------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `KODY_PUBLIC_URL`                    | —       | OAuth redirect URI is `${KODY_PUBLIC_URL}/connect/oauth/callback`; register it in each OAuth app ([integrations.md](./integrations.md)). |
-| `KODY_SECRET_PROVIDER_CACHE_SECONDS` | `300`   | In-memory TTL for resolved `{{secret/…}}` values in the user cell; `0` disables caching ([secret-providers.md](./secret-providers.md)).  |
-| `KODY_SECRET_PROVIDER_TIMEOUT_MS`    | `20000` | Wall-clock cap for one sealed provider run (minimum 1000).                                                                               |
+| Variable                             | Default | Notes                                                                                                                                                                                                                                  |
+| ------------------------------------ | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `KODY_PUBLIC_URL`                    | —       | OAuth redirect URI is `${KODY_PUBLIC_URL}/connect/oauth/callback`; register it in each OAuth app ([integrations.md](./integrations.md)).                                                                                               |
+| `KODY_SECRET_PROVIDER_CACHE_SECONDS` | `300`   | In-memory TTL for resolved `{{secret/…}}` values in the user cell; `0` disables caching ([secret-providers.md](./secret-providers.md)).                                                                                                |
+| `KODY_SECRET_PROVIDER_TIMEOUT_MS`    | `20000` | Wall-clock cap for one sealed provider run (minimum 1000).                                                                                                                                                                             |
+| `KODY_MCP_ALLOW_PRIVATE_HOSTS`       | —       | Comma-separated hosts, `*.suffix` wildcards, IPs and CIDR ranges (`172.30.0.0/16`) of private/LAN MCP servers `mcpServerAdd` may reach; plain `http:` only for these. Names are not DNS-resolved ([mcp-servers.md](./mcp-servers.md)). |
 
 ## npm imports, package sources, community catalog
 
