@@ -300,4 +300,67 @@ export default async function main() {
 		overFile.error,
 	)
 	log('over-file package rejected', overFile.error.message.slice(0, 140))
+
+	// TypeScript and JSX (issue #35): kody.codes packages and ad hoc code with
+	// types run compiled; stored files keep the source as written.
+	const adhocTs = await mcp.run(`export default async (params: Record<string, unknown>): Promise<string> => {
+  const n: number = 2
+  return 'ts ' + (n satisfies number)
+}`)
+	assert(adhocTs === 'ts 2', 'ad hoc execute code with type annotations runs', adhocTs)
+
+	const typedIndex = [
+		"import type { Shape } from './types.ts'",
+		"import { area } from './area.ts'",
+		"import Badge from './badge.tsx'",
+		"enum Unit { Cm = 'cm' }",
+		'class Box {',
+		'  constructor(private readonly size: number) {}',
+		'  get area(): number { return area({ w: this.size, h: this.size } satisfies Shape) }',
+		'}',
+		'export default async (params: { size?: number } = {}): Promise<string> => Badge({ text: `${new Box(params.size ?? 2).area}${Unit.Cm}` })',
+	].join('\n')
+	await mcp.call('packageSave', {
+		files: {
+			'package.json': JSON.stringify({
+				name: '@kody-smoke/typed',
+				version: '1.0.0',
+				exports: { '.': './src/index.ts', './broken': './src/broken.ts' },
+			}),
+			'README.md': '# @kody-smoke/typed',
+			'AGENTS.md': 'Smoke.',
+			'src/index.ts': typedIndex,
+			'src/types.ts': 'export type Shape = { w: number; h: number }',
+			'src/area.ts': "import type { Shape } from './types.ts'\nexport const area = (s: Shape): number => s.w * s.h",
+			// Classic runtime (no tsconfig.json): React is a local createElement, so no npm import is needed.
+			'src/h.ts':
+				'export const createElement = (tag: string, _props: unknown, ...children: Array<unknown>): string => `<${tag}>${children.join("")}</${tag}>`\nexport const Fragment = "frag"',
+			'src/badge.tsx':
+				"import * as React from './h.ts'\nexport default ({ text }: { text: string }): string => <b>{text}</b>",
+			'src/broken.ts': 'export default (x: ) => 1',
+		},
+	})
+	const typedRun = await mcp.callDirect('packageRun', { name: '@kody-smoke/typed', export: '.', params: { size: 3 } })
+	assert(
+		typedRun.ok && typedRun.result === '<b>9cm</b>',
+		'a saved TypeScript + TSX package runs through packageRun',
+		typedRun,
+	)
+	const typedImport = await mcp.run(`import typed from 'kody:@kody-smoke/typed'
+export default async () => typed({ size: 4 })`)
+	assert(typedImport === '<b>16cm</b>', 'a TypeScript package export runs through a kody: import', typedImport)
+	const typedStored = await mcp.call('packageGet', { name: '@kody-smoke/typed', includeFiles: true })
+	assert(typedStored.files['src/index.ts'] === typedIndex, 'stored TypeScript stays exactly as written')
+	const typedBroken = await mcp.execute(`import broken from 'kody:@kody-smoke/typed/broken'
+export default async () => broken()`)
+	assert(
+		!typedBroken.ok &&
+			typedBroken.error?.name === 'invalid_module' &&
+			/^Cannot read the TypeScript in src\/broken\.ts in package @kody-smoke\/typed: Unexpected token/.test(
+				typedBroken.error?.message ?? '',
+			),
+		'a reachable TypeScript file that cannot be read is named',
+		typedBroken.error,
+	)
+	log('typescript', { adhoc: adhocTs, packageRun: typedRun.result, kodyImport: typedImport })
 }

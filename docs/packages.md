@@ -39,11 +39,26 @@ Rules enforced by `src/packages/manifest.ts` on `packageSave`:
   handlers must resolve to a module in the package (`x`, `x.js`, `x/index.js`;
   code and JSON only), so a broken import is refused with `invalid_import`
   instead of failing the run later; unreached files (tests, client code),
-  dynamic `import()`, and TypeScript `import type` / `export type … from` are
-  not checked. Install, fork and preview apply the same check;
+  dynamic `import()`, and imports that compiled TypeScript or JSX no longer has
+  (`import type`, imports used only as types) are not checked. Install, fork
+  and preview apply the same check;
 - `kody.dependencies` is validated and kept on the manifest for tooling; at run
   time packages simply `import` each other via `kody:@scope/pkg/...` (there is
   no install step).
+
+### TypeScript and JSX
+
+`.ts`, `.mts`, `.tsx` and `.jsx` package files are compiled when they run, as hosted kody does with esbuild; here it's sucrase. Ad hoc `execute` code is read as TypeScript. Package files are stored exactly as written. Types are removed, not checked.
+
+- `enum`, constructor parameter properties, `satisfies` and `as` work.
+- `import type`, and named imports used only as types, are dropped, as `tsc` does, so they need not resolve. Side-effect imports (`import './x.ts'`) stay.
+- JSX uses `compilerOptions.jsx` and `jsxImportSource` from the package's root `tsconfig.json` (comments allowed).
+  - `react-jsx` selects the automatic runtime, for example `"jsxImportSource": "remix/component"`.
+  - A file's `/** @jsxImportSource … */` or `/** @jsxRuntime classic */` comment wins.
+  - Without either, JSX compiles to `React.createElement`.
+  - The automatic runtime imports `<source>/jsx-runtime` like any npm import.
+- `.d.ts` files are never loaded or imported.
+- A file that cannot be read fails only when the entry reaches it, with `invalid_module` naming the file. JSON that does not parse, such as a `tsconfig.json` with comments, fails only if imported.
 
 ## Lifecycle capabilities
 
