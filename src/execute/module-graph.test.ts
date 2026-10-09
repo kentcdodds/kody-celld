@@ -32,6 +32,26 @@ const vaultFiles = {
 	'leak.js': "import provider from './provider.js'\nexport default async () => provider({ ref: 'x' })",
 }
 
+// Ordinary entry reaches a helper only via dynamic import. The helper statically
+// imports the provider and also has an unused literal dynamic bare import that
+// fails with npm off. Rewrite must not publish the helper's original source
+// (that would leave the provider import unsealed).
+const deferredSealFiles = {
+	'package.json': JSON.stringify({
+		name: '@t/deferred-seal',
+		version: '1.0.0',
+		exports: { '.': './index.js', './secretProvider': './provider.js' },
+		kody: { secretProvider: { id: 'deferred-seal' } },
+	}),
+	'README.md': 'deferred seal',
+	'AGENTS.md': 'deferred seal',
+	'index.js':
+		"export default async () => (await import('./helper.js')).default()",
+	'helper.js':
+		"import provider from './provider.js'\nvoid import('lodash')\nexport default async () => provider({ ref: 'x' })",
+	'provider.js': "export default async ({ ref }) => ({ value: 'v-' + ref })",
+}
+
 // A package written by an agent from inside execute: its source mentions
 // imports in a string, a template literal and a comment.
 const textFiles = {
@@ -181,6 +201,7 @@ const packages: Record<string, Record<string, string>> = {
 	'@t/text-import': textImportFiles,
 	'@t/counter': counterFiles,
 	'@t/vault': vaultFiles,
+	'@t/deferred-seal': deferredSealFiles,
 	'@t/text': textFiles,
 	'@t/broken': brokenFiles,
 }
@@ -347,7 +368,9 @@ describe('buildModuleGraph', () => {
 		})
 		assert.equal(graph.modules['packages/@t/tolerant/index.js'], tolerantFiles['index.js'])
 		assert.equal(graph.modules['packages/@t/tolerant/test/unused.test.js'], tolerantFiles['test/unused.test.js'])
-		assert.equal(graph.modules['packages/@t/tolerant/client/view.js'], tolerantFiles['client/view.js'])
+		// JSX in an unreached .js file: publish a throwing stub, not the original source.
+		assert.match(graph.modules['packages/@t/tolerant/client/view.js'] ?? '', /throw error/)
+		assert.doesNotMatch(graph.modules['packages/@t/tolerant/client/view.js'] ?? '', /<div>/)
 	})
 
 	it('does not resolve imports to files that never become modules', async () => {
@@ -425,6 +448,24 @@ describe('buildModuleGraph', () => {
 		assert.equal(SEALED_MODULE_PATH in graph.modules, true, 'the sealed graph still stubs sibling imports')
 	})
 
+	it('never publishes original source when a deferred rewrite failed (sealed provider + unused bare import)', async () => {
+		// With npm off, helper's unused `import('lodash')` fails rewrite after the
+		// provider sealing redirect was computed. Publishing the original helper
+		// would leave `./provider.js` reachable via the entry's dynamic import.
+		const graph = await buildModuleGraph({
+			entry: { kind: 'package', packageName: '@t/deferred-seal' },
+			userCell: fakeUserCell,
+			allowNpm: false,
+		})
+		const helper = graph.modules['packages/@t/deferred-seal/helper.js'] ?? ''
+		assert.notEqual(helper, deferredSealFiles['helper.js'])
+		assert.doesNotMatch(helper, /provider\.js/)
+		assert.match(helper, /unsupported_import/)
+		assert.match(helper, /throw error/)
+		// Static admission still succeeds: the broken helper is only dynamic-reached.
+		assert.equal(graph.entryPath, 'packages/@t/deferred-seal/index.js')
+	})
+
 	it('runs TypeScript packages: types removed before linking, sources stored as written', async () => {
 		const graph = await buildModuleGraph({
 			entry: { kind: 'package', packageName: '@t/typed' },
@@ -440,7 +481,9 @@ describe('buildModuleGraph', () => {
 		assert.equal(index.split('\n').length, typedFiles['src/index.ts'].split('\n').length, 'line numbers kept')
 		assert.doesNotMatch(graph.modules['packages/@t/typed/src/area.ts'] ?? '', /Shape|: number/)
 		assert.equal('packages/@t/typed/src/globals.d.ts' in graph.modules, false, '.d.ts is never a module')
-		assert.equal(graph.modules['packages/@t/typed/src/unused-broken.ts'], typedFiles['src/unused-broken.ts'])
+		// Unreached broken TS: throwing stub so a later dynamic reach fails closed.
+		assert.match(graph.modules['packages/@t/typed/src/unused-broken.ts'] ?? '', /Cannot read the TypeScript/)
+		assert.doesNotMatch(graph.modules['packages/@t/typed/src/unused-broken.ts'] ?? '', /\(x: \)/)
 	})
 
 	it('runs .mts exports and JS files that import TypeScript', async () => {

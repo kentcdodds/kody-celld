@@ -35,6 +35,19 @@ throw error
 export default undefined
 `
 
+/** Module body that throws a recorded rewrite/admission failure when first evaluated. */
+function deferredModuleFailureSource(error: KodyError) {
+	// Joined strings (not one template) so Node's type stripper does not treat the
+	// embedded `export default` as real module syntax.
+	return [
+		`const error = new Error(${JSON.stringify(error.message)})`,
+		`error.name = ${JSON.stringify(error.name)}`,
+		'throw error',
+		'export default undefined',
+		'',
+	].join('\n')
+}
+
 export type ModuleGraph = {
 	modules: Record<string, string>
 	mainModule: string
@@ -283,10 +296,14 @@ export async function buildModuleGraph(input: {
 	}
 
 	// Modules that cannot be read or linked (JSX in .js client files, TypeScript
-	// or JSX sucrase cannot parse, an import this host refuses) stay as written
-	// and only fail the run if the entry reaches them. TypeScript and JSX are
-	// compiled first, so imports used only as types are gone before the import
-	// rewrite and the reachability check.
+	// or JSX sucrase cannot parse, an import this host refuses) only fail the run
+	// if the entry reaches them. Never publish the original source on failure:
+	// rewrite may have computed sealed-provider redirects (or other mandatory
+	// rewrites) and then thrown before applying them, which would leave a
+	// dynamic-only path able to import a secretProvider entry outside a sealed
+	// run. A throwing stub keeps unreached broken files from failing the run
+	// without that hole. TypeScript and JSX are compiled first, so imports used
+	// only as types are gone before the import rewrite and the reachability check.
 	const unreadable = new Map<string, KodyError>()
 	const rewriteModule = async (source: string, path: string, kind: TranspileKind | null, jsx?: JsxOptions) => {
 		try {
@@ -296,7 +313,7 @@ export async function buildModuleGraph(input: {
 			const kody = KodyError.fromUnknown(error)
 			if (!kody) throw error
 			unreadable.set(path, kody)
-			return source
+			return deferredModuleFailureSource(kody)
 		}
 	}
 
