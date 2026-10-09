@@ -17,12 +17,12 @@ node, through the same policy for every user.
 
 ## Configuration
 
-| Variable                  | Default          | Notes                                                                                                                       |
-| ------------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `KODY_NPM_IMPORTS`        | `on`             | `off` rejects every bare specifier with `unsupported_import` (packages using only `kody:` imports keep working).            |
-| `KODY_ESM_CDN_URL`        | `https://esm.sh` | Origin of the CDN. Any esm.sh-compatible server works: the public esm.sh, your own esm.sh (`compose.esm.yaml`), or a proxy. |
-| `KODY_NPM_CACHE_MAX_MB`   | `256`            | Size of the durable module cache; `0` disables it (the CDN is asked on every cold node).                                    |
-| `KODY_NPM_CACHE_TTL_DAYS` | `30`             | How long a cached module is served before it is re-fetched.                                                                 |
+| Variable                  | Default          | Notes                                                                                                                                                                            |
+| ------------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `KODY_NPM_IMPORTS`        | `on`             | `off` rejects bare specifiers in modules the entry reaches with `unsupported_import` (packages using only `kody:` imports keep working; unreached client files are not checked). |
+| `KODY_ESM_CDN_URL`        | `https://esm.sh` | Origin of the CDN. Any esm.sh-compatible server works: the public esm.sh, your own esm.sh (`compose.esm.yaml`), or a proxy.                                                      |
+| `KODY_NPM_CACHE_MAX_MB`   | `256`            | Size of the durable module cache; `0` disables it (the CDN is asked on every cold node).                                                                                         |
+| `KODY_NPM_CACHE_TTL_DAYS` | `30`             | How long a cached module is served before it is re-fetched.                                                                                                                      |
 
 The active values (never any token) show up in `GET /admin/npm-cache`, the
 operator console and the `npm` smoke scenario.

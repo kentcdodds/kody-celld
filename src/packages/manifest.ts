@@ -473,15 +473,17 @@ export function resolvePackageExport(manifest: PackageManifest, exportName: stri
 /**
  * TypeScript and JSX are checked as they will run: compiled, so imports used
  * only as types (erased, as tsc and esbuild do) need not resolve. A file
- * sucrase cannot read is checked as written; running it names the error.
+ * sucrase cannot read is skipped here; running it names the compile error.
+ * Falling back to the raw source would re-lex broken TSX/JSX and refuse the
+ * save with the import lexer's message instead of sucrase's clearer one.
  */
-function importSource(path: string, source: string, jsx: JsxOptions) {
+function importSource(path: string, source: string, jsx: JsxOptions): string | null {
 	const kind = transpileKind(path)
 	if (!kind) return source
 	try {
 		return stripTypes(source, path, kind, jsx)
 	} catch {
-		return source
+		return null
 	}
 }
 
@@ -513,8 +515,10 @@ function assertRelativeImportsResolve(files: PackageFiles, entries: Array<string
 		seen.add(path)
 		const source = sources.get(path)
 		if (source === undefined || path.endsWith('.json')) continue
+		const compiled = importSource(path, source, jsx)
+		if (compiled === null) continue
 		const base = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : ''
-		for (const { specifier, kind, typeOnly } of lexImportSpecifiers(importSource(path, source, jsx), path)) {
+		for (const { specifier, kind, typeOnly } of lexImportSpecifiers(compiled, path)) {
 			if (kind !== 'static' || typeOnly) continue
 			if (!specifier.startsWith('./') && !specifier.startsWith('../') && !specifier.startsWith('/')) continue
 			let target: string

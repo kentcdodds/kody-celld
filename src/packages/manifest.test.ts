@@ -306,6 +306,17 @@ describe('parsePackageManifest relative imports', () => {
 				'src/bad.ts': 'export const broken = (x: ) => 1',
 			}),
 		)
+		// Broken .tsx must not be re-lexed as written (the import lexer would
+		// refuse the save with a different message than the run-time error).
+		parsePackageManifest(
+			tsPackage(
+				{
+					'src/view.tsx': 'export default () => <b>{</b>',
+					'tsconfig.json': '{ "compilerOptions": { "jsx": "react-jsx", "jsxImportSource": "remix/component" } }',
+				},
+				'./src/view.tsx',
+			),
+		)
 	})
 
 	it('treats .mts as code', () => {
