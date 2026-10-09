@@ -45,13 +45,21 @@ describe('McpServerStore', () => {
 		assert.doesNotMatch(JSON.stringify(publicMcpServer(saved)), /very-secret-token/)
 	})
 
-	it('refuses a taken name unless replace, and replace without a token clears auth', async () => {
+	it('refuses a taken name unless replace, and replace without a token keeps the sealed bearer', async () => {
 		const { store } = await makeStore()
 		await store.save({ ...base, name: 'home', authorization: 'Bearer a' })
 		await assert.rejects(store.save({ ...base, name: 'home', authorization: null }), /mcp_server_exists/)
 		const replaced = await store.save({ ...base, name: 'home', authorization: null, replace: true })
-		assert.equal(replaced.auth.kind, 'none')
-		assert.equal(await store.authorization('home'), null)
+		assert.equal(replaced.auth.kind, 'bearer')
+		assert.equal(await store.authorization('home'), 'Bearer a')
+		const rotated = await store.save({
+			...base,
+			name: 'home',
+			authorization: 'Bearer b',
+			replace: true,
+		})
+		assert.equal(rotated.auth.kind, 'bearer')
+		assert.equal(await store.authorization('home'), 'Bearer b')
 	})
 
 	it('records discovery results and errors', async () => {

@@ -1,6 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
-import type { jsonSchemaValidator, JsonSchemaValidatorResult } from '@modelcontextprotocol/sdk/validation/types.js'
+import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/cfworker'
 import { KODY_CELLD_VERSION } from '../env.ts'
 import { KodyError } from '../lib/errors.ts'
 import { assertMcpUrl, type McpConfig } from './policy.ts'
@@ -33,16 +33,12 @@ export const mcpLimits = {
 	maxRedirects: 5,
 }
 
-/** The SDK's default validator (Ajv) compiles with `new Function`, which workerd forbids. Results are returned unvalidated. */
-export const noOutputValidation: jsonSchemaValidator = {
-	getValidator<T>() {
-		return (input: unknown): JsonSchemaValidatorResult<T> => ({
-			valid: true,
-			data: input as T,
-			errorMessage: undefined,
-		})
-	},
-}
+/**
+ * Ajv (the SDK default) compiles with `new Function`, which workerd forbids.
+ * Use the SDK's Cloudflare Workers provider (`@cfworker/json-schema`), the same
+ * path hosted Kody takes via the Agents SDK's MCP client.
+ */
+export const mcpJsonSchemaValidator = new CfWorkerJsonSchemaValidator()
 
 function bytes(value: unknown) {
 	return new TextEncoder().encode(JSON.stringify(value) ?? '').length
@@ -185,7 +181,7 @@ async function withClient<T>(
 	})
 	const client = new Client(
 		{ name: 'kody-celld', version: KODY_CELLD_VERSION },
-		{ capabilities: {}, jsonSchemaValidator: noOutputValidation },
+		{ capabilities: {}, jsonSchemaValidator: mcpJsonSchemaValidator },
 	)
 	let phase = 'connect'
 	try {

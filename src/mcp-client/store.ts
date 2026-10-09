@@ -144,11 +144,24 @@ export class McpServerStore {
 				{ status: 409 },
 			)
 		}
-		let sealed: { iv: string; ciphertext: string; keyId: string } | null = null
+		// replace without a new token keeps the sealed bearer (clearing is remove + re-add).
+		let sealed: { iv: string | null; ciphertext: string | null; keyId: string | null; kind: 'none' | 'bearer' } = {
+			iv: null,
+			ciphertext: null,
+			keyId: null,
+			kind: 'none',
+		}
 		if (input.authorization) {
 			const { current } = await this.host.keyring()
 			const encrypted = await encryptSecretValue(current.key, this.host.userId(), input.authorization)
-			sealed = { iv: encrypted.iv, ciphertext: encrypted.ciphertext, keyId: current.id }
+			sealed = { iv: encrypted.iv, ciphertext: encrypted.ciphertext, keyId: current.id, kind: 'bearer' }
+		} else if (existing?.bearer_ciphertext) {
+			sealed = {
+				iv: existing.bearer_iv,
+				ciphertext: existing.bearer_ciphertext,
+				keyId: existing.bearer_key_id,
+				kind: 'bearer',
+			}
 		}
 		const now = nowIso()
 		this.host.sql.exec(
@@ -163,10 +176,10 @@ export class McpServerStore {
 			input.url,
 			input.enabled ? 1 : 0,
 			JSON.stringify(input.usage),
-			JSON.stringify({ kind: sealed ? 'bearer' : 'none' }),
-			sealed?.iv ?? null,
-			sealed?.ciphertext ?? null,
-			sealed?.keyId ?? null,
+			JSON.stringify({ kind: sealed.kind }),
+			sealed.iv,
+			sealed.ciphertext,
+			sealed.keyId,
 			JSON.stringify({ phase: 'connect', message: 'Not discovered yet.', at: now }),
 			existing?.created_at ?? now,
 			now,

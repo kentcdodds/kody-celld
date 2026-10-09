@@ -97,23 +97,24 @@ describe('addMcpServer', () => {
 		assert.doesNotMatch(JSON.stringify(record), /secrettoken123/)
 	})
 
-	it('replace keeps a stored lock and disabled state unless they are given', async () => {
+	it('replace keeps a stored lock, disabled state and bearer unless they are given', async () => {
 		const { deps, store } = await setup()
-		await addMcpServer(deps, { name: 'home', url, bearerToken: 'old' })
+		await addMcpServer(deps, { name: 'home', url, bearerToken: 'tok' })
 		store.setUsage('home', { mode: 'packages', packages: ['@me/lights'] })
 		store.setEnabled('home', false)
-		const replaced = await addMcpServer(deps, { name: 'home', url, bearerToken: 'tok', replace: true })
-		assert.deepEqual(replaced.usage, { mode: 'packages', packages: ['@me/lights'] })
-		assert.equal(replaced.enabled, false)
+		const keptToken = await addMcpServer(deps, { name: 'home', url, replace: true })
+		assert.deepEqual(keptToken.usage, { mode: 'packages', packages: ['@me/lights'] })
+		assert.equal(keptToken.enabled, false)
 		assert.equal(await store.authorization('home'), 'Bearer tok')
+		assert.equal(keptToken.status, 'ready')
 		const widened = await addMcpServer(deps, {
 			name: 'home',
 			url,
-			bearerToken: 'tok',
 			replace: true,
 			usage: { mode: 'packages', packages: ['@me/lights', '@me/heating'] },
 		})
 		assert.deepEqual(widened.usage, { mode: 'packages', packages: ['@me/lights', '@me/heating'] })
+		assert.equal(await store.authorization('home'), 'Bearer tok')
 	})
 
 	it('replace refuses a usage looser than the stored lock (unlocking is UI-only)', async () => {

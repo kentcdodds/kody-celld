@@ -1,4 +1,5 @@
-// Unit-test helper (not a test file): a real SDK MCP server behind a fetch function.
+// Test-only helper (imported by *.test.ts only; not part of the Worker graph).
+// A real SDK MCP server behind a fetch function for unit tests.
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'

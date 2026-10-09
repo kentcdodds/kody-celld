@@ -67,7 +67,7 @@ export const mcpServerAdd = defineCapability<{
 	domain: 'mcpServers',
 	name: 'mcpServerAdd',
 	description:
-		'Add a remote MCP server (Streamable HTTP) and discover its tools. bearerToken (optional) is stored encrypted and never returned; a bare token is sent as "Bearer <token>". The server is saved even when discovery fails (status "error" with lastError); fix it and call mcpServerRefresh. Pass replace: true to overwrite an existing name (its lock and enabled state are kept unless given; a looser usage is refused — unlocking is done on /account/mcp-servers).',
+		'Add a remote MCP server (Streamable HTTP) and discover its tools. bearerToken (optional) is stored encrypted and never returned; a bare token is sent as "Bearer <token>". The server is saved even when discovery fails (status "error" with lastError); fix it and call mcpServerRefresh. Pass replace: true to overwrite an existing name (its lock, enabled state and bearer are kept unless given; a looser usage is refused; unlocking is done on /account/mcp-servers).',
 	tags: ['mcp', 'write'],
 	keywords: ['add mcp server', 'connect mcp', 'remote mcp', 'home assistant', 'mcp client', 'kody.mcp'],
 	inputSchema: {
