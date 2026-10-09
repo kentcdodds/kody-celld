@@ -7,8 +7,9 @@ import { getMemoryCell } from '../capabilities/memory.ts'
 import { capabilities, domains } from '../capabilities/registry.ts'
 import { KODY_CELLD_VERSION } from '../env.ts'
 import { KodyError } from '../lib/errors.ts'
+import { mcpSearchItems } from '../mcp-client/search-items.ts'
 
-export type SearchEntity = 'capability' | 'domain' | 'package' | 'job' | 'guide'
+export type SearchEntity = 'capability' | 'domain' | 'package' | 'job' | 'guide' | 'mcp-server'
 
 export type SearchInput = {
 	query?: string | undefined
@@ -208,6 +209,10 @@ async function buildIndex(ctx: CapabilityContext, includeHidden: boolean): Promi
 			detail: { job },
 		})
 	}
+	for (const item of mcpSearchItems(await ctx.userCell.mcpServerList(), ctx.packageName)) {
+		const { text, ...rest } = item
+		items.push({ ...rest, haystack: tokens(text).join(' ') })
+	}
 	for (const guide of guides) {
 		items.push({
 			...guide,
@@ -303,7 +308,7 @@ async function rank(
 export async function search(input: SearchInput, ctx: CapabilityContext) {
 	const limit = Math.min(Math.max(input.limit ?? 10, 1), 50)
 	const maxResponseSize = Math.min(Math.max(input.maxResponseSize ?? 20_000, 1_000), 200_000)
-	if (input.entity && !['capability', 'domain', 'package', 'job', 'guide'].includes(input.entity)) {
+	if (input.entity && !['capability', 'domain', 'package', 'job', 'guide', 'mcp-server'].includes(input.entity)) {
 		throw new KodyError('invalid_args', `Unknown entity "${input.entity}".`)
 	}
 	const index = await buildIndex(ctx, input.includeHiddenPackages ?? false)

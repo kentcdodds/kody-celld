@@ -15,7 +15,7 @@ const searchToolSchema = {
 		query: { type: 'string', description: 'Free-text query. Empty lists everything.' },
 		entity: {
 			type: 'string',
-			enum: ['capability', 'domain', 'package', 'job', 'guide'],
+			enum: ['capability', 'domain', 'package', 'job', 'guide', 'mcp-server'],
 			description: 'Restrict to one entity kind.',
 		},
 		domain: { type: 'string', description: 'Restrict to one domain (system, secrets, packages, jobs, storage, runs).' },
