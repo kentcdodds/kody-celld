@@ -2,7 +2,7 @@
 // kody:<pkg>/<export> imports), and prove packageStorage() isolation.
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { assert, log, readPackageDir } from './lib.mjs'
+import { assert, log, readPackageDir, sha256 } from './lib.mjs'
 
 const examples = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../examples/packages')
 
@@ -212,24 +212,43 @@ export default async function main() {
 		{ largeTotal },
 	)
 	assert(bigChunk.length > 1024 * 1024, 'at least one file must exceed 1 MiB', bigChunk.length)
-	const largeSaved = await mcp.call('packageSave', { files: largeFiles, source: 'smoke/packages.mjs' })
+	// Save over REST so the 3.5 MiB file map is not an execute result payload.
+	const largeSaved = await mcp.callDirect('packageSave', { files: largeFiles, source: 'smoke/packages.mjs' })
 	assert(largeSaved.name === '@kody-smoke/large-package', 'large packageSave returned wrong name', largeSaved)
 	assert(largeSaved.fileCount === Object.keys(largeFiles).length, 'large package fileCount', largeSaved)
-	const largeGot = await mcp.call('packageGet', { name: '@kody-smoke/large-package', includeFiles: true })
-	assert(
-		largeGot.files['data/big-a.txt'] === bigChunk,
-		'large package big-a round-trip',
-		largeGot.files['data/big-a.txt']?.length,
+	const expectedDigests = {
+		'data/big-a.txt': sha256(bigChunk),
+		'data/big-b.txt': sha256(midChunk),
+		'data/filler.txt': sha256(filler),
+	}
+	// Hash inside execute — returning the full files map would exceed responseLimit.
+	const largeRoundTrip = await mcp.run(
+		`import { kody } from 'kody:runtime'
+async function sha256Hex(text) {
+  const bytes = new TextEncoder().encode(text)
+  const digest = await crypto.subtle.digest('SHA-256', bytes)
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+export default async function main({ expect }) {
+  const pkg = await kody.packageGet({ name: '@kody-smoke/large-package', includeFiles: true })
+  const digests = {}
+  for (const path of Object.keys(expect)) {
+    const content = pkg.files[path]
+    if (typeof content !== 'string') return { ok: false, path, reason: 'missing' }
+    digests[path] = await sha256Hex(content)
+  }
+  return { ok: true, fileCount: Object.keys(pkg.files).length, digests }
+}`,
+		{ expect: expectedDigests },
 	)
+	assert(largeRoundTrip.ok === true, 'large packageGet must return all big files', largeRoundTrip)
+	assert(largeRoundTrip.fileCount === Object.keys(largeFiles).length, 'large package file count', largeRoundTrip)
 	assert(
-		largeGot.files['data/big-b.txt'] === midChunk,
-		'large package big-b round-trip',
-		largeGot.files['data/big-b.txt']?.length,
-	)
-	assert(
-		largeGot.files['data/filler.txt'] === filler,
-		'large package filler round-trip',
-		largeGot.files['data/filler.txt']?.length,
+		largeRoundTrip.digests['data/big-a.txt'] === expectedDigests['data/big-a.txt'] &&
+			largeRoundTrip.digests['data/big-b.txt'] === expectedDigests['data/big-b.txt'] &&
+			largeRoundTrip.digests['data/filler.txt'] === expectedDigests['data/filler.txt'],
+		'large package file digests must match what was saved',
+		largeRoundTrip.digests,
 	)
 	const largeRun = await mcp.run(`import m from 'kody:@kody-smoke/large-package'\nexport default async () => m()`)
 	assert(largeRun === 'large-ok', 'large package must still execute', largeRun)
