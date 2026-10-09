@@ -51,20 +51,37 @@ function stub(size: number) {
 	return { type: 'object', description: `(schema too large: ${size} bytes)` }
 }
 
-/** Applies the tool-count, per-schema and total-size caps (largest schemas are stubbed first). */
+/** Applies the tool-count, per-schema and total-size caps (largest tools are degraded first, then the tail is dropped). */
 export function capTools(tools: Array<McpTool>): Array<McpTool> {
-	const capped = tools.slice(0, mcpLimits.maxTools).map((tool) => {
-		const size = bytes(tool.inputSchema)
-		return size > mcpLimits.maxSchemaBytes ? { ...tool, inputSchema: stub(size) } : tool
+	const capped: Array<McpTool> = tools.slice(0, mcpLimits.maxTools).map((tool) => {
+		const next: McpTool = { ...tool }
+		if (next.title) next.title = truncateUtf8(next.title, 500)
+		if (next.description) next.description = truncateUtf8(next.description, 4_000)
+		const inputSize = bytes(next.inputSchema)
+		if (inputSize > mcpLimits.maxSchemaBytes) next.inputSchema = stub(inputSize)
+		if (next.outputSchema) {
+			const outputSize = bytes(next.outputSchema)
+			if (outputSize > mcpLimits.maxSchemaBytes) next.outputSchema = stub(outputSize)
+		}
+		return next
 	})
-	const bySize = capped.map((tool, index) => ({ index, size: bytes(tool.inputSchema) })).sort((a, b) => b.size - a.size)
-	let total = bytes(capped)
-	for (const { index, size } of bySize) {
+	const sizes = capped.map((tool) => bytes(tool))
+	// "[" + "]" + one comma between tools
+	let total = 2 + Math.max(0, capped.length - 1) + sizes.reduce((a, b) => a + b, 0)
+	const order = sizes.map((size, index) => ({ index, size })).sort((a, b) => b.size - a.size)
+	for (const { index } of order) {
 		if (total <= mcpLimits.maxTotalToolBytes) break
-		const tool = capped[index]!
-		const replacement = { ...tool, inputSchema: stub(size), outputSchema: undefined }
-		capped[index] = replacement
-		total = bytes(capped)
+		const { annotations: _a, outputSchema: _o, ...rest } = capped[index]!
+		const degraded: McpTool = { ...rest, inputSchema: stub(bytes(rest.inputSchema)) }
+		const size = bytes(degraded)
+		if (size >= sizes[index]!) continue
+		total -= sizes[index]! - size
+		sizes[index] = size
+		capped[index] = degraded
+	}
+	while (capped.length > 0 && total > mcpLimits.maxTotalToolBytes) {
+		total -= sizes.pop()! + (capped.length > 1 ? 1 : 0)
+		capped.pop()
 	}
 	return capped
 }
@@ -100,6 +117,7 @@ function policyFetch(
 			const response = await base(url.href, { ...init, headers, redirect: 'manual' })
 			const location = response.headers.get('location')
 			if (response.status < 300 || response.status >= 400 || !location) return response
+			await response.body?.cancel().catch(() => {})
 			if (hop >= mcpLimits.maxRedirects) {
 				const kody = new KodyError(
 					'mcp_call_failed',
@@ -114,7 +132,24 @@ function policyFetch(
 	}) as typeof fetch
 }
 
-function toKodyError(error: unknown, phase: string, policyError: KodyError | null, timeoutMs: number) {
+/** Removes the credential (full header value and the part after the scheme) from remote-supplied text. */
+function redact(text: string, authorization: string | null) {
+	if (!authorization) return text
+	const secrets = new Set([authorization])
+	const credential = authorization.replace(/^\S+\s+/, '')
+	if (credential) secrets.add(credential)
+	let out = text
+	for (const secret of [...secrets].sort((a, b) => b.length - a.length)) out = out.split(secret).join('[redacted]')
+	return out
+}
+
+function toKodyError(
+	error: unknown,
+	phase: string,
+	policyError: KodyError | null,
+	timeoutMs: number,
+	authorization: string | null,
+) {
 	if (policyError) return policyError
 	const known = KodyError.fromUnknown(error)
 	if (known) return known
@@ -129,7 +164,7 @@ function toKodyError(error: unknown, phase: string, policyError: KodyError | nul
 	}
 	return new KodyError(
 		'mcp_call_failed',
-		`MCP ${phase} failed${httpStatus ? ` (HTTP ${httpStatus})` : ''}: ${truncateUtf8(message.replace(/[?#]\S*/g, ''), 300)}`,
+		`MCP ${phase} failed${httpStatus ? ` (HTTP ${httpStatus})` : ''}: ${truncateUtf8(redact(message, authorization).replace(/[?#]\S*/g, ''), 300)}`,
 		{ status: 502, details: { phase, ...(httpStatus ? { httpStatus } : {}) } },
 	)
 }
@@ -155,7 +190,7 @@ async function withClient<T>(
 		await client.connect(transport, { timeout })
 		return await run(client, (next) => (phase = next), timeout)
 	} catch (error) {
-		throw toKodyError(error, phase, policyError, timeout)
+		throw toKodyError(error, phase, policyError, timeout, target.authorization)
 	} finally {
 		await client.close().catch(() => {})
 	}

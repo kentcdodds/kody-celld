@@ -40,6 +40,21 @@ describe('discoverServer', () => {
 	})
 })
 
+describe('token redaction', () => {
+	it('does not leak the bearer token when the remote echoes it in an error body', async () => {
+		const server = startTestMcpServer({})
+		server.setRespond((u) => new Response(`denied for Bearer SECRETTOKEN at ${u.pathname}`, { status: 401 }))
+		await assert.rejects(
+			discoverServer({ url, authorization: 'Bearer SECRETTOKEN' }, { config, fetch: server.fetch }),
+			(error: Error) => {
+				assert.match(error.name, /mcp_call_failed/)
+				assert.doesNotMatch(error.message, /SECRETTOKEN/)
+				return true
+			},
+		)
+	})
+})
+
 describe('callServerTool', () => {
 	const server = startTestMcpServer({
 		tools: [
@@ -133,5 +148,21 @@ describe('capTools', () => {
 		assert.equal(capped.length, 200)
 		assert.match(String(capped[0]?.inputSchema.description), /schema too large/)
 		assert.ok(JSON.stringify(capped).length <= mcpLimits.maxTotalToolBytes)
+	})
+})
+
+describe('capTools total size', () => {
+	it('stays under 1 MB when annotations, outputSchema and titles are huge', () => {
+		const tools: Array<McpTool> = Array.from({ length: 200 }, (_, i) => ({
+			name: `t${i}`,
+			title: 'T'.repeat(5_000),
+			description: 'd'.repeat(4_000),
+			inputSchema: { type: 'object' },
+			outputSchema: { type: 'object', description: 'o'.repeat(mcpLimits.maxSchemaBytes + 10) },
+			annotations: { note: 'a'.repeat(10_000) },
+		}))
+		const capped = capTools(tools)
+		assert.ok(JSON.stringify(capped).length <= mcpLimits.maxTotalToolBytes)
+		assert.ok(capped.length > 0)
 	})
 })
