@@ -252,8 +252,10 @@ export async function callServerTool(
 	})
 }
 
-/** True when the remote rejected the call because it does not know `tool` (JSON-RPC -32602 naming the tool). */
+/** True when the remote rejected the call because it does not know `tool` ("Unknown tool: x", "Tool 'x' not found"). */
 export function isUnknownToolError(error: unknown, tool: string) {
 	const message = error instanceof Error ? error.message : String(error)
-	return /-32602|unknown tool|tool .* not found/i.test(message) && message.includes(tool)
+	const name = tool.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+	const pattern = new RegExp(`\\btool\\s*:?\\s*["'\`]?${name}["'\`]?(?![\\w.-])`, 'i')
+	return /-32602|unknown tool|not found/i.test(message) && pattern.test(message)
 }

@@ -75,9 +75,23 @@ export const secretHeaders = {
 	},
 }
 
+// kody.mcp["server"].tool(input): user-added remote MCP servers, called host-side.
+const __mcp = new Proxy(Object.create(null), {
+	get(_target, server) {
+		if (typeof server !== 'string' || server === 'then' || server === 'toJSON') return undefined
+		return new Proxy(Object.create(null), {
+			get(_t, tool) {
+				if (typeof tool !== 'string' || tool === 'then' || tool === 'toJSON') return undefined
+				return async (args = {}) => host().mcpCall(server, tool, args ?? {}, __callContext())
+			},
+		})
+	},
+})
+
 export const kody = new Proxy(Object.create(null), {
 	get(_target, name) {
 		if (typeof name !== 'string' || name === 'then' || name === 'toJSON') return undefined
+		if (name === 'mcp') return __mcp
 		return async (args = {}) => host().capability(name, args ?? {}, __callContext())
 	},
 	has() {

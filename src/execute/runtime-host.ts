@@ -1,9 +1,11 @@
 import { WorkerEntrypoint } from 'cloudflare:workers'
 import type { CapabilityContext } from '../capabilities/define.ts'
+import { mcpDeps } from '../capabilities/mcp-servers.ts'
 import { runCapability } from '../capabilities/registry.ts'
 import { packageStorageCellName, type StorageListOptions } from '../cells/package-storage-cell.ts'
 import type { Env } from '../env.ts'
 import { errorToJson, KodyError } from '../lib/errors.ts'
+import { callMcpTool } from '../mcp-client/service.ts'
 
 export type RuntimeProps = { userId: string; email: string; packageName: string | null }
 type CallContext = { runId?: string; packageName?: string | null } | null
@@ -44,6 +46,66 @@ export class RuntimeHost extends WorkerEntrypoint<Env, RuntimeProps> {
 		} catch (error) {
 			// RPC serializes plain Errors only; keep the Kody error code in the message.
 			const json = errorToJson(error)
+			throw new Error(`${json.error}: ${json.message}`, { cause: error })
+		}
+	}
+
+	/** `kody.mcp[server][tool](args)`: a host-side call to a user-added MCP server, logged as a gateway event. */
+	async mcpCall(server: string, tool: string, args: unknown, call: CallContext) {
+		const started = Date.now()
+		const userCell = this.env.USER.getByName(this.ctx.props.userId)
+		const record = (event: {
+			outcome: 'forwarded' | 'injected' | 'denied' | 'error'
+			url: string
+			secrets: Array<string>
+			reason?: string
+		}) => {
+			if (!call?.runId) return
+			let host = ''
+			let url = event.url
+			try {
+				const parsed = new URL(event.url)
+				host = parsed.hostname
+				url = `${parsed.origin}${parsed.pathname}`
+			} catch {}
+			this.ctx.waitUntil(
+				userCell.runRecordGatewayEvent({
+					runId: call.runId,
+					event: {
+						at: new Date().toISOString(),
+						method: 'MCP',
+						host,
+						status: null,
+						mcp: { server, tool, ms: Date.now() - started },
+						...event,
+						url,
+					},
+				}),
+			)
+		}
+		try {
+			const result = await callMcpTool(mcpDeps({ env: this.env, userCell }), {
+				server,
+				tool,
+				args,
+				packageName: this.ctx.props.packageName,
+			})
+			const bearer = result.authKind === 'bearer'
+			record({
+				outcome: bearer ? 'injected' : 'forwarded',
+				url: result.url,
+				secrets: bearer ? [`mcp:${server}`] : [],
+			})
+			const { authKind: _authKind, url: _url, ...publicResult } = result
+			return publicResult
+		} catch (error) {
+			const json = errorToJson(error)
+			record({
+				outcome: json.error.startsWith('mcp_server') || json.error === 'mcp_host_not_allowed' ? 'denied' : 'error',
+				url: '',
+				secrets: [],
+				reason: json.error,
+			})
 			throw new Error(`${json.error}: ${json.message}`, { cause: error })
 		}
 	}

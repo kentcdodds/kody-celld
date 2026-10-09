@@ -13,6 +13,7 @@ import { systemCapabilities, systemDomain } from './system.ts'
 import { emailCapabilities, emailDomain } from './email.ts'
 import { webhookCapabilities, webhooksDomain } from './webhooks.ts'
 import { integrationCapabilities, integrationsDomain } from './integrations.ts'
+import { mcpServerCapabilities, mcpServersDomain } from './mcp-servers.ts'
 import { secretProviderCapabilities, secretProvidersDomain } from './secret-providers.ts'
 import { accountCapabilities, accountDomain } from './account.ts'
 import { communityCapabilities, communityDomain } from './community.ts'
@@ -31,6 +32,7 @@ export const domains: Array<DomainDefinition> = [
 	webhooksDomain,
 	emailDomain,
 	integrationsDomain,
+	mcpServersDomain,
 	secretProvidersDomain,
 	accountDomain,
 	communityDomain,
@@ -50,6 +52,7 @@ export const capabilities: Array<CapabilityDefinition> = [
 	...webhookCapabilities,
 	...emailCapabilities,
 	...integrationCapabilities,
+	...mcpServerCapabilities,
 	...secretProviderCapabilities,
 	...accountCapabilities,
 	...communityCapabilities,
