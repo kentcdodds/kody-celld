@@ -36,6 +36,7 @@ export const routes = route({
 	accountWebhooks: '/account/webhooks',
 	accountActivity: '/account/runs',
 	accountIntegrations: '/account/integrations',
+	accountMcpServers: '/account/mcp-servers',
 	accountEmail: '/account/inbox',
 	accountSessions: '/account/sessions',
 	// Operator console (`/admin` upstream). The console has its own cookie

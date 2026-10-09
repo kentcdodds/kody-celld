@@ -19,6 +19,7 @@ describe('accountAliasLocation', () => {
 		assert.equal(at('/account'), null)
 		assert.equal(at('/account/inbox'), null)
 		assert.equal(at('/account/integrations'), null)
+		assert.equal(at('/account/mcp-servers'), null)
 		assert.equal(at('/account/emailish'), null)
 		assert.equal(at('/community/email'), null)
 	})

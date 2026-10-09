@@ -1,6 +1,9 @@
 import type { Env } from '../env.ts'
 import { getUserCell } from '../execute/engine.ts'
 import { recordAudit } from '../lib/audit.ts'
+import { mcpCell, mcpDeps } from '../capabilities/mcp-servers.ts'
+import { parseIntegrationUsage } from '../integrations/oauth.ts'
+import { refreshMcpServer } from '../mcp-client/service.ts'
 import { KodyError } from '../lib/errors.ts'
 import { loadEmailConfig } from '../email/service.ts'
 import { getMemoryCell } from '../capabilities/memory.ts'
@@ -910,6 +913,65 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 						status: integration.status,
 						expiresAt: integration.expiresAt,
 						allowedHosts: integration.allowedHosts,
+					})),
+				},
+			})
+		}
+
+		case 'mcp-servers': {
+			const cell = mcpCell({ userCell })
+			if (post) {
+				const name = form.name ?? ''
+				const record = name ? await cell.mcpServerGet(name) : null
+				if (record) {
+					if (form.action === 'refresh') {
+						await refreshMcpServer(mcpDeps({ env, userCell }), name)
+					} else if (form.action === 'enable' || form.action === 'disable') {
+						await cell.mcpServerSetEnabled({ name, enabled: form.action === 'enable' })
+						await audit('mcp_server.enabled', name, { enabled: form.action === 'enable', via: 'web' })
+					} else if (form.action === 'remove') {
+						await cell.mcpServerRemove(name)
+						await audit('mcp_server.remove', name, { via: 'web' })
+					} else if (form.action === 'allow_all') {
+						await cell.mcpServerSetUsage({ name, usage: { mode: 'any' } })
+						await audit('mcp_server.unlock', name, { via: 'web' })
+					} else if (form.action === 'ungrant' && form.packageName && record.usage.mode === 'packages') {
+						const rest = record.usage.packages.filter((p) => p !== form.packageName)
+						const usage = rest.length
+							? parseIntegrationUsage({ mode: 'packages', packages: rest })
+							: ({ mode: 'any' } as const)
+						await cell.mcpServerSetUsage({ name, usage })
+						await audit('mcp_server.ungrant', name, { packageName: form.packageName, via: 'web' })
+					}
+				}
+				return redirect('/account/mcp-servers')
+			}
+			const servers = await cell.mcpServerList()
+			return view(session, {
+				title: 'MCP servers',
+				current: '/account/mcp-servers',
+				flash,
+				data: {
+					page: 'accountMcpServers',
+					csrf: session.csrf,
+					servers: servers.map((s) => ({
+						name: s.name,
+						host: (() => {
+							try {
+								return new URL(s.url).host
+							} catch {
+								return s.url
+							}
+						})(),
+						status: s.status,
+						lastError: s.lastError ? `${s.lastError.phase}: ${s.lastError.message}` : null,
+						enabled: s.enabled,
+						authKind: s.auth.kind,
+						usage:
+							s.usage.mode === 'any'
+								? { mode: 'any' as const, packages: [] }
+								: { mode: 'packages' as const, packages: s.usage.packages },
+						tools: s.tools.map((t) => ({ name: t.name, description: t.description ?? '' })),
 					})),
 				},
 			})

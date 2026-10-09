@@ -350,6 +350,11 @@ export const accountNavItems: Array<AccountNavItem> = [
 		icon: 'plug',
 	},
 	{
+		href: routes.accountMcpServers.href(),
+		label: 'MCP servers',
+		icon: 'server',
+	},
+	{
 		href: routes.accountMcpOauthClients.href(),
 		label: 'MCP clients',
 		icon: 'server',

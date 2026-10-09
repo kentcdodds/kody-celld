@@ -216,6 +216,17 @@ export type IntegrationView = {
 	allowedHosts: Array<string>
 }
 
+export type McpServerView = {
+	name: string
+	host: string
+	status: 'ready' | 'error'
+	lastError: string | null
+	enabled: boolean
+	authKind: 'none' | 'bearer'
+	usage: { mode: 'any' | 'packages'; packages: Array<string> }
+	tools: Array<{ name: string; description: string }>
+}
+
 export type EmailMessageView = {
 	id: string
 	receivedAt: string
@@ -463,6 +474,11 @@ export type AppLoaderData =
 			page: 'accountIntegrations'
 			csrf: string
 			integrations: Array<IntegrationView>
+	  }
+	| {
+			page: 'accountMcpServers'
+			csrf: string
+			servers: Array<McpServerView>
 	  }
 	| {
 			page: 'accountEmail'
