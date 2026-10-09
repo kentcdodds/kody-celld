@@ -113,9 +113,9 @@ describe('redirect policy', () => {
 				: null,
 		)
 		await discoverServer({ url: 'http://172.30.1.5/mcp', authorization: 'Bearer t' }, { config, fetch: other.fetch })
-		assert.ok(
-			other.requests.filter((r) => r.url.startsWith('http://172.30.9.9')).every((r) => r.authorization === null),
-		)
+		const crossOrigin = other.requests.filter((r) => r.url.startsWith('http://172.30.9.9'))
+		assert.ok(crossOrigin.length > 0, 'the redirect target was never requested')
+		assert.ok(crossOrigin.every((r) => r.authorization === null))
 	})
 
 	it('refuses a redirect to a private host that is not allowlisted', async () => {
@@ -137,7 +137,7 @@ describe('redirect policy', () => {
 		)
 		await assert.rejects(
 			discoverServer({ url: 'https://mcp.example.com/mcp', authorization: null }, { config, fetch: server.fetch }),
-			/mcp_host_not_allowed|10\.0\.0\.5/,
+			/10\.0\.0\.5/,
 		)
 		assert.ok(server.requests.some((r) => r.url.startsWith('https://mcp.example.com')))
 		assert.ok(!server.requests.some((r) => r.url.includes('rebind.example.com')))
