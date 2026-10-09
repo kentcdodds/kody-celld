@@ -119,6 +119,26 @@ describe('stripTypes (JSX)', () => {
 		assert.doesNotMatch(classic, /jsx-runtime/)
 	})
 
+	it('reads pragmas only from the comments that open the file, never from strings or later code', () => {
+		const configured = { runtime: 'automatic', importSource: 'remix/component' } as const
+		for (const source of [
+			"const marker = '/* @jsxImportSource wrong/runtime */'\nexport default () => <b>{marker}</b>",
+			'const marker = `// @jsxRuntime classic`\nexport default () => <b>{marker}</b>',
+			'export default () => <b/>\n/** @jsxImportSource wrong/runtime */',
+		]) {
+			const out = stripTypes(source, 'x', 'tsx', configured)
+			assert.match(out, /from "remix\/component\/jsx-runtime"/, source)
+			assert.doesNotMatch(out, /wrong\/runtime\/jsx-runtime|React\.createElement/, source)
+		}
+		const leading = stripTypes(
+			'#!/usr/bin/env node\n// view\n\n/** @jsxRuntime automatic */\n/** @jsxImportSource preact */\nexport default () => <b/>',
+			'x',
+			'tsx',
+			{ runtime: 'classic' },
+		)
+		assert.match(leading, /from "preact\/jsx-runtime"/)
+	})
+
 	it('names the JSX module that cannot be read', () => {
 		assert.throws(
 			() => stripTypes('export default (x: number) => <b/>', 'app/view.jsx in package @t/x', 'jsx'),

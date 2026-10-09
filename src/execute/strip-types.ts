@@ -39,14 +39,45 @@ export function isCodeModulePath(path: string): boolean {
 }
 
 /**
+ * The comments that open a file, before its first statement (after an
+ * optional `#!` line). Pragmas count only here, as in TypeScript, so text in
+ * strings, template literals or later code is never read as one.
+ */
+function leadingComments(source: string): Array<string> {
+	const comments: Array<string> = []
+	let i = source.startsWith('#!') ? source.indexOf('\n') + 1 || source.length : 0
+	while (i < source.length) {
+		const rest = source.slice(i)
+		const space = /^\s+/.exec(rest)
+		if (space) {
+			i += space[0].length
+			continue
+		}
+		if (rest.startsWith('//')) {
+			const end = rest.indexOf('\n')
+			comments.push(end === -1 ? rest : rest.slice(0, end))
+			i += end === -1 ? rest.length : end
+		} else if (rest.startsWith('/*')) {
+			const end = rest.indexOf('*/', 2)
+			if (end === -1) break
+			comments.push(rest.slice(0, end + 2))
+			i += end + 2
+		} else {
+			break
+		}
+	}
+	return comments
+}
+
+/**
  * esbuild honours `@jsxRuntime` / `@jsxImportSource` comments per file; sucrase
- * does not, so read them here. As in TypeScript, `@jsxImportSource` alone
- * selects the automatic runtime.
+ * does not, so read them here from the file's leading comments. As in
+ * TypeScript, `@jsxImportSource` alone selects the automatic runtime.
  */
 function withPragmas(source: string, jsx: JsxOptions): JsxOptions {
 	let runtime: JsxOptions['runtime'] | undefined
 	let importSource: string | undefined
-	for (const comment of source.match(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g) ?? []) {
+	for (const comment of leadingComments(source)) {
 		runtime = (/@jsxRuntime\s+(classic|automatic)\b/.exec(comment)?.[1] as JsxOptions['runtime'] | undefined) ?? runtime
 		importSource = /@jsxImportSource\s+(\S+?)(?:\s|\*\/|$)/.exec(comment)?.[1] ?? importSource
 	}

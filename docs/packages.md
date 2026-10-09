@@ -54,7 +54,7 @@ Rules enforced by `src/packages/manifest.ts` on `packageSave`:
 - `import type`, and named imports used only as types, are dropped, as `tsc` does, so they need not resolve. Side-effect imports (`import './x.ts'`) stay.
 - JSX uses `compilerOptions.jsx` and `jsxImportSource` from the package's root `tsconfig.json` (comments allowed).
   - `react-jsx` selects the automatic runtime, for example `"jsxImportSource": "remix/component"`.
-  - A file's `/** @jsxImportSource … */` or `/** @jsxRuntime classic */` comment wins.
+  - A `/** @jsxImportSource … */` or `/** @jsxRuntime classic */` comment at the top of a file (before its first statement, as in TypeScript) wins.
   - Without either, JSX compiles to `React.createElement`.
   - The automatic runtime imports `<source>/jsx-runtime` like any npm import.
 - `.d.ts` files are never loaded or imported.
