@@ -1,5 +1,16 @@
 import { KodyError } from '../lib/errors.ts'
 import type { PackageFiles, PackageManifest } from './manifest.ts'
+import {
+	assertPackageTotalBytes,
+	communityPackagesIndexesDdl,
+	communityPackagesTableDdl,
+	countPackageFiles,
+	deletePackageFiles,
+	migrateCommunityPackageFiles,
+	packageFilesSchema,
+	readPackageFiles,
+	replacePackageFiles,
+} from './package-files-store.ts'
 
 /**
  * Community catalog: packages users chose to publish for everyone on this
@@ -26,21 +37,9 @@ export type CommunityListing = {
 export type CommunityPackage = CommunityListing & { files: PackageFiles; agents: string }
 
 export const communitySchema = `
-	CREATE TABLE IF NOT EXISTS community_packages (
-		name TEXT PRIMARY KEY,
-		user_id TEXT NOT NULL,
-		publisher TEXT NOT NULL,
-		version TEXT NOT NULL,
-		description TEXT NOT NULL,
-		keywords TEXT NOT NULL,
-		manifest_json TEXT NOT NULL,
-		files_json TEXT NOT NULL,
-		installs INTEGER NOT NULL DEFAULT 0,
-		created_at TEXT NOT NULL,
-		updated_at TEXT NOT NULL
-	);
-	CREATE INDEX IF NOT EXISTS community_packages_user ON community_packages(user_id);
-	CREATE INDEX IF NOT EXISTS community_packages_installs ON community_packages(installs DESC, updated_at DESC);
+	${communityPackagesTableDdl}
+	${communityPackagesIndexesDdl}
+	${packageFilesSchema}
 `
 
 export const communityLimits = {
@@ -59,17 +58,27 @@ type Row = {
 	description: string
 	keywords: string
 	manifest_json: string
-	files_json: string
 	installs: number
 	created_at: string
 	updated_at: string
 }
 
 const summaryColumns =
-	'name, user_id, publisher, version, description, keywords, manifest_json, files_json, installs, created_at, updated_at'
+	'name, user_id, publisher, version, description, keywords, manifest_json, installs, created_at, updated_at'
 
-function toListing(row: Row): CommunityListing & { userId: string } {
-	const files = JSON.parse(row.files_json) as PackageFiles
+function readmeOf(sql: SqlStorage, packageName: string): string {
+	return (
+		sql
+			.exec<{ content: string }>(
+				'SELECT content FROM package_files WHERE package_name = ? AND path = ?',
+				packageName,
+				'README.md',
+			)
+			.toArray()[0]?.content ?? ''
+	)
+}
+
+function toListing(sql: SqlStorage, row: Row): CommunityListing & { userId: string } {
 	return {
 		name: row.name,
 		userId: row.user_id,
@@ -78,17 +87,23 @@ function toListing(row: Row): CommunityListing & { userId: string } {
 		publisher: row.publisher,
 		keywords: row.keywords ? row.keywords.split(' ') : [],
 		manifest: JSON.parse(row.manifest_json) as PackageManifest,
-		readme: files['README.md'] ?? '',
+		readme: readmeOf(sql, row.name),
 		installs: row.installs,
-		fileCount: Object.keys(files).length,
+		fileCount: countPackageFiles(sql, row.name),
 		publishedAt: row.created_at,
 		updatedAt: row.updated_at,
 	}
 }
 
-function toPackage(row: Row): CommunityPackage & { userId: string } {
-	const files = JSON.parse(row.files_json) as PackageFiles
-	return { ...toListing(row), files, agents: files['AGENTS.md'] ?? '' }
+function toPackage(sql: SqlStorage, row: Row): CommunityPackage & { userId: string } {
+	const files = readPackageFiles(sql, row.name)
+	const listing = toListing(sql, row)
+	return {
+		...listing,
+		files,
+		agents: files['AGENTS.md'] ?? '',
+		fileCount: Object.keys(files).length,
+	}
 }
 
 export class CommunityStore {
@@ -98,6 +113,7 @@ export class CommunityStore {
 	constructor(sql: SqlStorage, now: () => string = () => new Date().toISOString()) {
 		this.sql = sql
 		this.now = now
+		migrateCommunityPackageFiles(sql)
 	}
 
 	publish(input: {
@@ -117,6 +133,14 @@ export class CommunityStore {
 		if (input.manifest.hidden) {
 			throw new KodyError('invalid_package', `"${input.name}" is marked hidden in package.json; unhide it to publish.`)
 		}
+		let totalBytes = 0
+		for (const [path, content] of Object.entries(input.files)) {
+			if (typeof content !== 'string') {
+				throw new KodyError('invalid_package', `File "${path}" must be a string.`)
+			}
+			totalBytes += content.length
+		}
+		assertPackageTotalBytes(totalBytes)
 		const existing = this.sql
 			.exec<{ user_id: string }>('SELECT user_id FROM community_packages WHERE name = ?', input.name)
 			.toArray()[0]
@@ -139,11 +163,11 @@ export class CommunityStore {
 		const now = this.now()
 		this.sql.exec(
 			`INSERT INTO community_packages
-				(name, user_id, publisher, version, description, keywords, manifest_json, files_json, installs, created_at, updated_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+				(name, user_id, publisher, version, description, keywords, manifest_json, installs, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
 			 ON CONFLICT(name) DO UPDATE SET
 				publisher = excluded.publisher, version = excluded.version, description = excluded.description,
-				keywords = excluded.keywords, manifest_json = excluded.manifest_json, files_json = excluded.files_json,
+				keywords = excluded.keywords, manifest_json = excluded.manifest_json,
 				updated_at = excluded.updated_at`,
 			input.name,
 			input.userId,
@@ -152,10 +176,10 @@ export class CommunityStore {
 			input.manifest.description,
 			input.manifest.keywords.join(' '),
 			JSON.stringify(input.manifest),
-			JSON.stringify(input.files),
 			now,
 			now,
 		)
+		replacePackageFiles(this.sql, input.name, input.files)
 		return this.get(input.name)!
 	}
 
@@ -168,21 +192,24 @@ export class CommunityStore {
 			throw new KodyError('forbidden', `"${input.name}" was published by someone else.`, { status: 403 })
 		}
 		this.sql.exec('DELETE FROM community_packages WHERE name = ?', input.name)
+		deletePackageFiles(this.sql, input.name)
 		return true
 	}
 
 	unpublishAll(userId: string): number {
-		const count = this.sql
-			.exec<{ n: number }>('SELECT COUNT(*) AS n FROM community_packages WHERE user_id = ?', userId)
-			.toArray()[0]?.n
+		const names = this.sql
+			.exec<{ name: string }>('SELECT name FROM community_packages WHERE user_id = ?', userId)
+			.toArray()
+			.map((row) => row.name)
+		for (const name of names) deletePackageFiles(this.sql, name)
 		this.sql.exec('DELETE FROM community_packages WHERE user_id = ?', userId)
-		return count ?? 0
+		return names.length
 	}
 
 	get(name: string): CommunityPackage | null {
 		const row = this.sql.exec<Row>(`SELECT ${summaryColumns} FROM community_packages WHERE name = ?`, name).toArray()[0]
 		if (!row) return null
-		const { userId: _userId, ...pkg } = toPackage(row)
+		const { userId: _userId, ...pkg } = toPackage(this.sql, row)
 		return pkg
 	}
 
@@ -221,7 +248,7 @@ export class CommunityStore {
 			)
 			.toArray()
 		return rows.map((row) => {
-			const { userId: _userId, ...listing } = toListing(row)
+			const { userId: _userId, ...listing } = toListing(this.sql, row)
 			return listing
 		})
 	}
@@ -231,7 +258,7 @@ export class CommunityStore {
 			.exec<Row>(`SELECT ${summaryColumns} FROM community_packages WHERE user_id = ? ORDER BY name`, userId)
 			.toArray()
 			.map((row) => {
-				const { userId: _userId, ...listing } = toListing(row)
+				const { userId: _userId, ...listing } = toListing(this.sql, row)
 				return listing
 			})
 	}

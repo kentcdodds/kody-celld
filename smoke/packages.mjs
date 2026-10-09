@@ -184,4 +184,76 @@ export default async function main() {
 		)
 	}
 	log('imports', { unreachedAndDynamic: 'ok' })
+
+	// Per-file SQLite rows: a ~3.5 MiB package (with one file over 1 MiB) must
+	// round-trip, and anything over the documented 4 MiB cap must be refused
+	// with an error that names the limit (issue #35 part 3).
+	const bigChunk = 'x'.repeat(1.2 * 1024 * 1024)
+	const midChunk = 'y'.repeat(1.1 * 1024 * 1024)
+	const filler = 'z'.repeat(1.2 * 1024 * 1024)
+	const largeFiles = {
+		'package.json': JSON.stringify({
+			name: '@kody-smoke/large-package',
+			version: '1.0.0',
+			description: 'smoke large package',
+			exports: './index.js',
+		}),
+		'README.md': '# large-package',
+		'AGENTS.md': 'Large package smoke.',
+		'index.js': 'export default async () => "large-ok"',
+		'data/big-a.txt': bigChunk,
+		'data/big-b.txt': midChunk,
+		'data/filler.txt': filler,
+	}
+	const largeTotal = Object.values(largeFiles).reduce((n, content) => n + content.length, 0)
+	assert(
+		largeTotal > 3.4 * 1024 * 1024 && largeTotal < 4 * 1024 * 1024,
+		`large package fixture should be ~3.5 MiB (got ${largeTotal})`,
+		{ largeTotal },
+	)
+	assert(bigChunk.length > 1024 * 1024, 'at least one file must exceed 1 MiB', bigChunk.length)
+	const largeSaved = await mcp.call('packageSave', { files: largeFiles, source: 'smoke/packages.mjs' })
+	assert(largeSaved.name === '@kody-smoke/large-package', 'large packageSave returned wrong name', largeSaved)
+	assert(largeSaved.fileCount === Object.keys(largeFiles).length, 'large package fileCount', largeSaved)
+	const largeGot = await mcp.call('packageGet', { name: '@kody-smoke/large-package', includeFiles: true })
+	assert(
+		largeGot.files['data/big-a.txt'] === bigChunk,
+		'large package big-a round-trip',
+		largeGot.files['data/big-a.txt']?.length,
+	)
+	assert(
+		largeGot.files['data/big-b.txt'] === midChunk,
+		'large package big-b round-trip',
+		largeGot.files['data/big-b.txt']?.length,
+	)
+	assert(
+		largeGot.files['data/filler.txt'] === filler,
+		'large package filler round-trip',
+		largeGot.files['data/filler.txt']?.length,
+	)
+	const largeRun = await mcp.run(`import m from 'kody:@kody-smoke/large-package'\nexport default async () => m()`)
+	assert(largeRun === 'large-ok', 'large package must still execute', largeRun)
+	log('large package', { bytes: largeTotal, files: largeSaved.fileCount, run: largeRun })
+
+	const overLimit = await mcp.execute(`import { kody } from 'kody:runtime'
+export default async function main() {
+  const huge = 'x'.repeat(4 * 1024 * 1024 + 1)
+  return await kody.packageSave({
+    files: {
+      'package.json': JSON.stringify({ name: '@kody-smoke/too-big', version: '1.0.0', exports: './index.js' }),
+      'README.md': '# too-big',
+      'AGENTS.md': 'Too big.',
+      'index.js': 'export default async () => 1',
+      'blob.txt': huge,
+    },
+  })
+}`)
+	assert(
+		!overLimit.ok &&
+			/invalid_package:.*at most 4 MiB/.test(overLimit.error?.message ?? '') &&
+			/limit is 4 MiB/.test(overLimit.error?.message ?? ''),
+		'packages over 4 MiB must be rejected naming the limit',
+		overLimit.error,
+	)
+	log('over-limit package rejected', overLimit.error.message.slice(0, 120))
 }

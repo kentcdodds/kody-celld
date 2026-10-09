@@ -29,6 +29,16 @@ import {
 	type WebhookDefinition,
 	type WebhookVerification,
 } from '../packages/manifest.ts'
+import {
+	assertPackageTotalBytes,
+	countPackageFiles,
+	deletePackageFiles,
+	migrateUserPackageFiles,
+	packageFilesSchema,
+	readPackageFiles,
+	replacePackageFiles,
+	userPackagesTableDdl,
+} from '../packages/package-files-store.ts'
 import type { IntegrationConfig, IntegrationUsage } from '../integrations/oauth.ts'
 import {
 	IntegrationStore,
@@ -357,15 +367,8 @@ export class UserCell extends DurableObject<Env> {
 				approved_at TEXT NOT NULL,
 				approved_by TEXT NOT NULL
 			);
-			CREATE TABLE IF NOT EXISTS packages (
-				name TEXT PRIMARY KEY,
-				version TEXT NOT NULL,
-				manifest_json TEXT NOT NULL,
-				files_json TEXT NOT NULL,
-				source TEXT NOT NULL,
-				created_at TEXT NOT NULL,
-				updated_at TEXT NOT NULL
-			);
+			${userPackagesTableDdl}
+			${packageFilesSchema}
 			CREATE TABLE IF NOT EXISTS jobs (
 				id TEXT PRIMARY KEY,
 				package_name TEXT NOT NULL,
@@ -571,6 +574,7 @@ export class UserCell extends DurableObject<Env> {
 			this.ctx.storage.sql.exec(`ALTER TABLE usage_daily ADD COLUMN email_receives INTEGER NOT NULL DEFAULT 0`)
 		}
 		ensureRunTriageColumns(this.ctx.storage.sql)
+		migrateUserPackageFiles(this.ctx.storage.sql)
 		this.runTriage = new RunTriageStore(this.ctx.storage.sql)
 	}
 
@@ -912,9 +916,7 @@ export class UserCell extends DurableObject<Env> {
 			totalBytes += content.length
 			files[path.replace(/^\.\//, '')] = content
 		}
-		if (totalBytes > 4 * 1024 * 1024) {
-			throw new KodyError('invalid_package', 'Package files must total at most 4 MiB.')
-		}
+		assertPackageTotalBytes(totalBytes)
 		const manifest = parsePackageManifest(files)
 		for (const [jobName, job] of Object.entries(manifest.jobs)) {
 			try {
@@ -941,18 +943,18 @@ export class UserCell extends DurableObject<Env> {
 			this.assertQuota('jobs', jobsElsewhere + declaredJobs - 1, 'Job')
 		}
 		this.ctx.storage.sql.exec(
-			`INSERT INTO packages (name, version, manifest_json, files_json, source, created_at, updated_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?)
+			`INSERT INTO packages (name, version, manifest_json, source, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?)
 			 ON CONFLICT(name) DO UPDATE SET version = excluded.version, manifest_json = excluded.manifest_json,
-			   files_json = excluded.files_json, source = excluded.source, updated_at = excluded.updated_at`,
+			   source = excluded.source, updated_at = excluded.updated_at`,
 			manifest.name,
 			manifest.version,
 			JSON.stringify(manifest),
-			JSON.stringify(files),
 			input.source ?? 'local',
 			existing?.created_at ?? now,
 			now,
 		)
+		replacePackageFiles(this.ctx.storage.sql, manifest.name, files)
 		this.reconcileJobs(manifest, now)
 		this.reconcileWebhooks(manifest, now)
 		if (!manifest.secretProvider) this.secretProviders.unbindPackage(manifest.name)
@@ -1042,11 +1044,10 @@ export class UserCell extends DurableObject<Env> {
 				name: string
 				version: string
 				manifest_json: string
-				files_json: string
 				source: string
 				created_at: string
 				updated_at: string
-			}>('SELECT * FROM packages ORDER BY name')
+			}>('SELECT name, version, manifest_json, source, created_at, updated_at FROM packages ORDER BY name')
 			.toArray()
 			.map((row) => ({
 				name: row.name,
@@ -1055,7 +1056,7 @@ export class UserCell extends DurableObject<Env> {
 				source: row.source,
 				createdAt: row.created_at,
 				updatedAt: row.updated_at,
-				fileCount: Object.keys(JSON.parse(row.files_json) as PackageFiles).length,
+				fileCount: countPackageFiles(this.ctx.storage.sql, row.name),
 			}))
 	}
 
@@ -1065,18 +1066,17 @@ export class UserCell extends DurableObject<Env> {
 				name: string
 				version: string
 				manifest_json: string
-				files_json: string
 				source: string
 				created_at: string
 				updated_at: string
-			}>('SELECT * FROM packages WHERE name = ?', name)
+			}>('SELECT name, version, manifest_json, source, created_at, updated_at FROM packages WHERE name = ?', name)
 			.toArray()[0]
 		if (!row) return null
 		return {
 			name: row.name,
 			version: row.version,
 			manifest: storedManifest(row.manifest_json),
-			files: JSON.parse(row.files_json) as PackageFiles,
+			files: readPackageFiles(this.ctx.storage.sql, row.name),
 			source: row.source,
 			createdAt: row.created_at,
 			updatedAt: row.updated_at,
@@ -1085,6 +1085,7 @@ export class UserCell extends DurableObject<Env> {
 
 	async packageDelete(name: string) {
 		const cursor = this.ctx.storage.sql.exec('DELETE FROM packages WHERE name = ?', name)
+		deletePackageFiles(this.ctx.storage.sql, name)
 		this.ctx.storage.sql.exec('DELETE FROM jobs WHERE package_name = ?', name)
 		this.ctx.storage.sql.exec('DELETE FROM secrets WHERE scope = ? AND package_name = ?', 'package', name)
 		for (const row of this.ctx.storage.sql
