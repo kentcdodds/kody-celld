@@ -36,6 +36,21 @@ export function touchesReservedTable(query: string): boolean {
 	return pattern.test(query)
 }
 
+/**
+ * True when any statement in `query` both names a reserved table and is not a
+ * SELECT. Checks each `;`-separated statement so a leading SELECT cannot mask a
+ * later write (`SELECT 1; DROP TABLE __kody_kv`).
+ */
+export function hasReservedTableWrite(query: string): boolean {
+	for (const statement of query.split(';')) {
+		const trimmed = statement.trim()
+		if (!trimmed) continue
+		if (/^\s*select\b/i.test(trimmed)) continue
+		if (touchesReservedTable(trimmed)) return true
+	}
+	return false
+}
+
 function escapeRegExp(value: string): string {
 	return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }

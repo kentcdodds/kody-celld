@@ -1,7 +1,7 @@
 import { DurableObject } from 'cloudflare:workers'
 import type { Env } from '../env.ts'
 import { KodyError } from '../lib/errors.ts'
-import { reservedTableExclusionSql, reservedTablePrefixes, touchesReservedTable } from './package-storage-reserved.ts'
+import { hasReservedTableWrite, reservedTableExclusionSql, reservedTablePrefixes } from './package-storage-reserved.ts'
 
 export type StorageListOptions = {
 	prefix?: string | undefined
@@ -114,7 +114,7 @@ export class PackageStorageCell extends DurableObject<Env> {
 		if (typeof query !== 'string' || !query.trim()) {
 			throw new KodyError('invalid_sql', 'A SQL statement is required.')
 		}
-		if (touchesReservedTable(query) && !/^\s*select/i.test(query)) {
+		if (hasReservedTableWrite(query)) {
 			throw new KodyError(
 				'reserved_table',
 				`Statements may not modify tables prefixed with ${reservedTablePrefixes.join(', ')}.`,

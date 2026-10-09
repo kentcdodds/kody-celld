@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
+	hasReservedTableWrite,
 	isReservedTableName,
 	likeLiteralPrefix,
 	reservedTableExclusionSql,
@@ -45,5 +46,13 @@ describe('package-storage reserved tables', () => {
 		assert.equal(touchesReservedTable('DROP TABLE _cf_ALARM'), true)
 		assert.equal(touchesReservedTable('DROP TABLE notes'), false)
 		assert.equal(touchesReservedTable('INSERT INTO notes VALUES (1)'), false)
+	})
+
+	it('rejects reserved-table writes even after a leading SELECT', () => {
+		assert.equal(hasReservedTableWrite('SELECT 1; DROP TABLE __kody_kv'), true)
+		assert.equal(hasReservedTableWrite('SELECT 1; DROP TABLE _litestream_seq'), true)
+		assert.equal(hasReservedTableWrite('SELECT * FROM __kody_kv'), false)
+		assert.equal(hasReservedTableWrite('SELECT 1; INSERT INTO notes VALUES (1)'), false)
+		assert.equal(hasReservedTableWrite('DROP TABLE __kody_kv'), true)
 	})
 })
