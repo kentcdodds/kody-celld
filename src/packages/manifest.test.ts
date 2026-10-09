@@ -171,7 +171,7 @@ describe('parsePackageManifest relative imports', () => {
 			),
 		)
 		assert.throws(
-			() => parsePackageManifest(tsPkg("import { X } from './missing.js'\nexport default (): number => 1")),
+			() => parsePackageManifest(tsPkg("import { X } from './missing.js'\nexport default () => X")),
 			(error: unknown) => {
 				const e = error as { code?: string; message?: string }
 				return (
@@ -232,6 +232,101 @@ describe('parsePackageManifest relative imports', () => {
 				'handlers/on-mail.js': "import { handle } from './run.js'\nexport default handle",
 				'handlers/run.js': 'export const handle = () => 1',
 			}),
+		)
+	})
+
+	const tsPackage = (files: Record<string, string>, entry = './src/index.ts') => ({
+		'package.json': JSON.stringify({ name: '@t/typed', version: '1.0.0', exports: { '.': entry } }),
+		'README.md': 'typed',
+		'AGENTS.md': 'typed',
+		...files,
+	})
+
+	it('reads TypeScript the way it runs: imports used only as types need not resolve', () => {
+		parsePackageManifest(
+			tsPackage({
+				'src/index.ts': "import { Missing } from './missing-types.ts'\nexport default (m: Missing | null = null) => m",
+			}),
+		)
+		parsePackageManifest(
+			tsPackage({
+				'src/index.ts':
+					"import { Shape } from './types.ts'\nimport type { G } from './globals.d.ts'\nexport default (s: Shape, g?: G) => s.w",
+				'src/types.ts': 'export type Shape = { w: number }',
+				'src/globals.d.ts': 'export type G = string',
+			}),
+		)
+		assert.throws(
+			() =>
+				parsePackageManifest(
+					tsPackage({ 'src/index.ts': "import { area } from './area.ts'\nexport default (n: number) => area(n)" }),
+				),
+			/Cannot resolve "\.\/area\.ts" from src\/index\.ts: no such file in the package\./,
+		)
+		assert.throws(
+			() =>
+				parsePackageManifest(
+					tsPackage({
+						'src/index.ts': "import { g } from './globals.d.ts'\nexport default () => g",
+						'src/globals.d.ts': 'export declare const g: string',
+					}),
+				),
+			/Cannot resolve "\.\/globals\.d\.ts" from src\/index\.ts/,
+		)
+	})
+
+	it('checks .tsx and .jsx files reached from exports, with their JSX compiled', () => {
+		parsePackageManifest(
+			tsPackage(
+				{
+					'tsconfig.json': '{ "compilerOptions": { "jsx": "react-jsx", "jsxImportSource": "remix/component", } }',
+					'src/view.tsx':
+						"import type { Props } from './props.ts'\nimport { label } from './label.ts'\nexport default (p: Props) => <b>{label}</b>",
+					'src/label.ts': "export const label: string = 'hi'",
+				},
+				'./src/view.tsx',
+			),
+		)
+		assert.throws(
+			() =>
+				parsePackageManifest(
+					tsPackage(
+						{ 'src/view.jsx': "import { x } from './nope.js'\nexport default () => <b>{x}</b>" },
+						'./src/view.jsx',
+					),
+				),
+			/Cannot resolve "\.\/nope\.js" from src\/view\.jsx/,
+		)
+	})
+
+	it('saves a reachable file sucrase cannot read; the run names it instead', () => {
+		parsePackageManifest(
+			tsPackage({
+				'src/index.ts': "import { broken } from './bad.ts'\nexport default () => broken",
+				'src/bad.ts': 'export const broken = (x: ) => 1',
+			}),
+		)
+	})
+
+	it('treats .mts as code', () => {
+		parsePackageManifest(
+			tsPackage(
+				{
+					'src/index.mts': "import { one } from './one.mts'\nexport default (): number => one",
+					'src/one.mts': 'export const one: number = 1',
+				},
+				'./src/index.mts',
+			),
+		)
+		assert.throws(
+			() =>
+				parsePackageManifest(
+					tsPackage(
+						{ 'src/index.mts': "import { one } from './nope.mts'\nexport default () => one" },
+						'./src/index.mts',
+					),
+				),
+			/Cannot resolve "\.\/nope\.mts" from src\/index\.mts/,
 		)
 	})
 })
