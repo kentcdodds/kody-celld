@@ -2,6 +2,7 @@ import { parseIntegrationUsage, usagePermits, type IntegrationUsage } from '../i
 import { KodyError } from '../lib/errors.ts'
 import { callServerTool, discoverServer, isUnknownToolError, type McpToolResult } from './client.ts'
 import { assertMcpServerName, assertMcpUrl, normalizeBearerToken, type McpConfig } from './policy.ts'
+import { assertResolvedHostAllowed } from './resolve.ts'
 import type { McpDiscoveryOutcome, McpServerRecord, McpServerStore } from './store.ts'
 
 export type McpServerCell = {
@@ -34,20 +35,38 @@ async function discover(deps: McpDeps, record: McpServerRecord): Promise<McpServ
 	return deps.cell.mcpServerSetDiscovery({ name: record.name, outcome })
 }
 
+/** An explicit usage on replace may keep or widen the stored grant list; unlocking or removing grants is UI-only. */
+function assertUsageNotLooser(name: string, stored: IntegrationUsage, next: IntegrationUsage) {
+	if (stored.mode === 'any') return
+	const dropped = next.mode === 'any' ? [] : stored.packages.filter((p) => !next.packages.includes(p))
+	if (next.mode === 'packages' && dropped.length === 0) return
+	throw new KodyError(
+		'mcp_server_locked',
+		next.mode === 'any'
+			? `MCP server "${name}" is locked to package(s) ${stored.packages.join(', ')}; unlocking it is done on /account/mcp-servers.`
+			: `MCP server "${name}" grants package(s) ${dropped.join(', ')}; removing a grant is done on /account/mcp-servers.`,
+		{ status: 403 },
+	)
+}
+
 export async function addMcpServer(
 	deps: McpDeps,
 	input: { name: unknown; url: unknown; bearerToken?: unknown; enabled?: boolean; usage?: unknown; replace?: boolean },
 ): Promise<McpServerRecord> {
 	const name = assertMcpServerName(input.name)
 	if (typeof input.url !== 'string') throw new KodyError('invalid_args', 'url must be a string.')
-	const url = assertMcpUrl(input.url, deps.config).href
+	const url = assertMcpUrl(input.url, deps.config)
 	const authorization =
 		input.bearerToken === undefined || input.bearerToken === null ? null : normalizeBearerToken(input.bearerToken)
-	const usage: IntegrationUsage = input.usage === undefined ? { mode: 'any' } : parseIntegrationUsage(input.usage)
+	const requested = input.usage === undefined ? null : parseIntegrationUsage(input.usage)
+	const existing = input.replace === true ? await deps.cell.mcpServerGet(name) : null
+	if (existing && requested) assertUsageNotLooser(name, existing.usage, requested)
+	const usage: IntegrationUsage = requested ?? existing?.usage ?? { mode: 'any' }
+	await assertResolvedHostAllowed(url, deps.config, deps.fetch ?? fetch)
 	const saved = await deps.cell.mcpServerSave({
 		name,
-		url,
-		enabled: input.enabled ?? true,
+		url: url.href,
+		enabled: input.enabled ?? existing?.enabled ?? true,
 		usage,
 		authorization,
 		replace: input.replace === true,

@@ -96,6 +96,55 @@ describe('addMcpServer', () => {
 		assert.match(record.lastError?.message ?? '', /401/)
 		assert.doesNotMatch(JSON.stringify(record), /secrettoken123/)
 	})
+
+	it('replace keeps a stored lock and disabled state unless they are given', async () => {
+		const { deps, store } = await setup()
+		await addMcpServer(deps, { name: 'home', url, bearerToken: 'old' })
+		store.setUsage('home', { mode: 'packages', packages: ['@me/lights'] })
+		store.setEnabled('home', false)
+		const replaced = await addMcpServer(deps, { name: 'home', url, bearerToken: 'tok', replace: true })
+		assert.deepEqual(replaced.usage, { mode: 'packages', packages: ['@me/lights'] })
+		assert.equal(replaced.enabled, false)
+		assert.equal(await store.authorization('home'), 'Bearer tok')
+		const widened = await addMcpServer(deps, {
+			name: 'home',
+			url,
+			bearerToken: 'tok',
+			replace: true,
+			usage: { mode: 'packages', packages: ['@me/lights', '@me/heating'] },
+		})
+		assert.deepEqual(widened.usage, { mode: 'packages', packages: ['@me/lights', '@me/heating'] })
+	})
+
+	it('replace refuses a usage looser than the stored lock (unlocking is UI-only)', async () => {
+		const { deps, store } = await setup()
+		await addMcpServer(deps, { name: 'home', url, bearerToken: 'tok' })
+		store.setUsage('home', { mode: 'packages', packages: ['@me/lights', '@me/heating'] })
+		await assert.rejects(
+			addMcpServer(deps, { name: 'home', url, bearerToken: 'tok', replace: true, usage: { mode: 'any' } }),
+			/mcp_server_locked|account\/mcp-servers/,
+		)
+		await assert.rejects(
+			addMcpServer(deps, {
+				name: 'home',
+				url,
+				bearerToken: 'tok',
+				replace: true,
+				usage: { mode: 'packages', packages: ['@me/lights'] },
+			}),
+			/@me\/heating/,
+		)
+		assert.deepEqual(store.get('home')?.usage, { mode: 'packages', packages: ['@me/lights', '@me/heating'] })
+	})
+
+	it('refuses a name that resolves into unlisted private space without saving anything', async () => {
+		const { deps, store } = await setup({ dns: { 'rebind.example.com': '10.0.0.5' } })
+		await assert.rejects(
+			addMcpServer(deps, { name: 'rebind', url: 'https://rebind.example.com/mcp', bearerToken: 'tok' }),
+			(error: Error & { code?: string }) => error.code === 'mcp_host_not_allowed' && /10\.0\.0\.5/.test(error.message),
+		)
+		assert.equal(store.get('rebind'), null)
+	})
 })
 
 describe('callMcpTool', () => {
