@@ -83,6 +83,9 @@ jobs:
       KODY_EMAIL_OUTBOUND_TOKEN: publish-email-bridge-token-${{ github.run_id }}
       KODY_EMAIL_OUTBOUND_URL: http://host.docker.internal:9796
       KODY_BROWSER_ALLOW_PRIVATE_HOSTS: 127.0.0.1,localhost,host.docker.internal
+      # Defaults plus host.docker.internal so web smoke can preview a local JSON
+      # file-map (private by name; must be listed exactly — see packages.md).
+      KODY_PACKAGE_SOURCE_HOSTS: github.com,api.github.com,codeload.github.com,raw.githubusercontent.com,gist.githubusercontent.com,objects.githubusercontent.com,kody.codes,host.docker.internal
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

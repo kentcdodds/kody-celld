@@ -6,6 +6,7 @@
 // redirect targets, and page text.
 import { randomBytes } from 'node:crypto'
 import { admin, adminToken, assert, baseUrl, Browser, hiddenInputs, log } from './lib.mjs'
+import { startPackageFixtureServer } from './package-fixture-server.mjs'
 
 function randomPassword() {
 	return `pw-${randomBytes(12).toString('hex')}`
@@ -394,58 +395,81 @@ export async function smokeWeb({ user, mcp }) {
 		refused.status,
 	)
 	if (process.env.SMOKE_OFFLINE !== '1') {
-		// Preview opens kody's files explorer on a remote source before install.
-		const previewed = await browser.post('/account/packages', {
-			action: 'preview',
-			source: 'github:kentcdodds/kody-celld/examples/packages/http-probe#main',
-			csrf,
-		})
-		const browse = /href="(\/account\/package-preview\/[A-Za-z0-9_-]+\/files)"/.exec(previewed.text)?.[1]
-		assert(previewed.status === 200 && browse, 'package preview links to the files explorer', previewed.status)
-		const previewRoot = await browser.get(browse)
-		// Scope to the summary (`aria-label="Package preview"`) — the README on
-		// the same page can share description wording, so a full-page includes
-		// would pass even if the summary never rendered `p.description`.
-		const previewSummary = /<section[^>]*aria-label="Package preview"[^>]*>([\s\S]*?)<\/section>/.exec(
-			previewRoot.text,
-		)?.[1]
-		assert(
-			previewRoot.status === 200 &&
-				previewRoot.text.includes('data-testid="package-files-markdown"') &&
-				Boolean(previewSummary?.includes('Calls an HTTP endpoint with a secret placeholder header.')),
-			'preview explorer opens on the README under the package description',
-			previewRoot.status,
-		)
-		const previewProbe = await browser.get(`${browse}/probe.js`)
-		assert(
-			previewProbe.status === 200 &&
-				previewProbe.text.includes('data-testid="package-files-code"') &&
-				previewProbe.text.includes('--shiki-dark') &&
-				previewProbe.text.includes('name="action" value="install"'),
-			'preview explorer highlights a remote file and offers install',
-			previewProbe.status,
-		)
-		// The subdir field travels inside the :source segment and back out to Install.
-		const subdirPreview = await browser.post('/account/packages', {
-			action: 'preview',
-			source: 'github:kentcdodds/kody-celld#main',
-			subdir: 'examples/packages/http-probe',
-			csrf,
-		})
-		const subdirBrowse = /href="(\/account\/package-preview\/[A-Za-z0-9_-]+\/files)"/.exec(subdirPreview.text)?.[1]
-		assert(
-			subdirPreview.status === 200 && subdirBrowse,
-			'subdir preview links to the files explorer',
-			subdirPreview.status,
-		)
-		const subdirProbe = await browser.get(`${subdirBrowse}/probe.js`)
-		assert(
-			subdirProbe.status === 200 &&
-				subdirProbe.text.includes('data-testid="package-files-code"') &&
-				subdirProbe.text.includes('name="subdir" value="examples/packages/http-probe"'),
-			'subdir preview round-trips: opens the subdir file and keeps the subdir for install',
-			subdirProbe.status,
-		)
+		// Preview the files explorer against a local JSON file-map. Live
+		// github:/codeload fetches flake under CI (status 200, no browse link
+		// when the download fails); install.mjs still covers real GitHub.
+		const fixture = await startPackageFixtureServer()
+		try {
+			const previewed = await browser.post('/account/packages', {
+				action: 'preview',
+				source: fixture.flatUrl,
+				csrf,
+			})
+			const browse = /href="(\/account\/package-preview\/[A-Za-z0-9_-]+\/files)"/.exec(previewed.text)?.[1]
+			const alertText = /role="alert"[^>]*>([\s\S]*?)<\//
+				.exec(previewed.text)?.[1]
+				?.replace(/<[^>]+>/g, '')
+				.trim()
+			assert(previewed.status === 200 && browse, 'package preview links to the files explorer', {
+				status: previewed.status,
+				browseFound: Boolean(browse),
+				alertText: alertText ?? null,
+				source: fixture.flatUrl,
+			})
+			const previewRoot = await browser.get(browse)
+			// Scope to the summary (`aria-label="Package preview"`) — the README on
+			// the same page can share description wording, so a full-page includes
+			// would pass even if the summary never rendered `p.description`.
+			const previewSummary = /<section[^>]*aria-label="Package preview"[^>]*>([\s\S]*?)<\/section>/.exec(
+				previewRoot.text,
+			)?.[1]
+			assert(
+				previewRoot.status === 200 &&
+					previewRoot.text.includes('data-testid="package-files-markdown"') &&
+					Boolean(previewSummary?.includes('Calls an HTTP endpoint with a secret placeholder header.')),
+				'preview explorer opens on the README under the package description',
+				previewRoot.status,
+			)
+			const previewProbe = await browser.get(`${browse}/probe.js`)
+			assert(
+				previewProbe.status === 200 &&
+					previewProbe.text.includes('data-testid="package-files-code"') &&
+					previewProbe.text.includes('--shiki-dark') &&
+					previewProbe.text.includes('name="action" value="install"'),
+				'preview explorer highlights a remote file and offers install',
+				previewProbe.status,
+			)
+			// The subdir field travels inside the :source segment and back out to Install.
+			const subdirPreview = await browser.post('/account/packages', {
+				action: 'preview',
+				source: fixture.repoUrl,
+				subdir: fixture.subdir,
+				csrf,
+			})
+			const subdirBrowse = /href="(\/account\/package-preview\/[A-Za-z0-9_-]+\/files)"/.exec(subdirPreview.text)?.[1]
+			const subdirAlert = /role="alert"[^>]*>([\s\S]*?)<\//
+				.exec(subdirPreview.text)?.[1]
+				?.replace(/<[^>]+>/g, '')
+				.trim()
+			assert(subdirPreview.status === 200 && subdirBrowse, 'subdir preview links to the files explorer', {
+				status: subdirPreview.status,
+				browseFound: Boolean(subdirBrowse),
+				alertText: subdirAlert ?? null,
+				source: fixture.repoUrl,
+				subdir: fixture.subdir,
+			})
+			const subdirProbe = await browser.get(`${subdirBrowse}/probe.js`)
+			assert(
+				subdirProbe.status === 200 &&
+					subdirProbe.text.includes('data-testid="package-files-code"') &&
+					subdirProbe.text.includes(`name="subdir" value="${fixture.subdir}"`),
+				'subdir preview round-trips: opens the subdir file and keeps the subdir for install',
+				subdirProbe.status,
+			)
+			log('package preview', { source: fixture.flatUrl, subdirSource: fixture.repoUrl })
+		} finally {
+			await fixture.close()
+		}
 	}
 	const junkPreview = await browser.get('/account/package-preview/not*base64/files')
 	assert(junkPreview.status === 400, 'undecodable preview link is a 400', junkPreview.status)
