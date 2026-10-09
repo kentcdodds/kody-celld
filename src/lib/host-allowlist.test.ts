@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { hostMatchesAllowlist, normalizeAllowlistEntry, parseHostAllowlist, parseIpLiteral } from './host-allowlist.ts'
+import {
+	hostMatchesAllowlist,
+	isPrivateIp,
+	normalizeAllowlistEntry,
+	parseHostAllowlist,
+	parseIpLiteral,
+} from './host-allowlist.ts'
 
 describe('normalizeAllowlistEntry', () => {
 	it('accepts hosts, suffixes, IPs and CIDR ranges', () => {
@@ -16,6 +22,16 @@ describe('normalizeAllowlistEntry', () => {
 		assert.equal(normalizeAllowlistEntry('::/0'), '::/0')
 		assert.equal(normalizeAllowlistEntry('10.0.0.1/32'), '10.0.0.1/32')
 		assert.equal(normalizeAllowlistEntry('::1/128'), '::1/128')
+		assert.equal(normalizeAllowlistEntry('my_service'), 'my_service')
+		assert.equal(normalizeAllowlistEntry('*.my_lab.home'), '*.my_lab.home')
+	})
+	it('refuses IPv4-mapped CIDR entries and suggests the IPv4 form', () => {
+		assert.throws(() => normalizeAllowlistEntry('::ffff:0:0/96'), /"::ffff:0:0\/96".*IPv4.*0\.0\.0\.0\/0/)
+		assert.throws(() => normalizeAllowlistEntry('::ffff:10.0.0.0/104'), /"::ffff:10\.0\.0\.0\/104".*10\.0\.0\.0\/8/)
+		assert.throws(
+			() => parseHostAllowlist('[::ffff:10.0.0.0]/104', 'KODY_MCP_ALLOW_PRIVATE_HOSTS'),
+			/KODY_MCP_ALLOW_PRIVATE_HOSTS: .*IPv4.*10\.0\.0\.0\/8/,
+		)
 	})
 	it('rejects anything else', () => {
 		for (const bad of [
@@ -47,6 +63,55 @@ describe('parseHostAllowlist', () => {
 			() => parseHostAllowlist('ok.home,10.0.0.0/40', 'KODY_MCP_ALLOW_PRIVATE_HOSTS'),
 			/KODY_MCP_ALLOW_PRIVATE_HOSTS: "10\.0\.0\.0\/40"/,
 		)
+	})
+})
+
+describe('isPrivateIp', () => {
+	it('flags private v4 ranges and v6 forms that embed or are private space', () => {
+		for (const host of [
+			'0.1.2.3',
+			'10.0.0.5',
+			'100.64.0.1',
+			'127.0.0.1',
+			'169.254.169.254',
+			'172.16.0.1',
+			'192.0.0.8',
+			'192.168.1.1',
+			'198.18.0.1',
+			'224.0.0.1',
+			'240.0.0.1',
+			'255.255.255.255',
+			'::',
+			'::1',
+			'0:0:0:0:0:0:0:1',
+			'[::ffff:0:a00:1]',
+			'[64:ff9b::a00:1]',
+			'64:ff9b:1::1',
+			'[::a00:1]',
+			'[fe90::1]',
+			'fe80::1',
+			'fec0::1',
+			'fc00::1',
+			'fd12:3456::1',
+			'ff02::1',
+			'[0:0:0:0:0:ffff:a00:5]',
+			'2002:a00:1::1',
+			'100::1',
+		]) {
+			assert.equal(isPrivateIp(host), true, host)
+		}
+	})
+	it('passes public addresses and names', () => {
+		for (const host of [
+			'2606:4700::1111',
+			'[2606:4700::1111]',
+			'8.8.8.8',
+			'[64:ff9b::808:808]',
+			'2002:808:808::1',
+			'ha.home',
+		]) {
+			assert.equal(isPrivateIp(host), false, host)
+		}
 	})
 })
 

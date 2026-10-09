@@ -5,7 +5,9 @@
  * match IP-literal hosts only: names are never DNS-resolved here.
  */
 
-const hostnamePattern = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/
+// `_` is allowed in labels: compose service names (`my_service`) are valid Docker DNS names.
+const hostnamePattern =
+	/^(?=.{1,253}$)(?:[a-z0-9_](?:[a-z0-9_-]{0,61}[a-z0-9_])?\.)*[a-z0-9_](?:[a-z0-9_-]{0,61}[a-z0-9_])?$/
 
 function parseIpv4(text: string): bigint | null {
 	const parts = text.split('.')
@@ -68,6 +70,75 @@ export function parseIpLiteral(host: string): { version: 4 | 6; value: bigint } 
 	return { version: 6, value: v6 }
 }
 
+function formatIpv4(value: bigint): string {
+	return [24n, 16n, 8n, 0n].map((shift) => String((value >> shift) & 0xffn)).join('.')
+}
+
+function cidrMask(prefix: number, width: number): bigint {
+	return prefix === 0 ? 0n : ((1n << BigInt(prefix)) - 1n) << BigInt(width - prefix)
+}
+
+function inCidr(value: bigint, network: bigint, prefix: number, width: number) {
+	const mask = cidrMask(prefix, width)
+	return (value & mask) === (network & mask)
+}
+
+const privateV4: ReadonlyArray<readonly [bigint, number]> = (
+	[
+		['0.0.0.0', 8],
+		['10.0.0.0', 8],
+		['100.64.0.0', 10],
+		['127.0.0.0', 8],
+		['169.254.0.0', 16],
+		['172.16.0.0', 12],
+		['192.0.0.0', 24],
+		['192.168.0.0', 16],
+		['198.18.0.0', 15],
+		['224.0.0.0', 4],
+		['240.0.0.0', 4],
+		['255.255.255.255', 32],
+	] as const
+).map(([address, prefix]) => [parseIpv4(address)!, prefix] as const)
+
+const privateV6: ReadonlyArray<readonly [bigint, number]> = (
+	[
+		['64:ff9b:1::', 48], // local-use NAT64
+		['fc00::', 7], // unique local
+		['fe80::', 10], // link-local
+		['fec0::', 10], // site-local (deprecated)
+		['ff00::', 8], // multicast
+		['100::', 64], // discard-only
+	] as const
+).map(([address, prefix]) => [parseIpv6(address)!, prefix] as const)
+
+function isPrivateV4(value: bigint): boolean {
+	return privateV4.some(([network, prefix]) => inCidr(value, network, prefix, 32))
+}
+
+function isPrivateV6(value: bigint): boolean {
+	const low32 = value & 0xffffffffn
+	// ::/96 IPv4-compatible (covers :: and ::1), ::ffff:0:0:0/96 IPv4-translated, 64:ff9b::/96 NAT64: embedded IPv4.
+	const top96 = value >> 32n
+	if (top96 === 0n || top96 === 0xffff0000n || top96 === 0x64ff9bn << 64n) return isPrivateV4(low32)
+	// 2002::/16 6to4: the IPv4 address is the next 32 bits.
+	if (value >> 112n === 0x2002n) return isPrivateV4((value >> 80n) & 0xffffffffn)
+	return privateV6.some(([network, prefix]) => inCidr(value, network, prefix, 128))
+}
+
+/**
+ * True when `host` is an IP literal (brackets and non-canonical v6 forms allowed) in loopback,
+ * private, link-local, CGNAT, multicast, reserved or translation space, including v6 forms that
+ * embed a private IPv4 address (mapped, compatible, translated, NAT64, 6to4). Names return false.
+ */
+export function isPrivateIp(host: string): boolean {
+	const ip = parseIpLiteral(host)
+	if (!ip) return false
+	return ip.version === 4 ? isPrivateV4(ip.value) : isPrivateV6(ip.value)
+}
+
+/** An entry that is well-formed but can never match; its message is shown as is. */
+class UnmatchableEntryError extends Error {}
+
 type Entry =
 	| { kind: 'host'; host: string }
 	| { kind: 'suffix'; suffix: string }
@@ -82,13 +153,22 @@ function parseEntry(raw: string): Entry {
 		const ip = parseIpLiteral(address)
 		const isV4Text = parseIpv4(address) !== null
 		if (!ip) throw new Error(`"${raw.trim()}" is not an IP range`)
+		if (!isV4Text && ip.version === 4) {
+			const prefix = Number(prefixText)
+			const hint =
+				prefix >= 96 && prefix <= 128
+					? `write it as ${formatIpv4(ip.value & cidrMask(prefix - 96, 32))}/${prefix - 96}`
+					: 'write the IPv4 range instead'
+			throw new UnmatchableEntryError(
+				`"${raw.trim()}" is an IPv4-mapped IPv6 range, which never matches: mapped addresses are compared as IPv4, so ${hint}.`,
+			)
+		}
 		const version: 4 | 6 = isV4Text ? 4 : 6
 		const width = version === 4 ? 32 : 128
 		const prefix = Number(prefixText)
 		if (prefix > width) throw new Error(`"${raw.trim()}" has a prefix above /${width}`)
 		const value = version === 4 ? ip.value : (parseIpv6(address.replace(/^\[|\]$/g, '')) ?? 0n)
-		const mask = prefix === 0 ? 0n : ((1n << BigInt(prefix)) - 1n) << BigInt(width - prefix)
-		return { kind: 'cidr', version, network: value & mask, prefix }
+		return { kind: 'cidr', version, network: value & cidrMask(prefix, width), prefix }
 	}
 	const ip = parseIpLiteral(entry)
 	if (ip) {
@@ -120,7 +200,8 @@ export function parseHostAllowlist(raw: string | undefined, variable: string): A
 		if (!part.trim()) continue
 		try {
 			out.push(normalizeAllowlistEntry(part))
-		} catch {
+		} catch (error) {
+			if (error instanceof UnmatchableEntryError) throw new Error(`${variable}: ${error.message}`)
 			throw new Error(`${variable}: "${part.trim()}" is not a hostname, *.suffix, IP or CIDR range.`)
 		}
 	}
@@ -129,9 +210,7 @@ export function parseHostAllowlist(raw: string | undefined, variable: string): A
 
 function inRange(ip: { version: 4 | 6; value: bigint }, entry: Extract<Entry, { kind: 'cidr' }>) {
 	if (ip.version !== entry.version) return false
-	const width = entry.version === 4 ? 32 : 128
-	const mask = entry.prefix === 0 ? 0n : ((1n << BigInt(entry.prefix)) - 1n) << BigInt(width - entry.prefix)
-	return (ip.value & mask) === entry.network
+	return inCidr(ip.value, entry.network, entry.prefix, entry.version === 4 ? 32 : 128)
 }
 
 /** True when `hostname` (a URL hostname, brackets allowed) matches any entry. */

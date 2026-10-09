@@ -47,6 +47,19 @@ describe('assertMcpUrl', () => {
 		assert.throws(() => assertMcpUrl('ftp://mcp.example.com/', config), /http/)
 		assert.throws(() => assertMcpUrl('not a url', config), /valid URL/)
 	})
+	it('refuses private IPv6 literal forms the name check misses', () => {
+		for (const host of [
+			'[::ffff:0:a00:1]',
+			'[64:ff9b::a00:1]',
+			'[::a00:1]',
+			'[fe90::1]',
+			'[0:0:0:0:0:0:0:1]',
+			'[0:0:0:0:0:ffff:a00:5]',
+		]) {
+			assert.throws(() => assertMcpUrl(`https://${host}/mcp`, config), /mcp_host_not_allowed/, host)
+		}
+		assert.equal(assertMcpUrl('https://[2606:4700::1111]/mcp', config).hostname, '[2606:4700::1111]')
+	})
 	it('drops the fragment', () => {
 		assert.equal(assertMcpUrl('https://mcp.example.com/mcp#x', config).href, 'https://mcp.example.com/mcp')
 	})

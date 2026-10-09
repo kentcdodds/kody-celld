@@ -1,5 +1,5 @@
 import { KodyError } from '../lib/errors.ts'
-import { hostMatchesAllowlist, parseIpLiteral } from '../lib/host-allowlist.ts'
+import { hostMatchesAllowlist, isPrivateIp, parseIpLiteral } from '../lib/host-allowlist.ts'
 import { isPrivateHostname } from '../lib/private-hosts.ts'
 import type { McpConfig } from './policy.ts'
 
@@ -43,7 +43,7 @@ export async function assertResolvedHostAllowed(url: URL, config: McpConfig, fet
 	}
 	for (const address of addresses) {
 		if (
-			isPrivateHostname(address.includes(':') ? `[${address}]` : address) &&
+			(isPrivateHostname(address.includes(':') ? `[${address}]` : address) || isPrivateIp(address)) &&
 			!hostMatchesAllowlist(address, config.allowPrivateHosts)
 		) {
 			throw refuse(

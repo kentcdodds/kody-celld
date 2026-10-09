@@ -37,7 +37,7 @@ describe('assertResolvedHostAllowed', () => {
 					],
 				}),
 			),
-			/mcp_host_not_allowed|10\.0\.0\.5/,
+			/10\.0\.0\.5/,
 		)
 		await assert.rejects(
 			assertResolvedHostAllowed(
@@ -46,6 +46,24 @@ describe('assertResolvedHostAllowed', () => {
 				resolver({ 'v6.example.com/AAAA': [{ type: 28, data: 'fd00::1' }] }),
 			),
 			/fd00::1/,
+		)
+	})
+	it('refuses answers in private IPv6 forms the name check misses', async () => {
+		for (const address of ['::ffff:0:a00:1', '64:ff9b::a00:1', '::a00:1', 'fe90::1', '0:0:0:0:0:0:0:1']) {
+			await assert.rejects(
+				assertResolvedHostAllowed(
+					new URL('https://v6.example.com/mcp'),
+					config,
+					resolver({ 'v6.example.com/AAAA': [{ type: 28, data: address }] }),
+				),
+				(error: Error) => error.message.includes(address),
+				address,
+			)
+		}
+		await assertResolvedHostAllowed(
+			new URL('https://pub.example.com/mcp'),
+			config,
+			resolver({ 'pub.example.com/AAAA': [{ type: 28, data: '2606:4700::1111' }] }),
 		)
 	})
 	it('skips IP literals and names trusted by name; refuses unresolvable names', async () => {
