@@ -4,7 +4,7 @@ import { type AppSession } from '#universal/app-session.ts'
 import { CLIENT_ENTRY_HREF } from '#universal/client-entry.ts'
 import { type AppLoaderData, type PageFlash } from '#universal/loader-data.ts'
 import { KODY_CELLD_VERSION } from '../env.ts'
-import { firstPartySecurityHeaders } from './security-headers.ts'
+import { pageResponseHeaders } from './security-headers.ts'
 import { SsrDocument } from './ssr-document.tsx'
 import { openDocumentStream } from './ssr-document-stream.ts'
 
@@ -67,10 +67,6 @@ export async function renderPage(
 	)
 	return new Response(await openDocumentStream(stream), {
 		status: options.status ?? 200,
-		headers: {
-			'content-type': 'text/html; charset=utf-8',
-			...firstPartySecurityHeaders,
-			...Object.fromEntries(new Headers(options.headers ?? {}).entries()),
-		},
+		headers: pageResponseHeaders(options.headers),
 	})
 }

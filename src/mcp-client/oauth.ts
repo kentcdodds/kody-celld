@@ -69,18 +69,21 @@ export function assertAuthorizationServerIssuer(discovery: OAuthDiscoveryState) 
 	}
 }
 
-/** Host the browser will hit on Continue (authorization_endpoint), falling back to the issuer host. */
-export function mcpAuthorizationEndpointHost(discovery: OAuthDiscoveryState): string {
+/** The authorization_endpoint URL from discovery metadata (same field Continue redirects to). */
+function mcpAuthorizationEndpointUrl(discovery: OAuthDiscoveryState): URL | null {
 	const endpoint = (discovery.authorizationServerMetadata as { authorization_endpoint?: unknown } | undefined)
 		?.authorization_endpoint
-	if (typeof endpoint === 'string' && endpoint) {
-		try {
-			return new URL(endpoint).host
-		} catch {
-			/* fall through */
-		}
+	if (typeof endpoint !== 'string' || !endpoint) return null
+	try {
+		return new URL(endpoint)
+	} catch {
+		return null
 	}
-	return new URL(discovery.authorizationServerUrl).host
+}
+
+/** Host the browser will hit on Continue (authorization_endpoint), falling back to the issuer host. */
+export function mcpAuthorizationEndpointHost(discovery: OAuthDiscoveryState): string {
+	return mcpAuthorizationEndpointUrl(discovery)?.host ?? new URL(discovery.authorizationServerUrl).host
 }
 
 /** RFC 9728 → RFC 8414 discovery through the policy fetch. null when the server advertises no authorization server metadata. */
@@ -297,18 +300,11 @@ export async function refreshMcpTokens(input: {
  * The origin the consent page must add to its CSP `form-action` so Continue can
  * redirect there: only an http authorize endpoint that `assertBrowserRedirect`
  * accepts (an allowlisted LAN host). https is already allowed; anything else is refused anyway.
+ * Uses the same `authorization_endpoint` the SDK builds the Continue redirect from.
  */
 export function mcpBrowserFormActionOrigin(discovery: OAuthDiscoveryState, config: McpConfig): string | null {
-	const endpoint = (discovery.authorizationServerMetadata as { authorization_endpoint?: unknown } | undefined)
-		?.authorization_endpoint
-	if (typeof endpoint !== 'string') return null
-	let url: URL
-	try {
-		url = new URL(endpoint)
-	} catch {
-		return null
-	}
-	if (url.protocol !== 'http:') return null
+	const url = mcpAuthorizationEndpointUrl(discovery)
+	if (!url || url.protocol !== 'http:') return null
 	try {
 		return assertBrowserRedirect(url, config).origin
 	} catch {

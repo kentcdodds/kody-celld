@@ -17,11 +17,11 @@ import {
 	completeMcpAuthorization,
 	mcpAuthorizationEndpointHost,
 	mcpAuthorizeUrl,
+	mcpBrowserFormActionOrigin,
 	mcpOAuthScopes,
 	mcpOAuthUrls,
 	pickClientMode,
 	probeMcpOAuth,
-	mcpBrowserFormActionOrigin,
 } from './oauth.ts'
 import type { McpOAuthClient, McpOAuthClientMode, McpOAuthPending } from './oauth-store.ts'
 import { assertMcpServerName, assertMcpUrl, normalizeBearerToken, type McpConfig } from './policy.ts'

@@ -73,3 +73,18 @@ export const firstPartySecurityHeaders: Readonly<Record<string, string>> = {
 	'referrer-policy': 'same-origin',
 	'cache-control': 'no-store',
 }
+
+/**
+ * Headers for a server-rendered page. Page overrides replace first-party
+ * defaults by name (one `content-security-policy` header, never two that
+ * browsers would intersect). Keys are lowercased via `Headers`.
+ */
+export function pageResponseHeaders(
+	overrides?: HeadersInit,
+): Record<string, string> {
+	return {
+		'content-type': 'text/html; charset=utf-8',
+		...firstPartySecurityHeaders,
+		...Object.fromEntries(new Headers(overrides ?? {}).entries()),
+	}
+}

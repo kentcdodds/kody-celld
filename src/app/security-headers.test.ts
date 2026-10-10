@@ -3,6 +3,7 @@ import { describe, it } from 'node:test'
 import {
 	contentSecurityPolicyWithFormAction,
 	firstPartySecurityHeaders,
+	pageResponseHeaders,
 } from './security-headers.ts'
 
 function directive(csp: string, name: string) {
@@ -35,5 +36,31 @@ describe('contentSecurityPolicyWithFormAction', () => {
 		]) {
 			assert.throws(() => contentSecurityPolicyWithFormAction([bad]))
 		}
+	})
+})
+
+describe('pageResponseHeaders', () => {
+	it('replaces the first-party CSP with a page override instead of sending two', () => {
+		const widened = contentSecurityPolicyWithFormAction([
+			'http://172.30.0.85:8123',
+		])
+		const headers = pageResponseHeaders({
+			'Content-Security-Policy': widened,
+			'referrer-policy': 'no-referrer',
+		})
+		assert.equal(headers['content-security-policy'], widened)
+		assert.equal(headers['referrer-policy'], 'no-referrer')
+		assert.equal(
+			headers['x-frame-options'],
+			firstPartySecurityHeaders['x-frame-options'],
+		)
+		const response = new Response(null, { headers })
+		assert.equal(response.headers.get('content-security-policy'), widened)
+		assert.equal(
+			[...response.headers.keys()].filter(
+				(k) => k === 'content-security-policy',
+			).length,
+			1,
+		)
 	})
 })
