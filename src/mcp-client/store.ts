@@ -46,7 +46,8 @@ export type McpServerRecord = {
 export type McpDiscoveryOutcome =
 	| { serverInfo: McpServerInfo; tools: Array<McpTool> }
 	| { error: McpLastError }
-	| { auth: { status: 'authenticating' | 'error'; error: McpLastError } }
+	/** `origin`: write only while the server still has this origin (a late write after a replace is dropped). */
+	| { auth: { status: 'authenticating' | 'error'; error: McpLastError; origin?: string } }
 export type PublicMcpServer = Omit<McpServerRecord, 'tools'> & {
 	toolCount: number
 	tools: Array<{ name: string; title?: string; description?: string }>
@@ -234,6 +235,10 @@ export class McpServerStore {
 		this.require(name)
 		const now = nowIso()
 		if ('auth' in outcome) {
+			// Checked and written synchronously: a bearer record, or one that moved origin, is never relabelled oauth.
+			const row = this.require(name)
+			if (row.bearer_ciphertext !== null) return this.record(row)
+			if (outcome.auth.origin && !sameOrigin(row.url, outcome.auth.origin)) return this.record(row)
 			this.host.sql.exec(
 				`UPDATE mcp_servers SET status = ?, auth_json = '{"kind":"oauth"}', last_error_json = ?, updated_at = ? WHERE name = ?`,
 				outcome.auth.status,
@@ -310,6 +315,9 @@ export class McpServerStore {
 		if ((JSON.parse(row.auth_json) as { kind: string }).kind !== 'oauth') return this.authorization(name)
 		const result = await this.host.oauth.accessToken(name, options)
 		if (result.ok) return `Bearer ${result.accessToken}`
+		// A remove or replace during the refresh wins: hand back the newer record's credential instead of relabelling it.
+		const current = this.require(name)
+		if ((JSON.parse(current.auth_json) as { kind: string }).kind !== 'oauth') return this.authorization(name)
 		this.setAuthState(name, result.status, { phase: 'token exchange', message: result.message, at: nowIso() })
 		if (result.status === 'error') {
 			throw new KodyError('mcp_call_failed', `MCP server "${name}": ${result.message}`, { status: 502 })

@@ -468,7 +468,9 @@ export async function finishMcpOAuth(
 	const park = async (phase: string, message: string) => {
 		await deps.cell.mcpServerSetDiscovery({
 			name: record.name,
-			outcome: { auth: { status: 'authenticating', error: { phase, message, at: nowIso() } } },
+			outcome: {
+				auth: { status: 'authenticating', error: { phase, message, at: nowIso() }, origin: pending.serverOrigin },
+			},
 		})
 		return { name: record.name, ok: false, replay: false, message }
 	}

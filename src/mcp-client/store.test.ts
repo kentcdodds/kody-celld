@@ -203,4 +203,42 @@ describe('McpServerStore', () => {
 		assert.equal(readded.oauth, null)
 		assert.equal(await oauth.tokens('o'), null)
 	})
+
+	it('a late OAuth state write never relabels a bearer record or a record that moved origin', async () => {
+		const { store } = await makeStore()
+		await store.save({ ...base, name: 'b', authorization: 'Bearer static' })
+		const kept = store.setAuthState('b', 'authenticating', { phase: 'authorize', message: 'late', at: 'now' })
+		assert.equal(kept.auth.kind, 'bearer')
+		assert.notEqual(kept.status, 'authenticating')
+		assert.equal(await store.authorization('b'), 'Bearer static')
+		await store.save({ ...base, name: 'm', url: 'https://elsewhere.example/mcp', authorization: null })
+		const moved = store.setDiscovery('m', {
+			auth: {
+				status: 'authenticating',
+				error: { phase: 'authorize', message: 'late', at: 'now' },
+				origin: 'http://172.30.1.5',
+			},
+		})
+		assert.equal(moved.auth.kind, 'none')
+		assert.notEqual(moved.status, 'authenticating')
+	})
+
+	it('callAuthorization: a bearer replace during a refresh wins; the bearer is returned and the record stays bearer', async () => {
+		const { store, oauth } = await makeStore()
+		await store.save({ ...base, name: 'o', authorization: null })
+		store.markOAuth('o')
+		await oauth.saveClient('o', { mode: 'dynamic', information: { client_id: 'cid' } })
+		await oauth.saveTokens('o', { access_token: 'at-1', refresh_token: 'rt-1', token_type: 'Bearer', expires_in: 1 })
+		const authorization = await store.callAuthorization('o', {
+			forceRefresh: false,
+			refresher: async () => {
+				await store.save({ ...base, name: 'o', authorization: 'Bearer newer', replace: true })
+				return { access_token: 'at-2', refresh_token: 'rt-2', token_type: 'Bearer', expires_in: 3600 }
+			},
+		})
+		assert.equal(authorization, 'Bearer newer')
+		const record = store.get('o')!
+		assert.equal(record.auth.kind, 'bearer')
+		assert.notEqual(record.status, 'authenticating')
+	})
 })
