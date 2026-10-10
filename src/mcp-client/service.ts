@@ -50,6 +50,8 @@ export type McpServerCell = {
 		redirectUri: string
 		serverOrigin: string
 		serverUrl: string
+		/** `mcp_servers.id` read when authorization started; the cell refuses the begin if the row changed since. */
+		serverId: string
 		/** The client this attempt authorizes with; the cell records its id on the pending attempt. */
 		clientId: string | null
 		client: McpOAuthClient | null
@@ -451,6 +453,7 @@ export async function startMcpOAuth(
 		redirectUri: urls.callbackUrl,
 		serverOrigin: new URL(record.url).origin,
 		serverUrl: record.url,
+		serverId: record.id,
 		clientId: (begun.savedClient ?? stored.client?.information)?.client_id ?? null,
 		// The SDK saves a client on every path (CIMD included), so the label is the mode this attempt used.
 		client: begun.savedClient ? { mode: clientMode, information: begun.savedClient } : null,
@@ -498,6 +501,21 @@ export async function finishMcpOAuth(
 		}
 		return { name: record.name, ok: false, replay: false, message }
 	}
+	// The attempt is bound to the server row and client it started with (#50, #55): if either changed, nothing of it
+	// (no park, no token request) may reach the server. completeOAuth re-checks both after the exchange for changes during it.
+	if (
+		!pending.serverId ||
+		record.id !== pending.serverId ||
+		!pending.clientId ||
+		claimed.client?.information.client_id !== pending.clientId
+	) {
+		return {
+			name: record.name,
+			ok: false,
+			replay: false,
+			message: `MCP server "${record.name}" was removed or changed while authorizing; nothing was saved. Start again from /account/mcp-servers.`,
+		}
+	}
 	if (input.error) {
 		return park(
 			'authorize',
@@ -515,21 +533,6 @@ export async function finishMcpOAuth(
 			}
 		} else if (metadata?.authorization_response_iss_parameter_supported === true) {
 			return park('authorize', 'The provider omitted the required iss parameter.')
-		}
-	}
-	// The attempt is bound to the server row and client it started with (#50, #55): if either changed, don't even
-	// send the code to the token endpoint. completeOAuth re-checks both after the exchange for changes during it.
-	if (
-		!pending.serverId ||
-		record.id !== pending.serverId ||
-		!pending.clientId ||
-		claimed.client?.information.client_id !== pending.clientId
-	) {
-		return {
-			name: record.name,
-			ok: false,
-			replay: false,
-			message: `MCP server "${record.name}" was removed or changed while authorizing; nothing was saved. Start again from /account/mcp-servers.`,
 		}
 	}
 	let done

@@ -1263,6 +1263,7 @@ export class UserCell extends DurableObject<Env> {
 		redirectUri: string
 		serverOrigin: string
 		serverUrl: string
+		serverId: string
 		clientId: string | null
 		client: McpOAuthClient | null
 		discovery: OAuthDiscoveryState | null
@@ -1271,6 +1272,14 @@ export class UserCell extends DurableObject<Env> {
 		if (!server) {
 			throw new KodyError('mcp_server_not_found', `MCP server "${input.name}" was not found.`, { status: 404 })
 		}
+		// Removed and re-added while the authorization was starting: don't tag the old attempt with the new row (#50).
+		if (server.id !== input.serverId) {
+			throw new KodyError(
+				'mcp_oauth_state_invalid',
+				`MCP server "${input.name}" was removed or changed while authorizing; start again from /account/mcp-servers.`,
+				{ status: 400 },
+			)
+		}
 		if (input.client) await this.mcpOAuth.saveClient(input.name, input.client)
 		if (input.discovery) this.mcpOAuth.saveDiscovery(input.name, input.discovery)
 		return this.mcpOAuth.createPending({
@@ -1278,7 +1287,7 @@ export class UserCell extends DurableObject<Env> {
 			serverName: input.name,
 			serverOrigin: input.serverOrigin,
 			serverUrl: input.serverUrl,
-			serverId: server.id,
+			serverId: input.serverId,
 			clientId: input.clientId,
 			verifier: input.verifier,
 			redirectUri: input.redirectUri,

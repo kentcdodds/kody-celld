@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { DatabaseSync } from 'node:sqlite'
 import { describe, it } from 'node:test'
+import { KodyError } from '../lib/errors.ts'
 import { buildMasterKeyring } from '../lib/crypto.ts'
 import { oauthPolicyFetch } from './client.ts'
 import { refreshMcpTokens } from './oauth.ts'
@@ -65,6 +66,8 @@ async function setup(serverOptions: Parameters<typeof startTestMcpServer>[0] = {
 			discovery: oauth.discovery(name),
 		}),
 		mcpServerOAuthBegin: async (input) => {
+			if (store.get(input.name)?.id !== input.serverId)
+				throw new KodyError('mcp_oauth_state_invalid', 'changed', { status: 400 })
 			if (input.client) await oauth.saveClient(input.name, input.client)
 			if (input.discovery) oauth.saveDiscovery(input.name, input.discovery)
 			return oauth.createPending({
@@ -72,7 +75,7 @@ async function setup(serverOptions: Parameters<typeof startTestMcpServer>[0] = {
 				serverName: input.name,
 				serverOrigin: input.serverOrigin,
 				serverUrl: input.serverUrl,
-				serverId: store.get(input.name)!.id,
+				serverId: input.serverId,
 				clientId: input.clientId,
 				verifier: input.verifier,
 				redirectUri: input.redirectUri,
@@ -581,6 +584,42 @@ describe('OAuth servers', () => {
 		assert.match(finished.message ?? '', /changed while authorizing/)
 		assert.equal(server.oauth!.tokenRequests.filter((r) => r.grantType === 'authorization_code').length, 0)
 		assert.equal(await oauth.tokens('oa'), null)
+	})
+
+	it('a remove + re-add while authorization is starting is refused; no attempt is recorded for the new row (#50)', async () => {
+		const { deps, store } = await setup({ oauth: { mode: 'dynamic' } })
+		await addMcpServer(deps, { name: 'oa', url })
+		const begin = deps.cell.mcpServerOAuthBegin
+		const racing = {
+			...deps,
+			cell: {
+				...deps.cell,
+				mcpServerOAuthBegin: async (input: Parameters<typeof begin>[0]) => {
+					store.remove('oa')
+					await addMcpServer(deps, { name: 'oa', url })
+					return begin(input)
+				},
+			},
+		}
+		await assert.rejects(startMcpOAuth(racing, 'oa'), /mcp_oauth_state_invalid/)
+	})
+
+	it('a provider error on an attempt whose client changed does not park the server (#55)', async () => {
+		const { deps, store, oauth } = await setup({ oauth: { mode: 'dynamic' } })
+		await addMcpServer(deps, { name: 'oa', url })
+		const { authorizationUrl } = await startMcpOAuth(deps, 'oa')
+		const state = new URL(authorizationUrl).searchParams.get('state')!
+		await oauth.setPreregisteredClient('oa', { clientId: 'other-client', clientSecret: null })
+		const before = store.get('oa')!.lastError?.message
+		const finished = await finishMcpOAuth(deps, {
+			state,
+			code: null,
+			error: 'access_denied',
+			errorDescription: 'old attempt',
+		})
+		assert.equal(finished.ok, false)
+		assert.match(finished.message ?? '', /changed while authorizing/)
+		assert.equal(store.get('oa')!.lastError?.message, before, 'the stale attempt wrote nothing to the server')
 	})
 
 	it('remove and re-add at the same URL while the code exchange runs saves nothing (#50)', async () => {
