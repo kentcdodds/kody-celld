@@ -13,6 +13,8 @@ tree.
 
 Setup and architecture for people developing the repo:
 
+- [Contributing index](./docs/contributing/index.md)
+- [Engineering principles](./docs/principles/index.md)
 - [Getting started](./docs/getting-started.md)
 - [Architecture](./docs/architecture.md)
 - [Agent guide](./AGENTS.md)
