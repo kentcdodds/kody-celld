@@ -34,6 +34,7 @@ export const mcpOAuthSchema = `
 		state TEXT PRIMARY KEY,
 		server_name TEXT NOT NULL,
 		server_origin TEXT NOT NULL,
+		server_url TEXT NOT NULL,
 		verifier_iv TEXT NOT NULL,
 		verifier_ciphertext TEXT NOT NULL,
 		verifier_key_id TEXT,
@@ -66,6 +67,7 @@ export type McpOAuthPending = {
 	state: string
 	serverName: string
 	serverOrigin: string
+	serverUrl: string
 	verifier: string
 	redirectUri: string
 	createdAt: string
@@ -125,6 +127,7 @@ type PendingRow = {
 	state: string
 	server_name: string
 	server_origin: string
+	server_url: string
 	verifier_iv: string
 	verifier_ciphertext: string
 	verifier_key_id: string | null
@@ -396,6 +399,7 @@ export class McpOAuthStore {
 		state: string
 		serverName: string
 		serverOrigin: string
+		serverUrl: string
 		verifier: string
 		redirectUri: string
 	}) {
@@ -408,11 +412,12 @@ export class McpOAuthStore {
 		const verifier = await this.seal(input.verifier)
 		const expiresAt = new Date(now + mcpOAuthPendingTtlMs).toISOString()
 		this.host.sql.exec(
-			`INSERT INTO mcp_server_oauth_pending (state, server_name, server_origin, verifier_iv, verifier_ciphertext, verifier_key_id, redirect_uri, created_at, expires_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			`INSERT INTO mcp_server_oauth_pending (state, server_name, server_origin, server_url, verifier_iv, verifier_ciphertext, verifier_key_id, redirect_uri, created_at, expires_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			input.state,
 			input.serverName,
 			input.serverOrigin,
+			input.serverUrl,
 			verifier.iv,
 			verifier.ciphertext,
 			verifier.keyId,
@@ -437,6 +442,7 @@ export class McpOAuthStore {
 			state: row.state,
 			serverName: row.server_name,
 			serverOrigin: row.server_origin,
+			serverUrl: row.server_url,
 			verifier: (await this.open(row.verifier_iv, row.verifier_ciphertext, row.verifier_key_id)) ?? '',
 			redirectUri: row.redirect_uri,
 			createdAt: row.created_at,

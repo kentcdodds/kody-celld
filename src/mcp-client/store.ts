@@ -177,11 +177,12 @@ export class McpServerStore {
 				{ status: 409 },
 			)
 		}
-		// replace without a new token keeps the sealed bearer only for the same origin
+		// Bearer: replace without a new token keeps the sealed bearer only for the same origin
 		// (otherwise discovery would send it to a new host). Clearing is remove + re-add.
+		// OAuth: any URL change (path included) drops the grant; tokens are bound to the resource URL.
 		// A fresh add also clears: an OAuth row left under this name (a write that raced a remove) must not carry over.
-		const crossOrigin = existing !== null && !sameOrigin(existing.url, input.url)
-		if (!existing || crossOrigin || input.authorization) this.host.oauth.clear(input.name)
+		const urlChanged = existing !== null && existing.url !== input.url
+		if (!existing || urlChanged || input.authorization) this.host.oauth.clear(input.name)
 		let sealed: {
 			iv: string | null
 			ciphertext: string | null
@@ -204,7 +205,7 @@ export class McpServerStore {
 				keyId: existing.bearer_key_id,
 				kind: 'bearer',
 			}
-		} else if (existing && !crossOrigin && (JSON.parse(existing.auth_json) as { kind: string }).kind === 'oauth') {
+		} else if (existing && !urlChanged && (JSON.parse(existing.auth_json) as { kind: string }).kind === 'oauth') {
 			sealed.kind = 'oauth'
 		}
 		const now = nowIso()
@@ -272,19 +273,21 @@ export class McpServerStore {
 
 	/**
 	 * Saves a code-exchange result for the server the attempt was started for. Everything is sealed first; then,
-	 * with no await before the write, the server must still exist, have `serverOrigin` and not use a bearer.
+	 * with no await before the write, the server must still exist, have the same URL, and not use a bearer.
 	 * Otherwise nothing is written (a remove or replace during the exchange wins).
 	 */
 	async completeOAuth(input: {
 		name: string
 		serverOrigin: string
+		/** Full server URL at authorization start; path changes refuse the grant write. */
+		serverUrl: string
 		tokens: OAuthTokens
 		savedClient: OAuthClientInformationMixed | null
 	}): Promise<McpServerRecord> {
 		const commit = await this.host.oauth.sealGrant(input.name, input)
 		const row = this.row(input.name)
 		const kind = row ? (JSON.parse(row.auth_json) as { kind: string }).kind : null
-		if (!row || !sameOrigin(row.url, input.serverOrigin) || kind === 'bearer') {
+		if (!row || row.url !== input.serverUrl || !sameOrigin(row.url, input.serverOrigin) || kind === 'bearer') {
 			throw new KodyError(
 				'mcp_oauth_state_invalid',
 				`MCP server "${input.name}" was removed or changed while authorizing; nothing was saved. Start again from /account/mcp-servers.`,

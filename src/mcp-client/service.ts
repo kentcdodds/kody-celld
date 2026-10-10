@@ -49,6 +49,7 @@ export type McpServerCell = {
 		verifier: string
 		redirectUri: string
 		serverOrigin: string
+		serverUrl: string
 		client: McpOAuthClient | null
 		discovery: OAuthDiscoveryState | null
 	}): Promise<{ expiresAt: string }>
@@ -59,10 +60,11 @@ export type McpServerCell = {
 		client: McpOAuthClient | null
 		discovery: OAuthDiscoveryState | null
 	} | null>
-	/** Refuses (mcp_oauth_state_invalid, nothing saved) when the server was removed, moved off `serverOrigin` or given a bearer. */
+	/** Refuses (mcp_oauth_state_invalid, nothing saved) when the server was removed, URL-changed or given a bearer. */
 	mcpServerOAuthComplete(input: {
 		name: string
 		serverOrigin: string
+		serverUrl: string
 		tokens: OAuthTokens
 		savedClient: OAuthClientInformationMixed | null
 	}): Promise<McpServerRecord>
@@ -444,6 +446,7 @@ export async function startMcpOAuth(
 		verifier: begun.verifier,
 		redirectUri: urls.callbackUrl,
 		serverOrigin: new URL(record.url).origin,
+		serverUrl: record.url,
 		// The SDK saves a client on every path (CIMD included), so the label is the mode this attempt used.
 		client: begun.savedClient ? { mode: clientMode, information: begun.savedClient } : null,
 		discovery: begun.discovery,
@@ -473,7 +476,7 @@ export async function finishMcpOAuth(
 	const { pending } = claimed
 	if (!claimed.firstClaim) return { name: pending.serverName, ok: true, replay: true, message: null }
 	const record = await deps.cell.mcpServerGet(pending.serverName)
-	if (claimed.expired || !record || new URL(record.url).origin !== pending.serverOrigin) throw invalid()
+	if (claimed.expired || !record || record.url !== pending.serverUrl) throw invalid()
 	const park = async (phase: string, message: string) => {
 		// A cancelled or failed re-authorization must not mark a still-valid grant as needing auth.
 		if (!record.oauth?.hasAccessToken) {
@@ -536,6 +539,7 @@ export async function finishMcpOAuth(
 		await deps.cell.mcpServerOAuthComplete({
 			name: record.name,
 			serverOrigin: pending.serverOrigin,
+			serverUrl: pending.serverUrl,
 			tokens: done.tokens,
 			savedClient: done.savedClient,
 		})
@@ -554,9 +558,8 @@ export async function finishMcpOAuth(
 	}
 }
 
-export type McpServerResult = PublicMcpServer & {
+export type McpServerResult = Omit<PublicMcpServer, 'oauth'> & {
 	hasRefreshToken: boolean
-	oauthClientMode: McpOAuthClientMode | null
 	authUrl: string | null
 	oauthClientOrigin: string
 	oauthCallbackUrl: string
@@ -575,10 +578,11 @@ export function mcpServerResult(record: McpServerRecord, publicUrl: string): Mcp
 			: authUrl
 				? `The server requires OAuth authorization. Ask the user to open ${authUrl} to authorize Kody. If the provider rejects Kody's origin or redirect URI, allow ${urls.clientOrigin} and ${urls.callbackUrl}${urls.clientMetadataUrl ? ` (client id ${urls.clientMetadataUrl})` : ''}. Then check mcpServerList.`
 				: `Status "${record.status}": ${record.lastError?.message ?? 'unknown error'} Fix it and call mcpServerRefresh or mcpServerReconnect.`
+	// Capability contract matches hosted: hasRefreshToken + authUrl, no oauthClientMode / oauth summary.
+	const { oauth: _oauth, ...pub } = publicMcpServer(record)
 	return {
-		...publicMcpServer(record),
+		...pub,
 		hasRefreshToken: record.oauth?.hasRefreshToken ?? false,
-		oauthClientMode: record.oauth?.clientMode ?? null,
 		authUrl,
 		oauthClientOrigin: urls.clientOrigin,
 		oauthCallbackUrl: urls.callbackUrl,

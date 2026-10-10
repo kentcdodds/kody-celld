@@ -1261,6 +1261,7 @@ export class UserCell extends DurableObject<Env> {
 		verifier: string
 		redirectUri: string
 		serverOrigin: string
+		serverUrl: string
 		client: McpOAuthClient | null
 		discovery: OAuthDiscoveryState | null
 	}) {
@@ -1273,6 +1274,7 @@ export class UserCell extends DurableObject<Env> {
 			state: input.state,
 			serverName: input.name,
 			serverOrigin: input.serverOrigin,
+			serverUrl: input.serverUrl,
 			verifier: input.verifier,
 			redirectUri: input.redirectUri,
 		})
@@ -1288,6 +1290,7 @@ export class UserCell extends DurableObject<Env> {
 	async mcpServerOAuthComplete(input: {
 		name: string
 		serverOrigin: string
+		serverUrl: string
 		tokens: OAuthTokens
 		savedClient: OAuthClientInformationMixed | null
 	}) {

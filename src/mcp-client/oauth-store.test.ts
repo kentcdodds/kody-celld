@@ -98,12 +98,14 @@ describe('McpOAuthStore', () => {
 			state: 's1',
 			serverName: 'home',
 			serverOrigin: 'http://172.30.1.5',
+			serverUrl: 'http://172.30.1.5/mcp',
 			verifier: 'v',
 			redirectUri: 'https://k/cb',
 		})
 		const first = (await store.claimPending('s1'))!
 		assert.equal(first.firstClaim, true)
 		assert.equal(first.pending.verifier, 'v')
+		assert.equal(first.pending.serverUrl, 'http://172.30.1.5/mcp')
 		assert.equal((await store.claimPending('s1'))!.firstClaim, false)
 		assert.equal(await store.claimPending('nope'), null)
 	})
@@ -218,6 +220,7 @@ describe('McpOAuthStore', () => {
 			state: 's1',
 			serverName: 'home',
 			serverOrigin: 'http://172.30.1.5',
+			serverUrl: 'http://172.30.1.5/mcp',
 			verifier: 'v',
 			redirectUri: 'https://k/cb',
 		})

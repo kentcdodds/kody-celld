@@ -71,6 +71,7 @@ async function setup(serverOptions: Parameters<typeof startTestMcpServer>[0] = {
 				state: input.state,
 				serverName: input.name,
 				serverOrigin: input.serverOrigin,
+				serverUrl: input.serverUrl,
 				verifier: input.verifier,
 				redirectUri: input.redirectUri,
 			})
@@ -565,19 +566,30 @@ describe('OAuth servers', () => {
 		assert.equal(server.requests.length, before)
 	})
 
-	it('results carry top-level hasRefreshToken and oauthClientMode', async () => {
+	it('results carry top-level hasRefreshToken and omit oauthClientMode / oauth', async () => {
 		const { deps, server } = await setup({ oauth: { mode: 'dynamic' } })
 		const parked = mcpServerResult(await addMcpServer(deps, { name: 'oa', url }), deps.publicUrl)
-		assert.deepEqual(
-			{ hasRefreshToken: parked.hasRefreshToken, oauthClientMode: parked.oauthClientMode },
-			{ hasRefreshToken: false, oauthClientMode: null },
-		)
+		assert.equal(parked.hasRefreshToken, false)
+		assert.equal('oauthClientMode' in parked, false)
+		assert.equal('oauth' in parked, false)
 		await authorizeThroughBrowser(deps, server, 'oa')
 		const ready = mcpServerResult((await deps.cell.mcpServerGet('oa'))!, deps.publicUrl)
-		assert.deepEqual(
-			{ hasRefreshToken: ready.hasRefreshToken, oauthClientMode: ready.oauthClientMode },
-			{ hasRefreshToken: true, oauthClientMode: 'dynamic' },
-		)
+		assert.equal(ready.hasRefreshToken, true)
+		assert.equal('oauthClientMode' in ready, false)
+		assert.equal('oauth' in ready, false)
+	})
+
+	it('a same-origin path replace during code exchange saves nothing', async () => {
+		const { deps, server, store, oauth } = await setup({ oauth: { mode: 'dynamic' } })
+		await addMcpServer(deps, { name: 'oa', url })
+		const callback = await consentAndHoldExchange(deps, server, 'oa')
+		await addMcpServer(deps, { name: 'oa', url: `${url}/other`, replace: true })
+		callback.release()
+		const finished = await callback.finished
+		assert.equal(finished.ok, false)
+		assert.match(finished.message ?? '', /removed or changed while authorizing/)
+		assert.equal(await oauth.tokens('oa'), null)
+		assert.notEqual(store.get('oa')!.url, url)
 	})
 
 	it('a client metadata document start is labelled metadata even when an old dynamic client is stored', async () => {

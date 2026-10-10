@@ -137,14 +137,20 @@ describe('McpServerStore', () => {
 		assert.doesNotMatch(JSON.stringify(publicMcpServer(record)), /at-secret|rt-secret/)
 	})
 
-	it('replace to another origin, replace with a bearer, and remove all drop OAuth data', async () => {
+	it('replace that changes the URL (path included), a bearer replace, and remove all drop OAuth data', async () => {
 		const { store, oauth } = await makeStore()
 		await store.save({ ...base, name: 'home', authorization: null })
 		store.markOAuth('home')
 		await oauth.saveTokens('home', { access_token: 'at-1', token_type: 'Bearer' })
 		await store.save({ ...base, url: 'http://172.30.1.5/other', name: 'home', authorization: null, replace: true })
-		assert.equal(store.get('home')!.auth.kind, 'oauth', 'same-origin replace keeps oauth')
-		assert.equal((await oauth.tokens('home'))!.accessToken, 'at-1')
+		assert.equal(store.get('home')!.auth.kind, 'none', 'same-origin path change drops oauth')
+		assert.equal(oauth.summary('home'), null)
+		await store.save({ ...base, name: 'home', authorization: null, replace: true })
+		store.markOAuth('home')
+		await oauth.saveTokens('home', { access_token: 'at-1b', token_type: 'Bearer' })
+		await store.save({ ...base, name: 'home', authorization: null, replace: true })
+		assert.equal(store.get('home')!.auth.kind, 'oauth', 'identical URL keeps oauth')
+		assert.equal((await oauth.tokens('home'))!.accessToken, 'at-1b')
 		await store.save({
 			...base,
 			url: 'https://elsewhere.example/mcp',

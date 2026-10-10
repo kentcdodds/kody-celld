@@ -49,8 +49,9 @@ capabilities are refused from package code (`forbidden_from_package`);
 
 A server that answers `401` without a bearer token and advertises an OAuth
 authorization server (RFC 9728 protected resource metadata) is added as an
-OAuth server. A bearer token and OAuth are exclusive: a server added with
-`bearerToken` never starts OAuth.
+OAuth server. A bearer token and OAuth are exclusive on celld: a server added
+with `bearerToken` never starts OAuth (hosted Kody allows both; see
+kentcdodds/kody#3203).
 
 ### Flow
 
@@ -71,15 +72,16 @@ OAuth server. A bearer token and OAuth are exclusive: a server added with
    authorization expires after 15 minutes and works once: a replayed
    callback changes nothing, and an unknown `state` is refused
    (`mcp_oauth_state_invalid`).
-4. The server is `ready`; `mcpServerList` shows `authUrl: null`,
-   `hasRefreshToken` and `oauthClientMode` (`'preregistered'`, `'metadata'`,
-   `'dynamic'` or `null`; the same values are under `oauth`). Tokens, client
-   secrets and PKCE verifiers never appear in capability results, errors, run
-   history, logs or HTML.
+4. The server is `ready`; `mcpServerList` shows `authUrl: null` and
+   `hasRefreshToken`. Capability results do not include `oauthClientMode` or an
+   `oauth` summary (those stay on the account and consent pages, matching
+   hosted). Tokens, client secrets and PKCE verifiers never appear in capability
+   results, errors, run history, logs or HTML.
 
-If the server is removed or replaced (another origin, or a bearer token) while
-the provider round trip is running, the callback saves nothing and reports an
-error; start again from the new server's `authUrl`.
+If the server is removed or replaced (another URL including a same-origin path
+change, or a bearer token) while the provider round trip is running, the
+callback saves nothing and reports an error; start again from the new server's
+`authUrl`.
 
 `{origin}` is always the origin of `KODY_PUBLIC_URL`, never the request host.
 
