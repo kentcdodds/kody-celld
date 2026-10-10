@@ -358,15 +358,18 @@ describe('McpOAuthStore', () => {
 		await store.saveClient('home', dynamicClient)
 		await store.saveTokens('home', { access_token: 'at-1', refresh_token: 'rt-1', token_type: 'Bearer', expires_in: 1 })
 		let release!: () => void
+		let reached!: () => void
 		const gate = new Promise<void>((resolve) => (release = resolve))
+		const inRefresher = new Promise<void>((resolve) => (reached = resolve))
 		const pending = store.accessToken('home', {
 			forceRefresh: true,
 			refresher: async () => {
+				reached()
 				await gate
 				return { access_token: 'at-old-client', refresh_token: 'rt-old-client', token_type: 'Bearer', expires_in: 3600 }
 			},
 		})
-		await new Promise((r) => setTimeout(r, 5))
+		await inRefresher
 		store.clearClient('home')
 		release()
 		const result = await pending

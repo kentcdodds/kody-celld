@@ -517,6 +517,21 @@ export async function finishMcpOAuth(
 			return park('authorize', 'The provider omitted the required iss parameter.')
 		}
 	}
+	// The attempt is bound to the server row and client it started with (#50, #55): if either changed, don't even
+	// send the code to the token endpoint. completeOAuth re-checks both after the exchange for changes during it.
+	if (
+		!pending.serverId ||
+		record.id !== pending.serverId ||
+		!pending.clientId ||
+		claimed.client?.information.client_id !== pending.clientId
+	) {
+		return {
+			name: record.name,
+			ok: false,
+			replay: false,
+			message: `MCP server "${record.name}" was removed or changed while authorizing; nothing was saved. Start again from /account/mcp-servers.`,
+		}
+	}
 	let done
 	try {
 		done = await completeMcpAuthorization({
