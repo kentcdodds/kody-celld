@@ -12,8 +12,8 @@ export function oauthAttemptIdentityMatches(input: {
 }): boolean {
 	return Boolean(
 		input.pendingServerId &&
-			input.serverId === input.pendingServerId &&
-			input.pendingClientId &&
-			input.clientId === input.pendingClientId,
+		input.serverId === input.pendingServerId &&
+		input.pendingClientId &&
+		input.clientId === input.pendingClientId,
 	)
 }
