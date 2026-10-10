@@ -94,7 +94,13 @@ Kody picks the first client mode that applies, per server:
 2. **Client metadata document:** when `KODY_PUBLIC_URL` is `https:` and the
    authorization server advertises `client_id_metadata_document_supported`,
    the client id is `{origin}/oauth/client-metadata.json`, which Kody serves
-   publicly. On an `http:` origin the document is not served (`404`).
+   publicly. On an `http:` origin the document is not served (`404`). The
+   authorization server fetches this URL itself, so it must be reachable
+   **from the provider**, which for a public provider means from the
+   internet. On an internal-only deployment, either publish just that path,
+   for example with a Cloudflare Tunnel public hostname limited to
+   `^/oauth/client-metadata\.json$`, so the rest of Kody stays private, or
+   use a pre-registered client, which takes precedence.
 3. **Dynamic client registration** (RFC 7591), when the authorization server
    has a `registration_endpoint`. The registered client is stored and reused.
 4. Otherwise the server stays in `status: 'error'` with a message saying it
@@ -120,9 +126,28 @@ private or `http:` host, list **its** host in `KODY_MCP_ALLOW_PRIVATE_HOSTS`
 too, not only the MCP server's host. Requests that carry codes, verifiers or
 secrets follow only same-origin `307`/`308` redirects.
 
+A LAN authorization server may use plain `http:` when its host is in
+`KODY_MCP_ALLOW_PRIVATE_HOSTS`. The consent page then allows that one origin in
+its `form-action`, so **Continue** can send the browser there. Any other
+`http:` authorize URL is refused.
+
+Home Assistant (the **Model Context Protocol Server** integration) is the
+common case. Add it by its LAN address, list that address in the allowlist,
+and authorize:
+
+```js
+// KODY_MCP_ALLOW_PRIVATE_HOSTS=192.168.1.20 (Home Assistant's LAN IP)
+await kody.mcpServerAdd({ name: 'home', url: 'http://192.168.1.20:8123/api/mcp' })
+// → status 'authenticating'; open authUrl, log in to Home Assistant, approve
+```
+
 Home Assistant identifies clients by URL: its `client_id` is Kody's metadata
 document URL. That needs an `https:` `KODY_PUBLIC_URL` that Home Assistant
-can reach, so it can fetch `{origin}/oauth/client-metadata.json`.
+can reach, so it can fetch `{origin}/oauth/client-metadata.json`. Use the LAN
+address rather than a public Home Assistant URL: Home Assistant only
+advertises absolute endpoints and an `issuer` for a URL it knows about, so
+without an "Internet" URL configured in Home Assistant its public metadata is
+incomplete and is refused.
 
 ### Pre-registered client (GitHub)
 
@@ -164,6 +189,16 @@ capabilities, it is refused from package code.
   consent page, or a `lastError` naming the authorization server's host): add the
   authorization server's host to `KODY_MCP_ALLOW_PRIVATE_HOSTS`, not only the
   MCP server's host (see [LAN authorization servers](#lan-authorization-servers)).
+- **"CIMD fetch failed … HTTP 530"** (or 404/403) at the provider: the
+  authorization server could not fetch `{origin}/oauth/client-metadata.json`,
+  usually because Kody is not reachable from the internet. Publish only that
+  path, or enter a pre-registered client (see
+  [How Kody identifies itself](#how-kody-identifies-itself)).
+- **Continue on the consent page does nothing:** the browser refused to follow
+  the redirect to the provider, and the console shows a CSP `form-action`
+  violation. Kody allows `https:` authorize URLs and `http:` ones on hosts in
+  `KODY_MCP_ALLOW_PRIVATE_HOSTS`. Check that the authorization server's host is
+  in that list.
 - **The refresh token was rejected** (`status: 'authenticating'`, "The refresh
   token was rejected; authorize again"): open `authUrl` and authorize again.
   After a transient refresh failure (`status: 'error'`, tokens kept),
