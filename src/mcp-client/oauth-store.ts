@@ -83,6 +83,20 @@ export type McpAccessResult =
 export const mcpOAuthPendingTtlMs = 15 * 60_000
 
 type Sealed = { iv: string; ciphertext: string; keyId: string }
+type SealedClient = {
+	clientId: string
+	secret: Sealed | null
+	issuer: string | null
+	infoJson: string
+}
+type SealedTokens = {
+	access: Sealed
+	refresh: Sealed | null
+	tokenType: string
+	scope: string | null
+	expiresAt: string | null
+	issuer: string | null
+}
 type Row = {
 	server_name: string
 	client_mode: string | null
@@ -196,26 +210,43 @@ export class McpOAuthStore {
 		}
 	}
 
-	async saveClient(name: string, client: McpOAuthClient) {
-		const { client_id, client_secret, issuer, ...rest } = client.information as OAuthClientInformationMixed & {
+	private async sealClient(information: OAuthClientInformationMixed): Promise<SealedClient> {
+		const { client_id, client_secret, issuer, ...rest } = information as OAuthClientInformationMixed & {
 			client_secret?: string
 			issuer?: string
 		}
-		const secret = client_secret ? await this.seal(client_secret) : null
+		return {
+			clientId: client_id,
+			secret: client_secret ? await this.seal(client_secret) : null,
+			issuer: issuer ?? null,
+			infoJson: JSON.stringify(rest),
+		}
+	}
+
+	private writeClient(name: string, mode: McpOAuthClientMode, client: SealedClient) {
 		this.ensureRow(name)
 		this.host.sql.exec(
 			`UPDATE mcp_server_oauth SET client_mode = ?, client_id = ?, client_secret_iv = ?, client_secret_ciphertext = ?,
 			   client_secret_key_id = ?, client_issuer = ?, client_info_json = ?, updated_at = ? WHERE server_name = ?`,
-			client.mode,
-			client_id,
-			secret?.iv ?? null,
-			secret?.ciphertext ?? null,
-			secret?.keyId ?? null,
-			issuer ?? null,
-			JSON.stringify(rest),
+			mode,
+			client.clientId,
+			client.secret?.iv ?? null,
+			client.secret?.ciphertext ?? null,
+			client.secret?.keyId ?? null,
+			client.issuer,
+			client.infoJson,
 			nowIso(),
 			name,
 		)
+	}
+
+	/** The stored mode, for client information the SDK hands back (DCR result, or an issuer-stamped stored client). */
+	private storedMode(name: string): McpOAuthClientMode {
+		return (this.row(name)?.client_mode as McpOAuthClientMode | null) ?? 'dynamic'
+	}
+
+	async saveClient(name: string, client: McpOAuthClient) {
+		this.writeClient(name, client.mode, await this.sealClient(client.information))
 	}
 
 	/** An operator-supplied client (account page only). Replaces any stored client and drops the tokens issued to it. */
@@ -237,8 +268,8 @@ export class McpOAuthStore {
 
 	/** The SDK hands back client information (DCR result, or an issuer-stamped stored client): keep the stored mode. */
 	async saveClientInformation(name: string, information: OAuthClientInformationMixed) {
-		const mode = (this.row(name)?.client_mode as McpOAuthClientMode | null) ?? 'dynamic'
-		await this.saveClient(name, { mode, information })
+		const sealed = await this.sealClient(information)
+		this.writeClient(name, this.storedMode(name), sealed)
 	}
 
 	clearClient(name: string) {
@@ -265,36 +296,65 @@ export class McpOAuthStore {
 		}
 	}
 
-	async saveTokens(name: string, tokens: OAuthTokens) {
-		const access = await this.seal(tokens.access_token)
-		const refresh = tokens.refresh_token ? await this.seal(tokens.refresh_token) : null
+	private async sealTokens(tokens: OAuthTokens): Promise<SealedTokens> {
+		return {
+			access: await this.seal(tokens.access_token),
+			refresh: tokens.refresh_token ? await this.seal(tokens.refresh_token) : null,
+			tokenType: tokens.token_type,
+			scope: tokens.scope ?? null,
+			expiresAt:
+				typeof tokens.expires_in === 'number' ? new Date(Date.now() + tokens.expires_in * 1000).toISOString() : null,
+			issuer: tokens.issuer ?? null,
+		}
+	}
+
+	/** Synchronous, so a caller can re-check the server right before it. `create: false` never re-creates a cleared row. */
+	private writeTokens(name: string, tokens: SealedTokens, create: boolean) {
+		if (create) this.ensureRow(name)
 		const now = nowIso()
-		const expiresAt =
-			typeof tokens.expires_in === 'number' ? new Date(Date.now() + tokens.expires_in * 1000).toISOString() : null
-		this.ensureRow(name)
 		this.host.sql.exec(
 			`UPDATE mcp_server_oauth SET access_iv = ?, access_ciphertext = ?, access_key_id = ?, token_type = ?, scope = ?,
 			   expires_at = ?, token_issuer = COALESCE(?, token_issuer), refreshed_at = ?, updated_at = ? WHERE server_name = ?`,
-			access.iv,
-			access.ciphertext,
-			access.keyId,
-			tokens.token_type,
-			tokens.scope ?? null,
-			expiresAt,
-			tokens.issuer ?? null,
+			tokens.access.iv,
+			tokens.access.ciphertext,
+			tokens.access.keyId,
+			tokens.tokenType,
+			tokens.scope,
+			tokens.expiresAt,
+			tokens.issuer,
 			now,
 			now,
 			name,
 		)
 		// RFC 6749 §6: a refresh response may omit refresh_token; keep the stored one then.
-		if (refresh) {
+		if (tokens.refresh) {
 			this.host.sql.exec(
 				'UPDATE mcp_server_oauth SET refresh_iv = ?, refresh_ciphertext = ?, refresh_key_id = ? WHERE server_name = ?',
-				refresh.iv,
-				refresh.ciphertext,
-				refresh.keyId,
+				tokens.refresh.iv,
+				tokens.refresh.ciphertext,
+				tokens.refresh.keyId,
 				name,
 			)
+		}
+	}
+
+	async saveTokens(name: string, tokens: OAuthTokens) {
+		this.writeTokens(name, await this.sealTokens(tokens), true)
+	}
+
+	/**
+	 * Seals a code-exchange result and returns a synchronous commit, so the caller can re-check the server
+	 * (exists, origin, auth kind) after the last await and before anything is written.
+	 */
+	async sealGrant(
+		name: string,
+		input: { tokens: OAuthTokens; savedClient: OAuthClientInformationMixed | null },
+	): Promise<() => void> {
+		const client = input.savedClient ? await this.sealClient(input.savedClient) : null
+		const tokens = await this.sealTokens(input.tokens)
+		return () => {
+			if (client) this.writeClient(name, this.storedMode(name), client)
+			this.writeTokens(name, tokens, true)
 		}
 	}
 
@@ -402,7 +462,10 @@ export class McpOAuthStore {
 		}
 		const again = this.inFlight.get(name)
 		if (again) return again
-		const task = this.refreshNow(name, tokens, options.refresher).finally(() => this.inFlight.delete(name))
+		const task: Promise<McpAccessResult> = this.refreshNow(name, tokens, options.refresher).finally(() => {
+			// clear() may have dropped this entry and a newer refresh registered its own: leave that one.
+			if (this.inFlight.get(name) === task) this.inFlight.delete(name)
+		})
 		this.inFlight.set(name, task)
 		return task
 	}
@@ -455,8 +518,10 @@ export class McpOAuthStore {
 			]).slice(0, 300)
 			return { ok: false, status: 'error', message: `Token refresh failed: ${message}` }
 		}
+		// Seal first, then check and write with no await in between: a clear() can never be undone by this write.
+		const sealed = await this.sealTokens({ ...next, issuer: next.issuer ?? tokens.issuer ?? undefined })
 		if (changed()) return changedResult
-		await this.saveTokens(name, { ...next, issuer: next.issuer ?? tokens.issuer ?? undefined })
+		this.writeTokens(name, sealed, false)
 		return { ok: true, accessToken: next.access_token }
 	}
 

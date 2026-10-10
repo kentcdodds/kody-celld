@@ -192,4 +192,15 @@ describe('McpServerStore', () => {
 		await setRing('r2', 'r1')
 		assert.deepEqual(await store.rekey(), { resealed: 3, remaining: 0 })
 	})
+
+	it('a fresh add drops an OAuth row orphaned under the same name', async () => {
+		const { store, oauth } = await makeStore()
+		await store.save({ ...base, name: 'o', authorization: null })
+		store.remove('o')
+		// a token write that lost a race with remove() left a row behind
+		await oauth.saveTokens('o', { access_token: 'at-old', refresh_token: 'rt-old', token_type: 'Bearer' })
+		const readded = await store.save({ ...base, name: 'o', url: 'http://172.30.1.6/mcp', authorization: null })
+		assert.equal(readded.oauth, null)
+		assert.equal(await oauth.tokens('o'), null)
+	})
 })

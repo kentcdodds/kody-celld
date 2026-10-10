@@ -81,11 +81,7 @@ async function setup(serverOptions: Parameters<typeof startTestMcpServer>[0] = {
 			const name = claimed.pending.serverName
 			return { ...claimed, client: await oauth.client(name), discovery: oauth.discovery(name) }
 		},
-		mcpServerOAuthComplete: async (input) => {
-			if (input.savedClient) await oauth.saveClientInformation(input.name, input.savedClient)
-			await oauth.saveTokens(input.name, input.tokens)
-			return store.markOAuth(input.name)
-		},
+		mcpServerOAuthComplete: async (input) => store.completeOAuth(input),
 		mcpServerOAuthSetClient: async (input) => {
 			if (!store.get(input.name)) throw new Error('mcp_server_not_found')
 			await oauth.setPreregisteredClient(input.name, { clientId: input.clientId, clientSecret: input.clientSecret })
@@ -110,7 +106,7 @@ async function setup(serverOptions: Parameters<typeof startTestMcpServer>[0] = {
 		fetch: server.fetch,
 		publicUrl: 'http://localhost:8080',
 	}
-	return { deps, store, server, oauth }
+	return { deps, store, server, oauth, sql }
 }
 
 const url = 'http://172.30.1.5/mcp'
@@ -314,6 +310,34 @@ async function authorizeThroughBrowser(deps: McpDeps, server: ReturnType<typeof 
 	})
 }
 
+/** Consent, then a callback whose token request is held until release(): lets a test change the server mid-exchange. */
+async function consentAndHoldExchange(deps: McpDeps, server: ReturnType<typeof startTestMcpServer>, name: string) {
+	const { authorizationUrl } = await startMcpOAuth(deps, name)
+	const location = new URL((await server.fetch(authorizationUrl)).headers.get('location')!)
+	const inner = deps.fetch!
+	let reached!: () => void
+	let release!: () => void
+	const atTokenEndpoint = new Promise<void>((resolve) => (reached = resolve))
+	const gate = new Promise<void>((resolve) => (release = resolve))
+	deps.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+		const request = new Request(input, init)
+		if (new URL(request.url).pathname === '/token') {
+			reached()
+			await gate
+		}
+		return inner(request)
+	}) as typeof fetch
+	const finished = finishMcpOAuth(deps, {
+		state: location.searchParams.get('state')!,
+		code: location.searchParams.get('code'),
+		error: null,
+		errorDescription: null,
+	})
+	await atTokenEndpoint
+	deps.fetch = inner
+	return { finished, release }
+}
+
 describe('OAuth servers', () => {
 	it('add without a bearer against an OAuth server parks it as authenticating with an authUrl', async () => {
 		const { deps } = await setup({ oauth: { mode: 'dynamic' } })
@@ -455,5 +479,36 @@ describe('OAuth servers', () => {
 				: null,
 		)
 		await assert.rejects(startMcpOAuth(deps, 'oa'), /mcp_oauth_failed/)
+	})
+
+	it('a cross-origin replace while the code exchange runs: no tokens saved, the new record untouched', async () => {
+		const { deps, server, store, oauth } = await setup({ oauth: { mode: 'dynamic' } })
+		await addMcpServer(deps, { name: 'oa', url })
+		const callback = await consentAndHoldExchange(deps, server, 'oa')
+		server.setRespond((u) => (u.hostname === '172.30.1.6' ? new Response('down', { status: 503 }) : null))
+		await addMcpServer(deps, { name: 'oa', url: 'http://172.30.1.6/mcp', replace: true })
+		callback.release()
+		const finished = await callback.finished
+		assert.equal(finished.ok, false)
+		assert.match(finished.message ?? '', /removed or changed while authorizing/)
+		assert.equal(await oauth.tokens('oa'), null)
+		const record = store.get('oa')!
+		assert.deepEqual({ url: record.url, kind: record.auth.kind }, { url: 'http://172.30.1.6/mcp', kind: 'none' })
+		const issued = server.oauth!.issued
+		const sentToNew = server.requests.filter((r) => r.url.startsWith('http://172.30.1.6') && r.authorization)
+		assert.ok(sentToNew.every((r) => !issued.some((t) => r.authorization!.includes(t))))
+	})
+
+	it('a same-origin replace with a bearer while the code exchange runs keeps the bearer', async () => {
+		const { deps, server, store, oauth } = await setup({ oauth: { mode: 'dynamic' } })
+		await addMcpServer(deps, { name: 'oa', url })
+		const callback = await consentAndHoldExchange(deps, server, 'oa')
+		await addMcpServer(deps, { name: 'oa', url, bearerToken: 'tok', replace: true })
+		callback.release()
+		const finished = await callback.finished
+		assert.equal(finished.ok, false)
+		assert.equal(await oauth.tokens('oa'), null)
+		assert.equal(store.get('oa')!.auth.kind, 'bearer')
+		assert.equal(await store.authorization('oa'), 'Bearer tok')
 	})
 })

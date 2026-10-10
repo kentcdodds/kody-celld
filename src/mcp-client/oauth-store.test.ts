@@ -26,9 +26,28 @@ async function makeOAuth(key = 'oauth-store-key', previous?: string) {
 	const sql = memorySql()
 	sql.exec(mcpOAuthSchema)
 	let ring = await buildMasterKeyring(key, previous)
-	const store = new McpOAuthStore({ sql, userId: () => 'user_1', keyring: async () => ring })
-	return { store, sql, setRing: async (k: string, p?: string) => (ring = await buildMasterKeyring(k, p)) }
+	let hold: Promise<void> | null = null
+	const store = new McpOAuthStore({
+		sql,
+		userId: () => 'user_1',
+		keyring: async () => {
+			if (hold) await hold
+			return ring
+		},
+	})
+	/** Makes every keyring read (so every seal) wait until the returned release() is called. */
+	const holdKeyring = () => {
+		let release!: () => void
+		hold = new Promise<void>((resolve) => (release = resolve))
+		return () => {
+			hold = null
+			release()
+		}
+	}
+	return { store, sql, holdKeyring, setRing: async (k: string, p?: string) => (ring = await buildMasterKeyring(k, p)) }
 }
+
+const tick = () => new Promise((r) => setTimeout(r, 10))
 
 const dynamicClient = {
 	mode: 'dynamic' as const,
@@ -235,6 +254,69 @@ describe('McpOAuthStore', () => {
 		assert.equal(result.ok, false)
 		assert.equal(store.summary('home'), null)
 		assert.equal(await store.tokens('home'), null)
+	})
+
+	it('accessToken: a clear() while the refreshed tokens are being sealed does not re-create the row', async () => {
+		const { store, holdKeyring } = await makeOAuth()
+		await store.saveClient('home', dynamicClient)
+		await store.saveTokens('home', {
+			access_token: 'at-1',
+			refresh_token: 'rt-1',
+			token_type: 'Bearer',
+			expires_in: 10,
+		})
+		let release!: () => void
+		const pending = store.accessToken('home', {
+			forceRefresh: true,
+			refresher: async () => {
+				release = holdKeyring() // the refresh response is in; sealing it now waits on the keyring
+				return { access_token: 'at-2', refresh_token: 'rt-2', token_type: 'Bearer', expires_in: 3600 }
+			},
+		})
+		await tick()
+		store.clear('home')
+		release()
+		const result = await pending
+		assert.equal(result.ok, false)
+		assert.equal(store.summary('home'), null)
+		assert.equal(await store.tokens('home'), null)
+	})
+
+	it('accessToken: a refresh that finishes after clear() leaves the next refresh in flight (no duplicate refresh)', async () => {
+		const { store } = await makeOAuth()
+		const grant = async () => {
+			await store.saveClient('home', dynamicClient)
+			await store.saveTokens('home', {
+				access_token: 'at-1',
+				refresh_token: 'rt-1',
+				token_type: 'Bearer',
+				expires_in: 10,
+			})
+		}
+		await grant()
+		const gates: Array<() => void> = []
+		let calls = 0
+		const refresher = async () => {
+			calls++
+			await new Promise<void>((resolve) => gates.push(resolve))
+			return { access_token: `at-n${calls}`, refresh_token: `rt-n${calls}`, token_type: 'Bearer', expires_in: 3600 }
+		}
+		const first = store.accessToken('home', { forceRefresh: false, refresher })
+		await tick()
+		store.clear('home')
+		await grant()
+		const second = store.accessToken('home', { forceRefresh: false, refresher })
+		await tick()
+		gates[0]!() // the refresh from before clear() finishes while the second one is still running
+		assert.equal((await first).ok, false)
+		const third = store.accessToken('home', { forceRefresh: false, refresher })
+		await tick()
+		assert.equal(calls, 2, 'the third caller must join the refresh in flight')
+		for (const gate of gates) gate()
+		assert.deepEqual(await Promise.all([second, third]), [
+			{ ok: true, accessToken: 'at-n2' },
+			{ ok: true, accessToken: 'at-n2' },
+		])
 	})
 
 	it('pre-registered client: sealed secret, replaces a dynamic client, clears tokens, validates input', async () => {

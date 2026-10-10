@@ -2,6 +2,7 @@ import type { IntegrationUsage } from '../integrations/oauth.ts'
 import { decryptWithKeyring, encryptSecretValue, randomId, type MasterKeyring } from '../lib/crypto.ts'
 import { KodyError } from '../lib/errors.ts'
 import type { McpServerInfo, McpTool } from './client.ts'
+import type { OAuthClientInformationMixed, OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js'
 import type { McpOAuthStore, McpOAuthSummary, McpTokenRefresher } from './oauth-store.ts'
 
 export const mcpServerSchema = `
@@ -177,8 +178,9 @@ export class McpServerStore {
 		}
 		// replace without a new token keeps the sealed bearer only for the same origin
 		// (otherwise discovery would send it to a new host). Clearing is remove + re-add.
+		// A fresh add also clears: an OAuth row left under this name (a write that raced a remove) must not carry over.
 		const crossOrigin = existing !== null && !sameOrigin(existing.url, input.url)
-		if (existing && (crossOrigin || input.authorization)) this.host.oauth.clear(input.name)
+		if (!existing || crossOrigin || input.authorization) this.host.oauth.clear(input.name)
 		let sealed: {
 			iv: string | null
 			ciphertext: string | null
@@ -261,6 +263,31 @@ export class McpServerStore {
 
 	setAuthState(name: string, status: 'authenticating' | 'error', error: McpLastError): McpServerRecord {
 		return this.setDiscovery(name, { auth: { status, error } })
+	}
+
+	/**
+	 * Saves a code-exchange result for the server the attempt was started for. Everything is sealed first; then,
+	 * with no await before the write, the server must still exist, have `serverOrigin` and not use a bearer.
+	 * Otherwise nothing is written (a remove or replace during the exchange wins).
+	 */
+	async completeOAuth(input: {
+		name: string
+		serverOrigin: string
+		tokens: OAuthTokens
+		savedClient: OAuthClientInformationMixed | null
+	}): Promise<McpServerRecord> {
+		const commit = await this.host.oauth.sealGrant(input.name, input)
+		const row = this.row(input.name)
+		const kind = row ? (JSON.parse(row.auth_json) as { kind: string }).kind : null
+		if (!row || !sameOrigin(row.url, input.serverOrigin) || kind === 'bearer') {
+			throw new KodyError(
+				'mcp_oauth_state_invalid',
+				`MCP server "${input.name}" was removed or changed while authorizing; nothing was saved. Start again from /account/mcp-servers.`,
+				{ status: 400 },
+			)
+		}
+		commit()
+		return this.markOAuth(input.name)
 	}
 
 	/** After a successful code exchange: oauth kind; status stays "error / Not discovered yet" until discovery runs. */

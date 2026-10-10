@@ -1287,12 +1287,11 @@ export class UserCell extends DurableObject<Env> {
 
 	async mcpServerOAuthComplete(input: {
 		name: string
+		serverOrigin: string
 		tokens: OAuthTokens
 		savedClient: OAuthClientInformationMixed | null
 	}) {
-		if (input.savedClient) await this.mcpOAuth.saveClientInformation(input.name, input.savedClient)
-		await this.mcpOAuth.saveTokens(input.name, input.tokens)
-		return this.mcpServers.markOAuth(input.name)
+		return this.mcpServers.completeOAuth(input)
 	}
 
 	async mcpServerOAuthSetClient(input: { name: string; clientId: string; clientSecret: string | null }) {

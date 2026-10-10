@@ -58,8 +58,10 @@ export type McpServerCell = {
 		client: McpOAuthClient | null
 		discovery: OAuthDiscoveryState | null
 	} | null>
+	/** Refuses (mcp_oauth_state_invalid, nothing saved) when the server was removed, moved off `serverOrigin` or given a bearer. */
 	mcpServerOAuthComplete(input: {
 		name: string
+		serverOrigin: string
 		tokens: OAuthTokens
 		savedClient: OAuthClientInformationMixed | null
 	}): Promise<McpServerRecord>
@@ -484,7 +486,19 @@ export async function finishMcpOAuth(
 			redactSecrets(KodyError.fromUnknown(error)?.message ?? String(error), [input.code, pending.verifier, secret]),
 		)
 	}
-	await deps.cell.mcpServerOAuthComplete({ name: record.name, tokens: done.tokens, savedClient: done.savedClient })
+	try {
+		await deps.cell.mcpServerOAuthComplete({
+			name: record.name,
+			serverOrigin: pending.serverOrigin,
+			tokens: done.tokens,
+			savedClient: done.savedClient,
+		})
+	} catch (error) {
+		// Removed or replaced during the exchange: nothing was saved and the newer record stays as it is.
+		const kody = KodyError.fromUnknown(error)
+		if (kody?.code !== 'mcp_oauth_state_invalid') throw error
+		return { name: record.name, ok: false, replay: false, message: kody.message }
+	}
 	const updated = await refreshMcpServer(deps, record.name)
 	return {
 		name: record.name,
