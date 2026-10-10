@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
 	hostMatchesAllowlist,
+	isPrivateHostname,
 	isPrivateIp,
 	normalizeAllowlistEntry,
 	parseHostAllowlist,
@@ -111,6 +112,42 @@ describe('isPrivateIp', () => {
 			'ha.home',
 		]) {
 			assert.equal(isPrivateIp(host), false, host)
+		}
+	})
+})
+
+describe('isPrivateHostname', () => {
+	it('flags private names, single-label hosts, and every private IP literal', () => {
+		for (const host of [
+			'localhost',
+			'Foo.Localhost',
+			'nas.local',
+			'router.internal',
+			'gitea',
+			'host.docker.internal',
+			'10.0.0.5',
+			'127.0.0.1',
+			'169.254.169.254',
+			'172.30.1.1',
+			'192.168.0.1',
+			'100.64.0.1',
+			'192.0.0.8',
+			'198.18.0.1',
+			'224.0.0.1',
+			'::1',
+			'[::1]',
+			'fe80::1',
+			'fc00::1',
+			'[::ffff:10.0.0.5]',
+			'[64:ff9b::a00:1]',
+			'2002:a00:1::1',
+		]) {
+			assert.equal(isPrivateHostname(host), true, host)
+		}
+	})
+	it('passes public DNS names and public addresses', () => {
+		for (const host of ['example.com', 'ha.home.arpa', '8.8.8.8', '2606:4700::1111', '[64:ff9b::808:808]']) {
+			assert.equal(isPrivateHostname(host), false, host)
 		}
 	})
 })

@@ -1,5 +1,5 @@
 import { KodyError } from '../lib/errors.ts'
-import { isPrivateHostname } from '../lib/private-hosts.ts'
+import { isPrivateHostname } from '../lib/host-allowlist.ts'
 import { hostMatchesApproval } from '../secrets/host-policy.ts'
 import { cloneGitSmartHttp, normalizeGitUrl } from './git-smart-http.ts'
 import { parsePackageManifest, type PackageFiles, type PackageManifest } from './manifest.ts'
