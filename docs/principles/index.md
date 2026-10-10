@@ -5,9 +5,10 @@ Load only the page the task needs.
 
 kody-celld is a faithful self-host of
 [hosted Kody](https://github.com/kentcdodds/kody). Shared principle pages are
-copied from that repo and kept in sync by the sync lock (see
-`shared-from-kody.json`). Do not hand-edit them — change them upstream, then
-resync.
+copied from that repo's `docs/principles/` (currently pinned to commit
+`0d02fe04`). Do not hand-edit them — change them upstream in hosted Kody, then
+copy the updated page here in the same PR and note the new commit. A CI sync
+lock for these pages is planned separately.
 
 ## Shared (synced from kody)
 
@@ -32,10 +33,10 @@ Related maps that live only in hosted Kody (open them there):
 
 ## kody-celld only
 
-| Principle                                   | When to open it                                                                              |
-| ------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| [Match hosted first](./match-hosted-first.md) | Adding a capability, contract, UI surface, or behaviour that hosted Kody already has (or will) |
-| [Earn every dependency](./earn-every-dependency.md) | Adding a dependency, abstraction, config knob, or `KODY_` variable                     |
+| Principle                                           | When to open it                                                                                |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| [Match hosted first](./match-hosted-first.md)       | Adding a capability, contract, UI surface, or behaviour that hosted Kody already has (or will) |
+| [Earn every dependency](./earn-every-dependency.md) | Adding a dependency, abstraction, config knob, or `KODY_` variable                             |
 
 ## Epic Web principles
 

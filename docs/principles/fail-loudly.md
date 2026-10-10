@@ -10,9 +10,9 @@ A subscription wake cache is safe only when every manifest loaded.
 
 ```ts
 if (scanned.manifestLoadFailures > 0) {
-	// Leave the key missing so the next wake rescans rather than trusting
-	// a partial map that dropped subscribers.
-	return null
+  // Leave the key missing so the next wake rescans rather than trusting
+  // a partial map that dropped subscribers.
+  return null
 }
 ```
 

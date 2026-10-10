@@ -23,15 +23,15 @@ This file is a map, not the docs. Open the page that owns the task:
 
 ## Where things live
 
-| Path            | Role                                                                 |
-| --------------- | -------------------------------------------------------------------- |
-| `src/`          | Worker, Durable Objects, capabilities, execute, secrets, jobs, web |
-| `client/`       | Remix 3 page components and islands                                  |
-| `universal/`    | Shared Worker + browser code (routes, loader data, styles, icons)    |
-| `public/`       | Static assets (`styles.css`, fonts, Vite `build/`)                   |
-| `smoke/`        | Integration smoke suite                                              |
-| `mail-bridge/`  | Optional SMTP sidecar                                                |
-| `docs/`         | Human + agent docs                                                   |
+| Path           | Role                                                               |
+| -------------- | ------------------------------------------------------------------ |
+| `src/`         | Worker, Durable Objects, capabilities, execute, secrets, jobs, web |
+| `client/`      | Remix 3 page components and islands                                |
+| `universal/`   | Shared Worker + browser code (routes, loader data, styles, icons)  |
+| `public/`      | Static assets (`styles.css`, fonts, Vite `build/`)                 |
+| `smoke/`       | Integration smoke suite                                            |
+| `mail-bridge/` | Optional SMTP sidecar                                              |
+| `docs/`        | Human + agent docs                                                 |
 
 Style: TypeScript strict, tabs, no semicolons, single quotes (prettier is the
 authority). Unit tests sit beside the module as `*.test.ts`.
