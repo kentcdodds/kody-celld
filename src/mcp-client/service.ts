@@ -50,6 +50,8 @@ export type McpServerCell = {
 		redirectUri: string
 		serverOrigin: string
 		serverUrl: string
+		/** The client this attempt authorizes with; the cell records its id on the pending attempt. */
+		clientId: string | null
 		client: McpOAuthClient | null
 		discovery: OAuthDiscoveryState | null
 	}): Promise<{ expiresAt: string }>
@@ -65,6 +67,8 @@ export type McpServerCell = {
 		name: string
 		serverOrigin: string
 		serverUrl: string
+		serverId: string | null
+		clientId: string | null
 		tokens: OAuthTokens
 		savedClient: OAuthClientInformationMixed | null
 	}): Promise<McpServerRecord>
@@ -447,6 +451,7 @@ export async function startMcpOAuth(
 		redirectUri: urls.callbackUrl,
 		serverOrigin: new URL(record.url).origin,
 		serverUrl: record.url,
+		clientId: (begun.savedClient ?? stored.client?.information)?.client_id ?? null,
 		// The SDK saves a client on every path (CIMD included), so the label is the mode this attempt used.
 		client: begun.savedClient ? { mode: clientMode, information: begun.savedClient } : null,
 		discovery: begun.discovery,
@@ -540,6 +545,8 @@ export async function finishMcpOAuth(
 			name: record.name,
 			serverOrigin: pending.serverOrigin,
 			serverUrl: pending.serverUrl,
+			serverId: pending.serverId,
+			clientId: pending.clientId,
 			tokens: done.tokens,
 			savedClient: done.savedClient,
 		})

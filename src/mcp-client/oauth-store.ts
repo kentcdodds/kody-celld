@@ -35,6 +35,8 @@ export const mcpOAuthSchema = `
 		server_name TEXT NOT NULL,
 		server_origin TEXT NOT NULL,
 		server_url TEXT NOT NULL,
+		server_id TEXT,
+		client_id TEXT,
 		verifier_iv TEXT NOT NULL,
 		verifier_ciphertext TEXT NOT NULL,
 		verifier_key_id TEXT,
@@ -44,6 +46,17 @@ export const mcpOAuthSchema = `
 		completed_at TEXT
 	);
 `
+
+/** Adds columns introduced after `mcpOAuthSchema` first shipped (the schema uses CREATE TABLE IF NOT EXISTS). */
+export function ensureMcpOAuthColumns(sql: SqlStorage) {
+	const columns = sql
+		.exec<{ name: string }>(`SELECT name FROM pragma_table_info('mcp_server_oauth_pending')`)
+		.toArray()
+		.map((row) => row.name)
+	for (const column of ['server_id', 'client_id']) {
+		if (!columns.includes(column)) sql.exec(`ALTER TABLE mcp_server_oauth_pending ADD COLUMN ${column} TEXT`)
+	}
+}
 
 export type McpOAuthClientMode = 'preregistered' | 'metadata' | 'dynamic'
 export type McpOAuthClient = { mode: McpOAuthClientMode; information: OAuthClientInformationMixed }
@@ -68,6 +81,10 @@ export type McpOAuthPending = {
 	serverName: string
 	serverOrigin: string
 	serverUrl: string
+	/** `mcp_servers.id` at authorization start: survives a replace, changes on remove + re-add (#50). */
+	serverId: string | null
+	/** The OAuth client the attempt authorized with; a client reset or replace invalidates the attempt (#55). */
+	clientId: string | null
 	verifier: string
 	redirectUri: string
 	createdAt: string
@@ -128,6 +145,8 @@ type PendingRow = {
 	server_name: string
 	server_origin: string
 	server_url: string
+	server_id: string | null
+	client_id: string | null
 	verifier_iv: string
 	verifier_ciphertext: string
 	verifier_key_id: string | null
@@ -195,6 +214,11 @@ export class McpOAuthStore {
 			hasRefreshToken: row.refresh_ciphertext !== null,
 			expiresAt: row.expires_at,
 		}
+	}
+
+	/** The stored client's id, read synchronously (for check-then-write fences). */
+	storedClientId(name: string): string | null {
+		return this.row(name)?.client_id ?? null
 	}
 
 	async client(name: string): Promise<McpOAuthClient | null> {
@@ -407,6 +431,8 @@ export class McpOAuthStore {
 		serverName: string
 		serverOrigin: string
 		serverUrl: string
+		serverId: string
+		clientId: string | null
 		verifier: string
 		redirectUri: string
 	}) {
@@ -419,12 +445,14 @@ export class McpOAuthStore {
 		const verifier = await this.seal(input.verifier)
 		const expiresAt = new Date(now + mcpOAuthPendingTtlMs).toISOString()
 		this.host.sql.exec(
-			`INSERT INTO mcp_server_oauth_pending (state, server_name, server_origin, server_url, verifier_iv, verifier_ciphertext, verifier_key_id, redirect_uri, created_at, expires_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			`INSERT INTO mcp_server_oauth_pending (state, server_name, server_origin, server_url, server_id, client_id, verifier_iv, verifier_ciphertext, verifier_key_id, redirect_uri, created_at, expires_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			input.state,
 			input.serverName,
 			input.serverOrigin,
 			input.serverUrl,
+			input.serverId,
+			input.clientId,
 			verifier.iv,
 			verifier.ciphertext,
 			verifier.keyId,
@@ -450,6 +478,8 @@ export class McpOAuthStore {
 			serverName: row.server_name,
 			serverOrigin: row.server_origin,
 			serverUrl: row.server_url,
+			serverId: row.server_id,
+			clientId: row.client_id,
 			verifier: (await this.open(row.verifier_iv, row.verifier_ciphertext, row.verifier_key_id)) ?? '',
 			redirectUri: row.redirect_uri,
 			createdAt: row.created_at,

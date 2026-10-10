@@ -72,6 +72,8 @@ async function setup(serverOptions: Parameters<typeof startTestMcpServer>[0] = {
 				serverName: input.name,
 				serverOrigin: input.serverOrigin,
 				serverUrl: input.serverUrl,
+				serverId: store.get(input.name)!.id,
+				clientId: input.clientId,
 				verifier: input.verifier,
 				redirectUri: input.redirectUri,
 			})
@@ -536,6 +538,56 @@ describe('OAuth servers', () => {
 		assert.equal(await oauth.tokens('oa'), null)
 		assert.equal(store.get('oa')!.auth.kind, 'bearer')
 		assert.equal(await store.authorization('oa'), 'Bearer tok')
+	})
+
+	it('the client metadata document path still completes through the fence (CIMD client id recorded)', async () => {
+		const { deps, server, store } = await setup({ oauth: { mode: 'metadata' } })
+		const httpsDeps = { ...deps, publicUrl: 'https://kody.example.com' }
+		await addMcpServer(httpsDeps, { name: 'oa', url })
+		const finished = await authorizeThroughBrowser(httpsDeps, server, 'oa')
+		assert.equal(finished.ok, true)
+		assert.equal(store.get('oa')!.status, 'ready')
+		assert.equal(store.get('oa')!.oauth!.clientId, 'https://kody.example.com/oauth/client-metadata.json')
+	})
+
+	it('remove and re-add at the same URL while the code exchange runs saves nothing (#50)', async () => {
+		const { deps, server, store, oauth } = await setup({ oauth: { mode: 'dynamic' } })
+		await addMcpServer(deps, { name: 'oa', url })
+		const callback = await consentAndHoldExchange(deps, server, 'oa')
+		const oldId = store.get('oa')!.id
+		store.remove('oa')
+		await addMcpServer(deps, { name: 'oa', url })
+		assert.notEqual(store.get('oa')!.id, oldId)
+		callback.release()
+		const finished = await callback.finished
+		assert.equal(finished.ok, false)
+		assert.match(finished.message ?? '', /changed while authorizing/)
+		assert.equal(await oauth.tokens('oa'), null)
+	})
+
+	it('an OAuth client reset while the code exchange runs saves no tokens (#55)', async () => {
+		const { deps, server, oauth } = await setup({ oauth: { mode: 'dynamic' } })
+		await addMcpServer(deps, { name: 'oa', url })
+		const callback = await consentAndHoldExchange(deps, server, 'oa')
+		oauth.clearClient('oa')
+		callback.release()
+		const finished = await callback.finished
+		assert.equal(finished.ok, false)
+		assert.match(finished.message ?? '', /changed while authorizing/)
+		assert.equal(await oauth.tokens('oa'), null)
+		assert.equal(await oauth.client('oa'), null, 'the reset client stays reset')
+	})
+
+	it('an OAuth client replaced while the code exchange runs saves no tokens from the old client (#55)', async () => {
+		const { deps, server, oauth } = await setup({ oauth: { mode: 'dynamic' } })
+		await addMcpServer(deps, { name: 'oa', url })
+		const callback = await consentAndHoldExchange(deps, server, 'oa')
+		await oauth.setPreregisteredClient('oa', { clientId: 'other-client', clientSecret: null })
+		callback.release()
+		const finished = await callback.finished
+		assert.equal(finished.ok, false)
+		assert.equal(await oauth.tokens('oa'), null)
+		assert.equal((await oauth.client('oa'))!.information.client_id, 'other-client')
 	})
 
 	it('reconnect on a grant without a refresh token keeps the grant', async () => {

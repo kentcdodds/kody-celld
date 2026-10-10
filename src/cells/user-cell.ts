@@ -44,7 +44,7 @@ import type { OAuthDiscoveryState } from '@modelcontextprotocol/sdk/client/auth.
 import type { OAuthClientInformationMixed, OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js'
 import { oauthPolicyFetch } from '../mcp-client/client.ts'
 import { refreshMcpTokens } from '../mcp-client/oauth.ts'
-import { McpOAuthStore, mcpOAuthSchema, type McpOAuthClient } from '../mcp-client/oauth-store.ts'
+import { McpOAuthStore, mcpOAuthSchema, type McpOAuthClient, ensureMcpOAuthColumns } from '../mcp-client/oauth-store.ts'
 import { mcpConfigFromEnv } from '../mcp-client/policy.ts'
 import { McpServerStore, mcpServerSchema, type McpDiscoveryOutcome, type McpServerRecord } from '../mcp-client/store.ts'
 import {
@@ -557,6 +557,7 @@ export class UserCell extends DurableObject<Env> {
 		this.ctx.storage.sql.exec(secretProviderSchema)
 		this.ctx.storage.sql.exec(mcpServerSchema)
 		this.ctx.storage.sql.exec(mcpOAuthSchema)
+		ensureMcpOAuthColumns(this.ctx.storage.sql)
 		this.limits = limitsFromEnv(env)
 		this.defaultQuotas = quotasFromEnv(env)
 		this.integrations = new IntegrationStore({
@@ -1262,10 +1263,12 @@ export class UserCell extends DurableObject<Env> {
 		redirectUri: string
 		serverOrigin: string
 		serverUrl: string
+		clientId: string | null
 		client: McpOAuthClient | null
 		discovery: OAuthDiscoveryState | null
 	}) {
-		if (!this.mcpServers.get(input.name)) {
+		const server = this.mcpServers.get(input.name)
+		if (!server) {
 			throw new KodyError('mcp_server_not_found', `MCP server "${input.name}" was not found.`, { status: 404 })
 		}
 		if (input.client) await this.mcpOAuth.saveClient(input.name, input.client)
@@ -1275,6 +1278,8 @@ export class UserCell extends DurableObject<Env> {
 			serverName: input.name,
 			serverOrigin: input.serverOrigin,
 			serverUrl: input.serverUrl,
+			serverId: server.id,
+			clientId: input.clientId,
 			verifier: input.verifier,
 			redirectUri: input.redirectUri,
 		})
@@ -1291,6 +1296,8 @@ export class UserCell extends DurableObject<Env> {
 		name: string
 		serverOrigin: string
 		serverUrl: string
+		serverId: string | null
+		clientId: string | null
 		tokens: OAuthTokens
 		savedClient: OAuthClientInformationMixed | null
 	}) {

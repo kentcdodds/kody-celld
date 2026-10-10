@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { DatabaseSync } from 'node:sqlite'
 import { describe, it } from 'node:test'
 import { buildMasterKeyring } from '../lib/crypto.ts'
-import { McpOAuthStore, mcpOAuthSchema } from './oauth-store.ts'
+import { ensureMcpOAuthColumns, McpOAuthStore, mcpOAuthSchema } from './oauth-store.ts'
 
 /** Just enough of Durable Object `SqlStorage` for the store (same shim as provider-store.test.ts). */
 function memorySql() {
@@ -112,12 +112,15 @@ describe('McpOAuthStore', () => {
 			serverName: 'home',
 			serverOrigin: 'http://172.30.1.5',
 			serverUrl: 'http://172.30.1.5/mcp',
+			serverId: 'mcp_1',
+			clientId: 'cid',
 			verifier: 'v',
 			redirectUri: 'https://k/cb',
 		})
 		const first = (await store.claimPending('s1'))!
 		assert.equal(first.firstClaim, true)
 		assert.equal(first.pending.verifier, 'v')
+		assert.deepEqual([first.pending.serverId, first.pending.clientId], ['mcp_1', 'cid'])
 		assert.equal(first.pending.serverUrl, 'http://172.30.1.5/mcp')
 		assert.equal((await store.claimPending('s1'))!.firstClaim, false)
 		assert.equal(await store.claimPending('nope'), null)
@@ -234,6 +237,8 @@ describe('McpOAuthStore', () => {
 			serverName: 'home',
 			serverOrigin: 'http://172.30.1.5',
 			serverUrl: 'http://172.30.1.5/mcp',
+			serverId: 'mcp_1',
+			clientId: 'cid',
 			verifier: 'v',
 			redirectUri: 'https://k/cb',
 		})
@@ -346,5 +351,40 @@ describe('McpOAuthStore', () => {
 		assert.equal((await store.client('gh'))!.information.client_secret, 'gh-secret')
 		await assert.rejects(store.setPreregisteredClient('gh', { clientId: '', clientSecret: null }), /invalid_args/)
 		await assert.rejects(store.setPreregisteredClient('gh', { clientId: 'a\nb', clientSecret: null }), /invalid_args/)
+	})
+
+	it('accessToken: a client reset while a refresh runs leaves no tokens from the old client (#55)', async () => {
+		const { store } = await makeOAuth()
+		await store.saveClient('home', dynamicClient)
+		await store.saveTokens('home', { access_token: 'at-1', refresh_token: 'rt-1', token_type: 'Bearer', expires_in: 1 })
+		let release!: () => void
+		const gate = new Promise<void>((resolve) => (release = resolve))
+		const pending = store.accessToken('home', {
+			forceRefresh: true,
+			refresher: async () => {
+				await gate
+				return { access_token: 'at-old-client', refresh_token: 'rt-old-client', token_type: 'Bearer', expires_in: 3600 }
+			},
+		})
+		await new Promise((r) => setTimeout(r, 5))
+		store.clearClient('home')
+		release()
+		const result = await pending
+		assert.equal(result.ok, false)
+		assert.equal(await store.tokens('home'), null)
+	})
+
+	it('ensureMcpOAuthColumns adds server_id/client_id to a pending table that predates them, idempotently', async () => {
+		const sql = memorySql()
+		sql.exec(`CREATE TABLE mcp_server_oauth_pending (state TEXT PRIMARY KEY, server_name TEXT NOT NULL, server_origin TEXT NOT NULL,
+			server_url TEXT NOT NULL, verifier_iv TEXT NOT NULL, verifier_ciphertext TEXT NOT NULL, verifier_key_id TEXT,
+			redirect_uri TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT NOT NULL, completed_at TEXT)`)
+		ensureMcpOAuthColumns(sql)
+		ensureMcpOAuthColumns(sql)
+		const columns = sql
+			.exec<{ name: string }>(`SELECT name FROM pragma_table_info('mcp_server_oauth_pending')`)
+			.toArray()
+			.map((row) => row.name)
+		assert.ok(columns.includes('server_id') && columns.includes('client_id'))
 	})
 })

@@ -281,13 +281,26 @@ export class McpServerStore {
 		serverOrigin: string
 		/** Full server URL at authorization start; path changes refuse the grant write. */
 		serverUrl: string
+		/** The pending attempt's `mcp_servers.id` and OAuth client id: a remove + re-add or a client reset refuses the write. */
+		serverId: string | null
+		clientId: string | null
 		tokens: OAuthTokens
 		savedClient: OAuthClientInformationMixed | null
 	}): Promise<McpServerRecord> {
 		const commit = await this.host.oauth.sealGrant(input.name, input)
+		// Checked synchronously right before the write, after the awaited seal.
 		const row = this.row(input.name)
 		const kind = row ? (JSON.parse(row.auth_json) as { kind: string }).kind : null
-		if (!row || row.url !== input.serverUrl || !sameOrigin(row.url, input.serverOrigin) || kind === 'bearer') {
+		if (
+			!row ||
+			row.url !== input.serverUrl ||
+			!sameOrigin(row.url, input.serverOrigin) ||
+			kind === 'bearer' ||
+			!input.serverId ||
+			row.id !== input.serverId ||
+			!input.clientId ||
+			this.host.oauth.storedClientId(input.name) !== input.clientId
+		) {
 			throw new KodyError(
 				'mcp_oauth_state_invalid',
 				`MCP server "${input.name}" was removed or changed while authorizing; nothing was saved. Start again from /account/mcp-servers.`,
