@@ -81,76 +81,9 @@ export function normalizeDeliveryEvents(provider: OutboundProvider, body: unknow
 			const event = (str(b.event) ?? 'sent').toLowerCase()
 			return [{ providerMessageId: id, event, status: statusFor(event), detail: str(b.detail), at: isoOrNull(b.at) }]
 		}
-		case 'resend': {
-			const b = rec(body)
-			const data = rec(b?.data)
-			const id = stripAngle(str(data?.email_id))
-			const type = str(b?.type)
-			if (!id || !type) return []
-			const event = type.replace(/^email\./, '').toLowerCase()
-			const bounce = rec(data?.bounce)
-			return [
-				{
-					providerMessageId: id,
-					event,
-					status: statusFor(event),
-					detail: str(bounce?.message) ?? str(bounce?.type) ?? null,
-					at: isoOrNull(b?.created_at),
-				},
-			]
-		}
-		case 'postmark': {
-			const b = rec(body)
-			const id = stripAngle(str(b?.MessageID))
-			const type = str(b?.RecordType)
-			if (!id || !type) return []
-			const event = type.toLowerCase()
-			return [
-				{
-					providerMessageId: id,
-					event,
-					status: statusFor(event),
-					detail: str(b?.Description) ?? str(b?.Details) ?? str(b?.Type) ?? null,
-					at: isoOrNull(b?.DeliveredAt ?? b?.BouncedAt ?? b?.ReceivedAt),
-				},
-			]
-		}
-		case 'mailgun': {
-			const b = rec(body)
-			const data = rec(b?.['event-data'])
-			const message = rec(data?.message)
-			const headers = rec(message?.headers)
-			const id = stripAngle(str(headers?.['message-id']))
-			const event = str(data?.event)?.toLowerCase()
-			if (!id || !event) return []
-			const deliveryStatus = rec(data?.['delivery-status'])
-			return [
-				{
-					providerMessageId: id,
-					event,
-					status: statusFor(event),
-					detail: str(deliveryStatus?.description) ?? str(deliveryStatus?.message) ?? str(data?.reason) ?? null,
-					at: isoOrNull(data?.timestamp),
-				},
-			]
-		}
-		case 'sendgrid': {
-			const items = Array.isArray(body) ? body : body ? [body] : []
-			const out: Array<DeliveryEvent> = []
-			for (const item of items) {
-				const b = rec(item)
-				const sgId = str(b?.sg_message_id)
-				const event = str(b?.event)?.toLowerCase()
-				if (!b || !sgId || !event) continue
-				out.push({
-					providerMessageId: sgId.split('.')[0] ?? sgId,
-					event,
-					status: statusFor(event),
-					detail: str(b.reason) ?? str(b.response) ?? str(b.type) ?? null,
-					at: isoOrNull(b.timestamp),
-				})
-			}
-			return out
+		default: {
+			const _exhaustive: never = provider
+			throw new Error(`Unhandled outbound provider: ${String(_exhaustive)}`)
 		}
 	}
 }

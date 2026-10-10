@@ -31,7 +31,7 @@ export type PdfOptions = RenderOptions & {
 export type RenderedBytes = { bytes: Uint8Array; contentType: string }
 
 export interface BrowserRenderer {
-	readonly kind: 'browserless' | 'cloudflare'
+	readonly kind: 'browserless'
 	screenshot(options: ScreenshotOptions): Promise<RenderedBytes>
 	content(options: RenderOptions): Promise<string>
 	pdf(options: PdfOptions): Promise<RenderedBytes>
@@ -198,79 +198,9 @@ export class BrowserlessRenderer implements BrowserRenderer {
 	}
 }
 
-/** Cloudflare Browser Rendering REST API (`/accounts/:id/browser-rendering/*`). */
-export class CloudflareRenderer implements BrowserRenderer {
-	readonly kind = 'cloudflare' as const
-	private readonly config: NonNullable<BrowserConfig>
-
-	constructor(config: NonNullable<BrowserConfig>) {
-		this.config = config
-	}
-
-	private headers() {
-		return { authorization: `Bearer ${this.config.token ?? ''}` }
-	}
-
-	private goto(options: RenderOptions) {
-		return { gotoOptions: { waitUntil: options.waitUntil, timeout: options.timeoutMs } }
-	}
-
-	async screenshot(options: ScreenshotOptions) {
-		const response = await post(
-			this.config,
-			`${this.config.baseUrl}/screenshot`,
-			{
-				...target(options),
-				...this.goto(options),
-				viewport: { width: options.width, height: options.height },
-				...(options.selector ? { selector: options.selector } : {}),
-				screenshotOptions: {
-					fullPage: options.fullPage,
-					type: options.format,
-					...(options.format !== 'png' && options.quality !== undefined ? { quality: options.quality } : {}),
-				},
-			},
-			this.headers(),
-		)
-		if (!response.ok) return failure(response, 'Screenshot')
-		return bytesOf(response, `image/${options.format}`)
-	}
-
-	async content(options: RenderOptions) {
-		const response = await post(
-			this.config,
-			`${this.config.baseUrl}/content`,
-			{ ...target(options), ...this.goto(options) },
-			this.headers(),
-		)
-		if (!response.ok) return failure(response, 'Content extraction')
-		const text = await response.text()
-		if (response.headers.get('content-type')?.includes('application/json')) {
-			const parsed = JSON.parse(text) as { result?: unknown }
-			if (typeof parsed.result === 'string') return parsed.result
-		}
-		return text
-	}
-
-	async pdf(options: PdfOptions) {
-		const response = await post(
-			this.config,
-			`${this.config.baseUrl}/pdf`,
-			{
-				...target(options),
-				...this.goto(options),
-				pdfOptions: { format: options.format, landscape: options.landscape, printBackground: options.printBackground },
-			},
-			this.headers(),
-		)
-		if (!response.ok) return failure(response, 'PDF rendering')
-		return bytesOf(response, 'application/pdf')
-	}
-}
-
 export function createRenderer(config: BrowserConfig): BrowserRenderer | null {
 	if (!config) return null
-	return config.provider === 'cloudflare' ? new CloudflareRenderer(config) : new BrowserlessRenderer(config)
+	return new BrowserlessRenderer(config)
 }
 
 /** Best-effort visible-text extraction from rendered HTML (no DOM available in the worker). */

@@ -37,24 +37,11 @@ describe('aiConfigFromEnv', () => {
 		assert.equal(config.embed?.dimensions, 768)
 	})
 
-	it('supports Anthropic chat with a separate embedding endpoint', () => {
-		const config = aiConfigFromEnv({
-			KODY_AI_PROVIDER: 'anthropic',
-			KODY_AI_API_KEY: 'a',
-			KODY_AI_EMBED_PROVIDER: 'openai',
-			KODY_AI_EMBED_BASE_URL: 'http://embed:8080/v1',
-			KODY_AI_EMBED_MODEL: 'bge-small',
-			KODY_AI_EMBED_DIMENSIONS: '384',
-		})
-		assert.equal(config.chat?.provider, 'anthropic')
-		assert.equal(config.chat?.baseUrl, 'https://api.anthropic.com/v1')
-		assert.equal(config.embed?.baseUrl, 'http://embed:8080/v1')
-		assert.equal(config.embed?.apiKey, null)
-		assert.equal(config.embed?.dimensions, 384)
-	})
-
-	it('does not enable embeddings by default for anthropic', () => {
-		assert.equal(aiConfigFromEnv({ KODY_AI_PROVIDER: 'anthropic', KODY_AI_API_KEY: 'a' }).embed, null)
+	it('refuses the removed anthropic provider', () => {
+		assert.throws(
+			() => aiConfigFromEnv({ KODY_AI_PROVIDER: 'anthropic', KODY_AI_API_KEY: 'a' }),
+			/anthropic was removed/,
+		)
 	})
 
 	it('configures qdrant and llm re-ranking', () => {

@@ -1,36 +1,40 @@
 /**
  * Operator-level email configuration. celld has no Email Routing / Email
- * Sending binding, so both directions are adapters:
+ * Sending binding, so both directions are generic adapters:
  *
- *  - inbound: any provider that can POST a message to
- *    `/email/inbound/<provider>` (generic JSON, Postmark, Mailgun, SendGrid,
- *    a Cloudflare Email Worker forwarder, or the self-hosted mail-bridge)
- *  - outbound: the mail-bridge sidecar (SMTP relay), Resend, Postmark,
- *    Mailgun or SendGrid
+ *  - inbound: generic JSON (or the self-hosted mail-bridge) POSTed to
+ *    `/email/inbound/<provider>`
+ *  - outbound: the mail-bridge sidecar (SMTP relay)
  *
+ * Vendor-specific adapters (Resend, Postmark, Mailgun, SendGrid, Cloudflare)
+ * were removed — see https://github.com/kentcdodds/kody-celld/issues/63.
  * Provider tokens are deployment settings; they never reach sandbox code and
  * are not stored in any cell.
  */
 
-export const inboundProviders = ['generic', 'postmark', 'mailgun', 'sendgrid', 'cloudflare', 'bridge'] as const
+export const inboundProviders = ['generic', 'bridge'] as const
 export type InboundProvider = (typeof inboundProviders)[number]
 
-export const outboundProviders = ['bridge', 'resend', 'postmark', 'mailgun', 'sendgrid'] as const
+export const outboundProviders = ['bridge'] as const
 export type OutboundProvider = (typeof outboundProviders)[number]
+
+const removedOutboundProviders = ['resend', 'postmark', 'mailgun', 'sendgrid'] as const
+const removedInboundProviders = ['postmark', 'mailgun', 'sendgrid', 'cloudflare'] as const
+const noticeUrl = 'https://github.com/kentcdodds/kody-celld/issues/63'
 
 export type EmailEnv = {
 	/** Domain users receive mail on: `<local>@<domain>`. Unset disables the inbox surface. */
 	KODY_EMAIL_DOMAIN?: string
 	/** Shared secret every inbound/event adapter must present (bearer, basic password, or `?token=`). */
 	KODY_EMAIL_INBOUND_TOKEN?: string
-	/** Mailgun webhook signing key; when set, Mailgun deliveries must also carry a valid signature. */
+	/** @deprecated Removed — see #63. Presence fails loudly. */
 	KODY_EMAIL_MAILGUN_SIGNING_KEY?: string
 	KODY_EMAIL_OUTBOUND_PROVIDER?: string
-	/** Bridge base URL, or an API base override (Mailgun EU, self-hosted Postmark-compatible, ...). */
+	/** Bridge base URL. */
 	KODY_EMAIL_OUTBOUND_URL?: string
-	/** API key / server token / bridge bearer token. */
+	/** Bridge bearer token. */
 	KODY_EMAIL_OUTBOUND_TOKEN?: string
-	/** Mailgun sending domain (defaults to KODY_EMAIL_DOMAIN). */
+	/** @deprecated Removed — see #63. Presence fails loudly. */
 	KODY_EMAIL_MAILGUN_DOMAIN?: string
 	/** Display name for platform senders, e.g. "Kody". */
 	KODY_EMAIL_FROM_NAME?: string
@@ -41,27 +45,17 @@ export type OutboundConfig = {
 	provider: OutboundProvider
 	baseUrl: string
 	token: string
-	mailgunDomain: string | null
 	timeoutMs: number
 }
 
 export type EmailConfig = {
 	domain: string
 	inboundToken: string | null
-	mailgunSigningKey: string | null
 	fromName: string
 	outbound: OutboundConfig | null
 } | null
 
 export const defaultEmailTimeoutMs = 20_000
-
-export const providerDefaultUrls: Record<OutboundProvider, string | null> = {
-	bridge: null,
-	resend: 'https://api.resend.com',
-	postmark: 'https://api.postmarkapp.com',
-	mailgun: 'https://api.mailgun.net',
-	sendgrid: 'https://api.sendgrid.com',
-}
 
 function trimmed(value: string | undefined) {
 	const v = value?.trim()
@@ -83,7 +77,19 @@ function httpUrl(name: string, raw: string) {
 
 export const emailDomainPattern = /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/
 
+function refuseRemoved(kind: 'outbound' | 'inbound', value: string) {
+	if (kind === 'outbound') {
+		throw new Error(
+			`KODY_EMAIL_OUTBOUND_PROVIDER="${value}" was removed; use bridge (SMTP via mail-bridge) (see ${noticeUrl}).`,
+		)
+	}
+	throw new Error(`Inbound email provider "${value}" was removed; use generic or bridge (see ${noticeUrl}).`)
+}
+
 export function emailConfigFromEnv(env: EmailEnv): EmailConfig {
+	if (env.KODY_EMAIL_MAILGUN_SIGNING_KEY !== undefined || env.KODY_EMAIL_MAILGUN_DOMAIN !== undefined) {
+		throw new Error(`KODY_EMAIL_MAILGUN_* settings were removed with the Mailgun adapter (see ${noticeUrl}).`)
+	}
 	const domain = trimmed(env.KODY_EMAIL_DOMAIN)?.toLowerCase()
 	if (!domain) return null
 	if (!emailDomainPattern.test(domain)) throw new Error(`KODY_EMAIL_DOMAIN: "${domain}" is not a bare domain name.`)
@@ -98,6 +104,9 @@ export function emailConfigFromEnv(env: EmailEnv): EmailConfig {
 	const provider = trimmed(env.KODY_EMAIL_OUTBOUND_PROVIDER)?.toLowerCase() ?? 'none'
 	let outbound: OutboundConfig | null = null
 	if (provider !== 'none') {
+		if ((removedOutboundProviders as ReadonlyArray<string>).includes(provider)) {
+			refuseRemoved('outbound', provider)
+		}
 		if (!(outboundProviders as ReadonlyArray<string>).includes(provider)) {
 			throw new Error(
 				`KODY_EMAIL_OUTBOUND_PROVIDER: expected none, ${outboundProviders.join(', ')}; got "${env.KODY_EMAIL_OUTBOUND_PROVIDER}".`,
@@ -106,21 +115,19 @@ export function emailConfigFromEnv(env: EmailEnv): EmailConfig {
 		const kind = provider as OutboundProvider
 		const token = trimmed(env.KODY_EMAIL_OUTBOUND_TOKEN)
 		if (!token) throw new Error(`KODY_EMAIL_OUTBOUND_TOKEN is required when KODY_EMAIL_OUTBOUND_PROVIDER=${kind}.`)
-		const urlRaw = trimmed(env.KODY_EMAIL_OUTBOUND_URL) ?? providerDefaultUrls[kind]
+		const urlRaw = trimmed(env.KODY_EMAIL_OUTBOUND_URL)
 		if (!urlRaw)
 			throw new Error('KODY_EMAIL_OUTBOUND_URL (the mail-bridge base URL) is required for the bridge provider.')
 		outbound = {
 			provider: kind,
 			baseUrl: httpUrl('KODY_EMAIL_OUTBOUND_URL', urlRaw),
 			token,
-			mailgunDomain: kind === 'mailgun' ? (trimmed(env.KODY_EMAIL_MAILGUN_DOMAIN)?.toLowerCase() ?? domain) : null,
 			timeoutMs,
 		}
 	}
 	return {
 		domain,
 		inboundToken: trimmed(env.KODY_EMAIL_INBOUND_TOKEN) ?? null,
-		mailgunSigningKey: trimmed(env.KODY_EMAIL_MAILGUN_SIGNING_KEY) ?? null,
 		fromName: trimmed(env.KODY_EMAIL_FROM_NAME) ?? 'Kody',
 		outbound,
 	}
@@ -134,9 +141,30 @@ export function describeEmailConfig(config: EmailConfig) {
 		domain: config.domain,
 		inbound: config.inboundToken !== null,
 		inboundProviders: [...inboundProviders],
-		mailgunSignatureRequired: config.mailgunSigningKey !== null,
 		outbound: config.outbound?.provider ?? ('none' as const),
 		outboundBaseUrl: config.outbound?.baseUrl ?? null,
 		fromName: config.fromName,
 	}
+}
+
+export function assertInboundProviderAllowed(provider: string): InboundProvider {
+	const value = provider.toLowerCase()
+	if ((removedInboundProviders as ReadonlyArray<string>).includes(value)) {
+		refuseRemoved('inbound', value)
+	}
+	if (!(inboundProviders as ReadonlyArray<string>).includes(value)) {
+		throw new Error(`Unknown inbound email provider "${provider}". Expected ${inboundProviders.join(', ')}.`)
+	}
+	return value as InboundProvider
+}
+
+export function assertOutboundEventsProviderAllowed(provider: string): OutboundProvider {
+	const value = provider.toLowerCase()
+	if ((removedOutboundProviders as ReadonlyArray<string>).includes(value)) {
+		refuseRemoved('outbound', value)
+	}
+	if (!(outboundProviders as ReadonlyArray<string>).includes(value)) {
+		throw new Error(`Unknown email events provider "${provider}". Expected ${outboundProviders.join(', ')}.`)
+	}
+	return value as OutboundProvider
 }

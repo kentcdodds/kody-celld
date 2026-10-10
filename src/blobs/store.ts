@@ -20,11 +20,11 @@ export type StoreListPage = {
 
 /**
  * The object-store seam: everything above it (capabilities, signed URLs, the
- * per-user index) works against these five calls, so swapping R2 for a direct
- * S3 endpoint is configuration, not code.
+ * per-user index) works against these five calls, so swapping the celld
+ * binding for a direct S3 endpoint is configuration, not code.
  */
 export interface BlobStore {
-	readonly kind: 'r2' | 's3'
+	readonly kind: 'binding' | 's3'
 	put(
 		key: string,
 		body: Uint8Array,
@@ -47,8 +47,9 @@ function metaFromR2(object: R2Object): StoredObjectMeta {
 	}
 }
 
-export class R2BlobStore implements BlobStore {
-	readonly kind = 'r2' as const
+/** celld `BLOBS` binding (R2-compatible API on the fleet bucket / local volume). */
+export class BindingBlobStore implements BlobStore {
+	readonly kind = 'binding' as const
 	private readonly bucket: R2Bucket
 
 	constructor(bucket: R2Bucket) {
@@ -229,9 +230,9 @@ export class S3BlobStore implements BlobStore {
 export function createBlobStore(config: BlobConfig, bucket: R2Bucket | undefined): BlobStore {
 	if (config.provider === 's3' && config.s3) return new S3BlobStore(config.s3)
 	if (!bucket) {
-		throw new KodyError('blob_store_unavailable', 'The BLOBS R2 binding is missing from the worker config.', {
+		throw new KodyError('blob_store_unavailable', 'The BLOBS binding is missing from the worker config.', {
 			status: 503,
 		})
 	}
-	return new R2BlobStore(bucket)
+	return new BindingBlobStore(bucket)
 }

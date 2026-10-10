@@ -2,16 +2,13 @@ import { KodyError } from '../lib/errors.ts'
 import { inboundProviders, type InboundProvider } from './config.ts'
 import {
 	attachmentFromInput,
-	bytesToBase64,
 	cleanBody,
 	cleanSubject,
 	isEmailAddress,
 	maxAttachments,
 	normalizeEmailAddress,
-	parseAddressList,
 	parseRawEmail,
 	parseReferences,
-	parseSingleAddress,
 	pickSafeHeaders,
 	stripAngle,
 	toAddressInput,
@@ -71,24 +68,6 @@ function headersFromRecord(value: unknown): Array<[string, string]> {
 	return Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, String(v ?? '')])
 }
 
-/** Parses a raw header block ("Name: value\r\n...") as SendGrid's `headers` field ships it. */
-export function parseHeaderBlock(block: string): Array<[string, string]> {
-	const out: Array<[string, string]> = []
-	const lines = block.replace(/\r\n/g, '\n').split('\n')
-	let current: [string, string] | null = null
-	for (const line of lines) {
-		if (/^[ \t]/.test(line) && current) {
-			current[1] += ` ${line.trim()}`
-			continue
-		}
-		const colon = line.indexOf(':')
-		if (colon <= 0) continue
-		current = [line.slice(0, colon).trim(), line.slice(colon + 1).trim()]
-		out.push(current)
-	}
-	return out
-}
-
 function attachmentsFromJson(value: unknown): NormalizedEmail['attachments'] {
 	if (!Array.isArray(value)) return []
 	return value.slice(0, maxAttachments).flatMap((item, index) => {
@@ -112,22 +91,6 @@ function attachmentsFromJson(value: unknown): NormalizedEmail['attachments'] {
 				index,
 			),
 		]
-	})
-}
-
-function attachmentsFromFiles(files: Array<FormFile>, inlineIds: Map<string, string> = new Map()) {
-	return files.slice(0, maxAttachments).map((file, index) => {
-		const contentId = inlineIds.get(file.field) ?? null
-		return attachmentFromInput(
-			{
-				filename: file.filename,
-				contentType: file.contentType,
-				contentBase64: bytesToBase64(file.bytes),
-				contentId,
-				disposition: contentId ? 'inline' : 'attachment',
-			},
-			index,
-		)
 	})
 }
 
@@ -156,16 +119,6 @@ function expectJson(payload: InboundPayload, provider: string) {
 		throw new KodyError('invalid_email_payload', `${provider} deliveries must be application/json.`)
 	}
 	return record(payload.body)
-}
-
-function expectForm(payload: InboundPayload, provider: string) {
-	if (payload.kind !== 'form') {
-		throw new KodyError(
-			'invalid_email_payload',
-			`${provider} deliveries must be multipart/form-data or form-urlencoded.`,
-		)
-	}
-	return payload
 }
 
 /**
@@ -207,185 +160,11 @@ export async function normalizeGeneric(payload: InboundPayload): Promise<Inbound
 	return finish('generic', message, { from: envelopeFrom, to: envelopeTo }, message.messageId)
 }
 
-/** Postmark inbound webhook (JSON). */
-export async function normalizePostmark(payload: InboundPayload): Promise<InboundEmail> {
-	const body = expectJson(payload, 'Postmark')
-	const fromFull =
-		body.FromFull && typeof body.FromFull === 'object' ? (body.FromFull as Record<string, unknown>) : null
-	const from =
-		(fromFull && typeof fromFull.Email === 'string'
-			? { address: normalizeEmailAddress(fromFull.Email), name: str(fromFull.Name) }
-			: null) ?? parseSingleAddress(str(body.From))
-	if (!from) throw new KodyError('invalid_email_payload', 'Postmark payload has no From.')
-	const headers = headersFromArray(body.Headers)
-	const message: NormalizedEmail = {
-		from,
-		to: toAddressInput(body.ToFull).length ? toAddressInput(body.ToFull) : parseAddressList(str(body.To)),
-		cc: toAddressInput(body.CcFull).length ? toAddressInput(body.CcFull) : parseAddressList(str(body.Cc)),
-		replyTo: parseAddressList(str(body.ReplyTo)),
-		subject: cleanSubject(body.Subject),
-		messageId:
-			stripAngle(str(body.MessageID)) ?? stripAngle(headers.find(([k]) => k.toLowerCase() === 'message-id')?.[1]),
-		inReplyTo: stripAngle(headers.find(([k]) => k.toLowerCase() === 'in-reply-to')?.[1]),
-		references: parseReferences(headers.find(([k]) => k.toLowerCase() === 'references')?.[1]),
-		date: str(body.Date),
-		text: cleanBody(body.TextBody),
-		html: cleanBody(body.HtmlBody),
-		headers: pickSafeHeaders(headers),
-		attachments: attachmentsFromJson(body.Attachments),
-	}
-	const originalRecipient = str(body.OriginalRecipient)
-	return finish(
-		'postmark',
-		message,
-		{ from: null, to: originalRecipient ? [originalRecipient] : undefined },
-		str(body.MessageID),
-	)
-}
-
-/** Mailgun route `forward()` (multipart/form-data, parsed fields or `body-mime`). */
-export async function normalizeMailgun(payload: InboundPayload): Promise<InboundEmail> {
-	const form = expectForm(payload, 'Mailgun')
-	const f = (name: string) => str(form.fields.get(name))
-	const recipient = f('recipient')
-	const envelopeTo = recipient ? recipient.split(',').map((r) => r.trim()) : undefined
-	const mime = f('body-mime')
-	if (mime) {
-		const message = await parseRawEmail(mime)
-		return finish('mailgun', message, { from: f('sender'), to: envelopeTo }, message.messageId)
-	}
-	const sender = f('sender')
-	const from =
-		parseSingleAddress(f('from') ?? f('From')) ??
-		(sender ? { address: normalizeEmailAddress(sender), name: null } : null)
-	if (!from) throw new KodyError('invalid_email_payload', 'Mailgun payload has no from.')
-	let headerPairs: Array<[string, string]> = []
-	const rawHeaders = f('message-headers')
-	if (rawHeaders) {
-		try {
-			headerPairs = headersFromArray(JSON.parse(rawHeaders))
-		} catch {
-			headerPairs = []
-		}
-	}
-	const inlineIds = new Map<string, string>()
-	const contentIdMap = f('content-id-map')
-	if (contentIdMap) {
-		try {
-			for (const [cid, field] of Object.entries(JSON.parse(contentIdMap) as Record<string, string>)) {
-				inlineIds.set(field, stripAngle(cid) ?? cid)
-			}
-		} catch {
-			// ignore malformed map
-		}
-	}
-	const message: NormalizedEmail = {
-		from,
-		to: parseAddressList(f('To') ?? f('to')),
-		cc: parseAddressList(f('Cc') ?? f('cc')),
-		replyTo: parseAddressList(f('Reply-To')),
-		subject: cleanSubject(f('subject') ?? f('Subject') ?? ''),
-		messageId: stripAngle(f('Message-Id') ?? f('message-id')),
-		inReplyTo: stripAngle(f('In-Reply-To')),
-		references: parseReferences(f('References')),
-		date: f('Date'),
-		text: cleanBody(f('body-plain')),
-		html: cleanBody(f('body-html')),
-		headers: pickSafeHeaders(headerPairs),
-		attachments: attachmentsFromFiles(form.files, inlineIds),
-	}
-	return finish('mailgun', message, { from: f('sender'), to: envelopeTo }, message.messageId)
-}
-
-/** Mailgun signs `timestamp + token` with the webhook signing key (hex HMAC-SHA256). */
-export async function verifyMailgunSignature(
-	fields: Map<string, string>,
-	signingKey: string,
-	now = Date.now(),
-	toleranceSeconds = 300,
-) {
-	const timestamp = fields.get('timestamp') ?? ''
-	const token = fields.get('token') ?? ''
-	const signature = fields.get('signature') ?? ''
-	if (!/^\d+$/.test(timestamp) || !token || !signature) return false
-	if (Math.abs(now / 1000 - Number(timestamp)) > toleranceSeconds) return false
-	const key = await crypto.subtle.importKey(
-		'raw',
-		new TextEncoder().encode(signingKey),
-		{ name: 'HMAC', hash: 'SHA-256' },
-		false,
-		['sign'],
-	)
-	const digest = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${timestamp}${token}`)))
-	const hex = Array.from(digest, (b) => b.toString(16).padStart(2, '0')).join('')
-	const provided = signature.toLowerCase()
-	if (provided.length !== hex.length) return false
-	let diff = 0
-	for (let i = 0; i < hex.length; i++) diff |= hex.charCodeAt(i) ^ provided.charCodeAt(i)
-	return diff === 0
-}
-
-/** SendGrid Inbound Parse (multipart/form-data; parsed fields or the "send raw" `email` field). */
-export async function normalizeSendgrid(payload: InboundPayload): Promise<InboundEmail> {
-	const form = expectForm(payload, 'SendGrid')
-	const f = (name: string) => str(form.fields.get(name))
-	let envelopeFrom: string | null = null
-	let envelopeTo: Array<string> | undefined
-	const envelopeRaw = f('envelope')
-	if (envelopeRaw) {
-		try {
-			const envelope = JSON.parse(envelopeRaw) as { from?: unknown; to?: unknown }
-			envelopeFrom = str(envelope.from)
-			envelopeTo = Array.isArray(envelope.to)
-				? envelope.to.filter((x): x is string => typeof x === 'string')
-				: undefined
-		} catch {
-			// fall back to headers
-		}
-	}
-	const raw = f('email')
-	if (raw) {
-		const message = await parseRawEmail(raw)
-		return finish('sendgrid', message, { from: envelopeFrom, to: envelopeTo }, message.messageId)
-	}
-	const headerPairs = parseHeaderBlock(f('headers') ?? '')
-	const header = (name: string) => headerPairs.find(([k]) => k.toLowerCase() === name)?.[1]
-	const from = parseSingleAddress(f('from') ?? header('from'))
-	if (!from) throw new KodyError('invalid_email_payload', 'SendGrid payload has no from.')
-	const inlineIds = new Map<string, string>()
-	const info = f('attachment-info')
-	if (info) {
-		try {
-			for (const [field, meta] of Object.entries(JSON.parse(info) as Record<string, { 'content-id'?: string }>)) {
-				if (meta['content-id']) inlineIds.set(field, stripAngle(meta['content-id']) ?? meta['content-id'])
-			}
-		} catch {
-			// ignore malformed info
-		}
-	}
-	const message: NormalizedEmail = {
-		from,
-		to: parseAddressList(f('to') ?? header('to')),
-		cc: parseAddressList(f('cc') ?? header('cc')),
-		replyTo: parseAddressList(header('reply-to')),
-		subject: cleanSubject(f('subject') ?? header('subject') ?? ''),
-		messageId: stripAngle(header('message-id')),
-		inReplyTo: stripAngle(header('in-reply-to')),
-		references: parseReferences(header('references')),
-		date: header('date') ?? null,
-		text: cleanBody(f('text')),
-		html: cleanBody(f('html')),
-		headers: pickSafeHeaders(headerPairs),
-		attachments: attachmentsFromFiles(form.files, inlineIds),
-	}
-	return finish('sendgrid', message, { from: envelopeFrom, to: envelopeTo }, message.messageId)
-}
-
 /**
  * Raw RFC 5322 bytes (`message/rfc822`) with the SMTP envelope in
- * `x-kody-envelope-from` / `x-kody-envelope-to` headers. Used by the Cloudflare
- * Email Worker forwarder (examples/cloudflare-email-forwarder) and the
- * mail-bridge sidecar; `generic` accepts it too.
+ * `x-kody-envelope-from` / `x-kody-envelope-to` headers. Used by the
+ * mail-bridge sidecar and any forwarder (including the Cloudflare Email
+ * Routing example under examples/); `generic` accepts it too.
  */
 export async function normalizeRaw(provider: InboundProvider, payload: InboundPayload): Promise<InboundEmail> {
 	if (payload.kind !== 'raw') {
@@ -410,15 +189,12 @@ export async function normalizeInbound(provider: InboundProvider, payload: Inbou
 	switch (provider) {
 		case 'generic':
 			return normalizeGeneric(payload)
-		case 'postmark':
-			return normalizePostmark(payload)
-		case 'mailgun':
-			return normalizeMailgun(payload)
-		case 'sendgrid':
-			return normalizeSendgrid(payload)
-		case 'cloudflare':
 		case 'bridge':
 			return normalizeRaw(provider, payload)
+		default: {
+			const _exhaustive: never = provider
+			throw new Error(`Unhandled inbound provider: ${String(_exhaustive)}`)
+		}
 	}
 }
 

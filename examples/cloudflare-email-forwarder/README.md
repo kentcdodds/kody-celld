@@ -12,8 +12,9 @@ kody-celld node instead of running the SMTP `mail-bridge` yourself.
 3. Set `KODY_EMAIL_DOMAIN` on the node to the same domain; users then claim
    `<local>@<domain>` with `emailInboxClaim`.
 
-The Worker posts the raw message to `POST /email/inbound/cloudflare` with the
-SMTP envelope in `x-kody-envelope-from` / `x-kody-envelope-to`. A `404` from
-Kody (no claimed inbox) is turned into an SMTP reject; other failures throw so
-Cloudflare retries. Outbound mail is unaffected — pick any adapter in
-[docs/email.md](../../docs/email.md).
+The Worker posts the raw message to `POST /email/inbound/bridge` with the
+SMTP envelope in `x-kody-envelope-from` / `x-kody-envelope-to` (same shape as
+the mail-bridge sidecar). A `404` from Kody (no claimed inbox) is turned into
+an SMTP reject; other failures throw so Cloudflare retries. Outbound mail is
+unaffected — use `KODY_EMAIL_OUTBOUND_PROVIDER=bridge` (see
+[docs/email.md](../../docs/email.md)).

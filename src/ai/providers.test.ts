@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { KodyError } from '../lib/errors.ts'
 import { aiConfigFromEnv } from './config.ts'
-import { anthropicVersion, createAi, extractJsonObject, type FetchLike } from './providers.ts'
+import { createAi, extractJsonObject, type FetchLike } from './providers.ts'
 
 type Call = { url: string; init: RequestInit }
 
@@ -87,32 +87,6 @@ describe('openai-compatible provider', () => {
 			assert.ok(!error.message.includes('sk-secret'))
 			return true
 		})
-	})
-})
-
-describe('anthropic provider', () => {
-	it('uses x-api-key + version headers and joins text blocks', async () => {
-		const { calls, fetchImpl } = fakeFetch(() => ({
-			content: [
-				{ type: 'text', text: 'Hel' },
-				{ type: 'text', text: 'lo' },
-			],
-		}))
-		const ai = createAi(aiConfigFromEnv({ KODY_AI_PROVIDER: 'anthropic', KODY_AI_API_KEY: 'a' }), fetchImpl)
-		const text = await ai.chat!.chat({ system: 'sys', messages: [{ role: 'user', content: 'hi' }], maxTokens: 9 })
-		assert.equal(text, 'Hello')
-		assert.equal(calls[0]!.url, 'https://api.anthropic.com/v1/messages')
-		const headers = new Headers(calls[0]!.init.headers)
-		assert.equal(headers.get('x-api-key'), 'a')
-		assert.equal(headers.get('anthropic-version'), anthropicVersion)
-		const body = bodyOf(calls[0]!)
-		assert.equal(body.system, 'sys')
-		assert.equal(body.max_tokens, 9)
-		assert.deepEqual(body.messages, [{ role: 'user', content: 'hi' }])
-	})
-
-	it('requires an api key', () => {
-		assert.throws(() => createAi(aiConfigFromEnv({ KODY_AI_PROVIDER: 'anthropic' })), /KODY_AI_API_KEY/)
 	})
 })
 

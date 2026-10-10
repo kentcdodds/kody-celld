@@ -21,7 +21,7 @@ import { defineCapability, defineDomain, type CapabilityContext, type JsonSchema
 export const browserDomain = defineDomain({
 	name: 'browser',
 	description:
-		'Headless-browser rendering through a configurable service: a self-hosted browserless container (compose.browser.yaml) or Cloudflare Browser Rendering. Extract rendered HTML/text, take screenshots, or print PDFs of a URL or of HTML you supply.',
+		'Headless-browser rendering through a self-hosted browserless / CDP HTTP service (compose.browser.yaml). Extract rendered HTML/text, take screenshots, or print PDFs of a URL or of HTML you supply.',
 	guide:
 		'browserContent returns rendered HTML plus extracted text. browserScreenshot / browserPdf return the bytes base64-encoded and can also store them as a blob (`saveAs`) so you get a signed download `url` instead of a large payload. When called from execute, return `{ __mcpContent: [...] }` from browserScreenshot to show the image inline. Private/loopback hosts are refused unless the operator lists them in KODY_PRIVATE_HOSTS.',
 })
@@ -34,7 +34,7 @@ function configured(ctx: CapabilityContext): NonNullable<BrowserConfig> {
 	if (!config) {
 		throw new KodyError(
 			'browser_not_configured',
-			'No browser rendering service is configured. Set KODY_BROWSER_PROVIDER=browserless with KODY_BROWSER_URL (see compose.browser.yaml) or KODY_BROWSER_PROVIDER=cloudflare.',
+			'No browser rendering service is configured. Set KODY_BROWSER_PROVIDER=browserless with KODY_BROWSER_URL (see compose.browser.yaml).',
 			{ status: 501 },
 		)
 	}

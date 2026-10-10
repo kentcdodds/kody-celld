@@ -168,41 +168,6 @@ export function createOpenAiCompatibleEmbeddings(
 	}
 }
 
-// -------------------------------------------------------------------- Anthropic
-
-export const anthropicVersion = '2023-06-01'
-
-export function createAnthropicChat(config: ChatConfig, timeoutMs: number, fetchImpl: FetchLike = fetch): ChatProvider {
-	if (!config.apiKey) {
-		throw new Error('KODY_AI_API_KEY is required for KODY_AI_PROVIDER=anthropic.')
-	}
-	const headers = { 'x-api-key': config.apiKey, 'anthropic-version': anthropicVersion }
-	return {
-		kind: 'anthropic',
-		model: config.model,
-		async chat(request) {
-			const payload = await postJson(
-				fetchImpl,
-				`${config.baseUrl}/messages`,
-				headers,
-				{
-					model: config.model,
-					max_tokens: request.maxTokens ?? 512,
-					temperature: 0,
-					...(request.system ? { system: request.system } : {}),
-					messages: request.messages,
-				},
-				timeoutMs,
-				'anthropic',
-			)
-			const content = isRecord(payload) && Array.isArray(payload.content) ? payload.content : []
-			const text = content.map((part) => (isRecord(part) && typeof part.text === 'string' ? part.text : '')).join('')
-			if (!text) throw providerError('anthropic', 'response had no text content.')
-			return text
-		},
-	}
-}
-
 // ---------------------------------------------------------------------- factory
 
 export type Ai = {
@@ -212,9 +177,7 @@ export type Ai = {
 }
 
 export function createAi(config: AiConfig, fetchImpl: FetchLike = fetch): Ai {
-	let chat: ChatProvider | null = null
-	if (config.chat?.provider === 'openai') chat = createOpenAiCompatibleChat(config.chat, config.timeoutMs, fetchImpl)
-	if (config.chat?.provider === 'anthropic') chat = createAnthropicChat(config.chat, config.timeoutMs, fetchImpl)
+	const chat = config.chat ? createOpenAiCompatibleChat(config.chat, config.timeoutMs, fetchImpl) : null
 	const embeddings = config.embed ? createOpenAiCompatibleEmbeddings(config.embed, config.timeoutMs, fetchImpl) : null
 	return { config, chat, embeddings }
 }

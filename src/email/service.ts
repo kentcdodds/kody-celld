@@ -5,15 +5,14 @@ import { recordAudit } from '../lib/audit.ts'
 import { KodyError } from '../lib/errors.ts'
 import { limitsFromEnv } from '../lib/limits.ts'
 import { dispatchTopic } from '../packages/subscriptions.ts'
-import { emailConfigFromEnv, type EmailConfig } from './config.ts'
-import { isOutboundProvider, normalizeDeliveryEvents, type DeliveryEvent } from './events.ts'
 import {
-	isInboundProvider,
-	normalizeInbound,
-	readInboundPayload,
-	verifyMailgunSignature,
-	type InboundEmail,
-} from './inbound.ts'
+	assertInboundProviderAllowed,
+	assertOutboundEventsProviderAllowed,
+	emailConfigFromEnv,
+	type EmailConfig,
+} from './config.ts'
+import { normalizeDeliveryEvents, type DeliveryEvent } from './events.ts'
+import { normalizeInbound, readInboundPayload, type InboundEmail } from './inbound.ts'
 import { snippetOf, splitInboxAddress } from './message.ts'
 import { sendOutbound, type OutboundAttachment, type OutboundMessage } from './outbound.ts'
 
@@ -50,8 +49,8 @@ export function requireEmailConfig(env: Env): NonNullable<EmailConfig> {
 
 /**
  * Inbound/event adapters authenticate with the deployment-wide
- * KODY_EMAIL_INBOUND_TOKEN, presented however the provider allows: bearer
- * header, HTTP basic password (Postmark), or `?token=` (Mailgun/SendGrid URLs).
+ * KODY_EMAIL_INBOUND_TOKEN, presented as Bearer, Basic password, `?token=`,
+ * or `x-kody-email-token`.
  */
 export function inboundAuthorized(request: Request, url: URL, config: NonNullable<EmailConfig>) {
 	const expected = config.inboundToken
@@ -88,9 +87,17 @@ export async function handleEmailInbound(
 	url: URL,
 ): Promise<Response> {
 	const segments = url.pathname.split('/').filter(Boolean) // ['email', 'inbound', provider]
-	const provider = segments[2] ?? ''
-	if (segments.length !== 3 || !isInboundProvider(provider)) {
+	const providerRaw = segments[2] ?? ''
+	if (segments.length !== 3) {
 		return json({ error: 'not_found', message: 'Unknown inbound email adapter.' }, 404)
+	}
+	let provider
+	try {
+		provider = assertInboundProviderAllowed(providerRaw)
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error)
+		const removed = /was removed/.test(message)
+		return json({ error: removed ? 'adapter_removed' : 'not_found', message }, removed ? 410 : 404)
 	}
 	if (request.method !== 'POST') {
 		return json({ error: 'method_not_allowed', message: 'Inbound email accepts POST.' }, 405, { allow: 'POST' })
@@ -111,11 +118,6 @@ export async function handleEmailInbound(
 	}
 	const limits = limitsFromEnv(env)
 	const payload = await readInboundPayload(request, limits.emailMaxBytes * 2)
-	if (provider === 'mailgun' && config.mailgunSigningKey) {
-		if (payload.kind !== 'form' || !(await verifyMailgunSignature(payload.fields, config.mailgunSigningKey))) {
-			return json({ error: 'unauthorized', message: 'Mailgun signature verification failed.' }, 401)
-		}
-	}
 	const inbound = await normalizeInbound(provider, payload)
 	const outcome = await deliverInbound(env, ctx, config, inbound)
 	if (outcome.accepted.length === 0) {
@@ -243,9 +245,17 @@ export async function handleEmailEvents(
 	url: URL,
 ): Promise<Response> {
 	const segments = url.pathname.split('/').filter(Boolean) // ['email', 'events', provider]
-	const provider = segments[2] ?? ''
-	if (segments.length !== 3 || !isOutboundProvider(provider)) {
+	const providerRaw = segments[2] ?? ''
+	if (segments.length !== 3) {
 		return json({ error: 'not_found', message: 'Unknown email events adapter.' }, 404)
+	}
+	let provider
+	try {
+		provider = assertOutboundEventsProviderAllowed(providerRaw)
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error)
+		const removed = /was removed/.test(message)
+		return json({ error: removed ? 'adapter_removed' : 'not_found', message }, removed ? 410 : 404)
 	}
 	if (request.method !== 'POST') {
 		return json({ error: 'method_not_allowed', message: 'Email events accept POST.' }, 405, { allow: 'POST' })
@@ -351,7 +361,7 @@ export async function sendUserEmail(
 	if (!config.outbound) {
 		throw new KodyError(
 			'email_outbound_not_configured',
-			'No outbound email adapter: set KODY_EMAIL_OUTBOUND_PROVIDER (bridge, resend, postmark, mailgun, sendgrid).',
+			'No outbound email adapter: set KODY_EMAIL_OUTBOUND_PROVIDER=bridge with KODY_EMAIL_OUTBOUND_URL and KODY_EMAIL_OUTBOUND_TOKEN.',
 			{ status: 501 },
 		)
 	}
