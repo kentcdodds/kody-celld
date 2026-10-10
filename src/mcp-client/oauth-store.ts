@@ -130,6 +130,8 @@ export function isInvalidGrant(error: unknown) {
 export class McpOAuthStore {
 	private readonly host: { sql: SqlStorage; userId: () => string; keyring: () => Promise<MasterKeyring> }
 	private readonly inFlight = new Map<string, Promise<McpAccessResult>>()
+	/** Bumped by clear(): a refresh that started before it must not write tokens back. */
+	private readonly generation = new Map<string, number>()
 
 	constructor(host: { sql: SqlStorage; userId: () => string; keyring: () => Promise<MasterKeyring> }) {
 		this.host = host
@@ -392,7 +394,15 @@ export class McpOAuthStore {
 		tokens: McpOAuthTokenSet,
 		refresher: McpTokenRefresher,
 	): Promise<McpAccessResult> {
+		const startedAt = this.generation.get(name) ?? 0
+		const changed = () => (this.generation.get(name) ?? 0) !== startedAt || this.row(name) === null
+		const changedResult: McpAccessResult = {
+			ok: false,
+			status: 'authenticating',
+			message: 'The server was changed while refreshing; authorize again.',
+		}
 		const client = await this.client(name)
+		if (changed()) return changedResult
 		const discovery = this.discovery(name)
 		if (!client) {
 			this.clearTokens(name)
@@ -414,6 +424,7 @@ export class McpOAuthStore {
 		try {
 			next = await refresher({ client: client.information, refreshToken: tokens.refreshToken!, discovery })
 		} catch (error) {
+			if (changed()) return changedResult
 			if (isInvalidGrant(error)) {
 				this.clearTokens(name)
 				return { ok: false, status: 'authenticating', message: 'The refresh token was rejected; authorize again.' }
@@ -426,11 +437,14 @@ export class McpOAuthStore {
 			]).slice(0, 300)
 			return { ok: false, status: 'error', message: `Token refresh failed: ${message}` }
 		}
+		if (changed()) return changedResult
 		await this.saveTokens(name, { ...next, issuer: next.issuer ?? tokens.issuer ?? undefined })
 		return { ok: true, accessToken: next.access_token }
 	}
 
 	clear(name: string) {
+		this.generation.set(name, (this.generation.get(name) ?? 0) + 1)
+		this.inFlight.delete(name)
 		this.host.sql.exec('DELETE FROM mcp_server_oauth WHERE server_name = ?', name)
 		this.host.sql.exec('DELETE FROM mcp_server_oauth_pending WHERE server_name = ?', name)
 	}

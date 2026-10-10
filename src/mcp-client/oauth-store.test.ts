@@ -209,4 +209,31 @@ describe('McpOAuthStore', () => {
 		assert.equal(store.summary('home'), null)
 		assert.equal(await store.claimPending('s1'), null)
 	})
+
+	it('accessToken: a refresh in flight when clear() runs does not re-create the tokens', async () => {
+		const { store } = await makeOAuth()
+		await store.saveClient('home', dynamicClient)
+		await store.saveTokens('home', {
+			access_token: 'at-1',
+			refresh_token: 'rt-1',
+			token_type: 'Bearer',
+			expires_in: 10,
+		})
+		let release!: () => void
+		const gate = new Promise<void>((resolve) => (release = resolve))
+		const pending = store.accessToken('home', {
+			forceRefresh: true,
+			refresher: async () => {
+				await gate
+				return { access_token: 'at-old-origin', refresh_token: 'rt-old', token_type: 'Bearer', expires_in: 3600 }
+			},
+		})
+		await new Promise((r) => setTimeout(r, 10))
+		store.clear('home')
+		release()
+		const result = await pending
+		assert.equal(result.ok, false)
+		assert.equal(store.summary('home'), null)
+		assert.equal(await store.tokens('home'), null)
+	})
 })
