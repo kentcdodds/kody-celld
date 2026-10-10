@@ -31,6 +31,8 @@ export type TestOAuthOptions = {
 	clients?: Record<string, { secret?: string }>
 	accessTtlSeconds?: number
 	rotateRefresh?: boolean
+	/** false: token responses carry no refresh_token (like a GitHub OAuth app). Default true. */
+	issueRefreshToken?: boolean
 	/** Override authorization_servers[0] in the resource metadata (to test the host policy). */
 	authorizationServer?: string
 }
@@ -57,11 +59,14 @@ function createTestAuthorizationServer(origin: string, options: TestOAuthOptions
 	const issue = (clientId: string) => {
 		counter++
 		const at = `at-${counter}-${b64url(randomBytes(6))}`
-		const rt = `rt-${counter}-${b64url(randomBytes(6))}`
 		access.add(at)
+		state.issued.push(at)
+		const response = { access_token: at, token_type: 'Bearer', expires_in: options.accessTtlSeconds ?? 3600 }
+		if (options.issueRefreshToken === false) return response
+		const rt = `rt-${counter}-${b64url(randomBytes(6))}`
 		refresh.set(rt, clientId)
-		state.issued.push(at, rt)
-		return { access_token: at, refresh_token: rt, token_type: 'Bearer', expires_in: options.accessTtlSeconds ?? 3600 }
+		state.issued.push(rt)
+		return { ...response, refresh_token: rt }
 	}
 	const clientAuth = (request: Request, form: URLSearchParams) => {
 		const basic = request.headers.get('authorization')

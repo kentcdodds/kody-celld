@@ -280,11 +280,20 @@ export async function callMcpTool(
 			{ status: 403 },
 		)
 	}
-	if (record.auth.kind === 'oauth' && record.status === 'authenticating') {
+	// No usable grant (authenticating, or an error with no access token such as "needs a pre-registered client"):
+	// refuse with the link instead of probing the server on every call.
+	if (
+		record.auth.kind === 'oauth' &&
+		(record.status === 'authenticating' || (record.status !== 'ready' && !record.oauth?.hasAccessToken))
+	) {
 		unauthorizedWithLink(
 			deps,
 			record.name,
-			new KodyError('mcp_server_unauthorized', `MCP server "${record.name}" needs authorization.`, { status: 401 }),
+			new KodyError(
+				'mcp_server_unauthorized',
+				`MCP server "${record.name}" needs authorization${record.lastError ? `: ${record.lastError.message}` : '.'}`,
+				{ status: 401 },
+			),
 		)
 	}
 	assertMcpUrl(record.url, deps.config)
@@ -321,7 +330,8 @@ export async function callMcpTool(
 export async function reconnectMcpServer(deps: McpDeps, name: string): Promise<McpServerRecord> {
 	const record = await deps.cell.mcpServerGet(assertMcpServerName(name))
 	if (!record) throw new KodyError('mcp_server_not_found', `MCP server "${name}" was not found.`, { status: 404 })
-	if (record.auth.kind === 'oauth') {
+	// Refresh only a grant that can be refreshed: forcing it without a refresh token would drop a working access token.
+	if (record.auth.kind === 'oauth' && record.oauth?.hasRefreshToken) {
 		try {
 			await deps.cell.mcpServerAuthorization(record.name, { forceRefresh: true })
 		} catch (error) {
@@ -509,6 +519,8 @@ export async function finishMcpOAuth(
 }
 
 export type McpServerResult = PublicMcpServer & {
+	hasRefreshToken: boolean
+	oauthClientMode: McpOAuthClientMode | null
 	authUrl: string | null
 	oauthClientOrigin: string
 	oauthCallbackUrl: string
@@ -528,6 +540,8 @@ export function mcpServerResult(record: McpServerRecord, publicUrl: string): Mcp
 				: `Status "${record.status}": ${record.lastError?.message ?? 'unknown error'}${authUrl ? ` Authorize at ${authUrl}.` : ' Fix it and call mcpServerRefresh or mcpServerReconnect.'}`
 	return {
 		...publicMcpServer(record),
+		hasRefreshToken: record.oauth?.hasRefreshToken ?? false,
+		oauthClientMode: record.oauth?.clientMode ?? null,
 		authUrl,
 		oauthClientOrigin: urls.clientOrigin,
 		oauthCallbackUrl: urls.callbackUrl,

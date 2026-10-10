@@ -511,4 +511,47 @@ describe('OAuth servers', () => {
 		assert.equal(store.get('oa')!.auth.kind, 'bearer')
 		assert.equal(await store.authorization('oa'), 'Bearer tok')
 	})
+
+	it('reconnect on a grant without a refresh token keeps the grant', async () => {
+		const { deps, server, store } = await setup({ oauth: { mode: 'dynamic', issueRefreshToken: false } })
+		await addMcpServer(deps, { name: 'oa', url })
+		await authorizeThroughBrowser(deps, server, 'oa')
+		assert.equal(store.get('oa')!.oauth!.hasRefreshToken, false)
+		const reconnected = await reconnectMcpServer(deps, 'oa')
+		assert.equal(reconnected.status, 'ready')
+		assert.equal(reconnected.oauth!.hasAccessToken, true)
+		const sum = await callMcpTool(deps, { server: 'oa', tool: 'add', args: { a: 1, b: 2 }, packageName: null })
+		assert.equal(sum.content[0]!.text, '3')
+	})
+
+	it('a call on an OAuth server in error without a grant is refused with mcp_server_unauthorized and no network probe', async () => {
+		const { deps, server } = await setup({ oauth: { mode: 'none' } })
+		await addMcpServer(deps, { name: 'gh', url })
+		const before = server.requests.length
+		await assert.rejects(
+			callMcpTool(deps, { server: 'gh', tool: 'add', args: { a: 1, b: 2 }, packageName: null }),
+			(error: Error & { code?: string }) => {
+				assert.equal(error.code, 'mcp_server_unauthorized')
+				assert.match(error.message, /pre-registered OAuth client/)
+				assert.match(error.message, /\/account\/mcp-servers\/gh\/authorize/)
+				return true
+			},
+		)
+		assert.equal(server.requests.length, before)
+	})
+
+	it('results carry top-level hasRefreshToken and oauthClientMode', async () => {
+		const { deps, server } = await setup({ oauth: { mode: 'dynamic' } })
+		const parked = mcpServerResult(await addMcpServer(deps, { name: 'oa', url }), deps.publicUrl)
+		assert.deepEqual(
+			{ hasRefreshToken: parked.hasRefreshToken, oauthClientMode: parked.oauthClientMode },
+			{ hasRefreshToken: false, oauthClientMode: null },
+		)
+		await authorizeThroughBrowser(deps, server, 'oa')
+		const ready = mcpServerResult((await deps.cell.mcpServerGet('oa'))!, deps.publicUrl)
+		assert.deepEqual(
+			{ hasRefreshToken: ready.hasRefreshToken, oauthClientMode: ready.oauthClientMode },
+			{ hasRefreshToken: true, oauthClientMode: 'dynamic' },
+		)
+	})
 })
