@@ -90,11 +90,11 @@ export class RuntimeHost extends WorkerEntrypoint<Env, RuntimeProps> {
 				args,
 				packageName: this.ctx.props.packageName,
 			})
-			const bearer = result.authKind === 'bearer'
+			const injected = result.authKind !== 'none'
 			record({
-				outcome: bearer ? 'injected' : 'forwarded',
+				outcome: injected ? 'injected' : 'forwarded',
 				url: result.url,
-				secrets: bearer ? [`mcp:${server}`] : [],
+				secrets: injected ? [`mcp:${server}`] : [],
 			})
 			const { authKind: _authKind, url: _url, ...publicResult } = result
 			return publicResult
