@@ -70,8 +70,12 @@ export async function smokeMcpOAuth(ctx) {
 		const listed = await mcp.call('mcpServerList')
 		const server = listed.servers.find((s) => s.name === 'smoke-oauth')
 		assert(
-			server?.status === 'ready' && server.oauth?.hasRefreshToken === true && server.authUrl === null,
-			'server is ready with a refresh token',
+			server?.status === 'ready' &&
+				server.hasRefreshToken === true &&
+				server.authUrl === null &&
+				server.oauth === undefined &&
+				server.oauthClientMode === undefined,
+			'server is ready with a refresh token (no oauth / oauthClientMode on the capability result)',
 			server,
 		)
 		assert(!leaks(listed), 'mcpServerList never contains a token')
