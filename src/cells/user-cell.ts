@@ -40,6 +40,7 @@ import {
 	userPackagesTableDdl,
 } from '../packages/package-files-store.ts'
 import type { IntegrationConfig, IntegrationUsage } from '../integrations/oauth.ts'
+import { McpOAuthStore, mcpOAuthSchema } from '../mcp-client/oauth-store.ts'
 import { McpServerStore, mcpServerSchema, type McpDiscoveryOutcome, type McpServerRecord } from '../mcp-client/store.ts'
 import {
 	IntegrationStore,
@@ -550,6 +551,7 @@ export class UserCell extends DurableObject<Env> {
 		this.ctx.storage.sql.exec(integrationSchema)
 		this.ctx.storage.sql.exec(secretProviderSchema)
 		this.ctx.storage.sql.exec(mcpServerSchema)
+		this.ctx.storage.sql.exec(mcpOAuthSchema)
 		this.limits = limitsFromEnv(env)
 		this.defaultQuotas = quotasFromEnv(env)
 		this.integrations = new IntegrationStore({
@@ -560,10 +562,16 @@ export class UserCell extends DurableObject<Env> {
 			fetch: (input, init) => fetch(input, init),
 		})
 		this.secretProviders = new SecretProviderStore(this.ctx.storage.sql)
+		this.mcpOAuth = new McpOAuthStore({
+			sql: this.ctx.storage.sql,
+			userId: () => this.userId,
+			keyring: () => this.keyring(),
+		})
 		this.mcpServers = new McpServerStore({
 			sql: this.ctx.storage.sql,
 			userId: () => this.userId,
 			keyring: () => this.keyring(),
+			oauth: this.mcpOAuth,
 		})
 		const secretColumns = this.ctx.storage.sql
 			.exec<{ name: string }>(`SELECT name FROM pragma_table_info('secrets')`)
@@ -591,6 +599,7 @@ export class UserCell extends DurableObject<Env> {
 	private readonly defaultQuotas: Quotas
 	private readonly integrations: IntegrationStore
 	private readonly secretProviders: SecretProviderStore
+	private readonly mcpOAuth: McpOAuthStore
 	private readonly mcpServers: McpServerStore
 	private readonly runTriage: RunTriageStore
 

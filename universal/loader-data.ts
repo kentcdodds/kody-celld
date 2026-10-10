@@ -219,10 +219,10 @@ export type IntegrationView = {
 export type McpServerView = {
 	name: string
 	host: string
-	status: 'ready' | 'error'
+	status: 'ready' | 'error' | 'authenticating'
 	lastError: string | null
 	enabled: boolean
-	authKind: 'none' | 'bearer'
+	authKind: 'none' | 'bearer' | 'oauth'
 	usage: { mode: 'any' | 'packages'; packages: Array<string> }
 	tools: Array<{ name: string; description: string }>
 }

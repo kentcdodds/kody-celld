@@ -2,6 +2,7 @@ import type { IntegrationUsage } from '../integrations/oauth.ts'
 import { decryptWithKeyring, encryptSecretValue, randomId, type MasterKeyring } from '../lib/crypto.ts'
 import { KodyError } from '../lib/errors.ts'
 import type { McpServerInfo, McpTool } from './client.ts'
+import type { McpOAuthStore, McpOAuthSummary, McpTokenRefresher } from './oauth-store.ts'
 
 export const mcpServerSchema = `
 	CREATE TABLE IF NOT EXISTS mcp_servers (
@@ -31,8 +32,9 @@ export type McpServerRecord = {
 	url: string
 	enabled: boolean
 	usage: IntegrationUsage
-	auth: { kind: 'none' | 'bearer' }
-	status: 'ready' | 'error'
+	auth: { kind: 'none' | 'bearer' | 'oauth' }
+	status: 'ready' | 'error' | 'authenticating'
+	oauth: McpOAuthSummary | null
 	lastError: McpLastError | null
 	serverInfo: McpServerInfo | null
 	tools: Array<McpTool>
@@ -40,7 +42,10 @@ export type McpServerRecord = {
 	createdAt: string
 	updatedAt: string
 }
-export type McpDiscoveryOutcome = { serverInfo: McpServerInfo; tools: Array<McpTool> } | { error: McpLastError }
+export type McpDiscoveryOutcome =
+	| { serverInfo: McpServerInfo; tools: Array<McpTool> }
+	| { error: McpLastError }
+	| { auth: { status: 'authenticating' | 'error'; error: McpLastError } }
 export type PublicMcpServer = Omit<McpServerRecord, 'tools'> & {
 	toolCount: number
 	tools: Array<{ name: string; title?: string; description?: string }>
@@ -76,7 +81,7 @@ function sameOrigin(a: string, b: string) {
 	}
 }
 
-function toRecord(row: Row): McpServerRecord {
+function toRecord(row: Row, oauth: McpOAuthSummary | null): McpServerRecord {
 	return {
 		id: row.id,
 		name: row.name,
@@ -84,7 +89,8 @@ function toRecord(row: Row): McpServerRecord {
 		enabled: row.enabled === 1,
 		usage: JSON.parse(row.usage_json) as IntegrationUsage,
 		auth: JSON.parse(row.auth_json) as McpServerRecord['auth'],
-		status: row.status === 'ready' ? 'ready' : 'error',
+		status: row.status === 'ready' || row.status === 'authenticating' ? row.status : 'error',
+		oauth,
 		lastError: row.last_error_json ? (JSON.parse(row.last_error_json) as McpLastError) : null,
 		serverInfo: row.server_info_json ? (JSON.parse(row.server_info_json) as McpServerInfo) : null,
 		tools: JSON.parse(row.tools_json) as Array<McpTool>,
@@ -108,9 +114,19 @@ export function publicMcpServer(record: McpServerRecord): PublicMcpServer {
 }
 
 export class McpServerStore {
-	private readonly host: { sql: SqlStorage; userId: () => string; keyring: () => Promise<MasterKeyring> }
+	private readonly host: {
+		sql: SqlStorage
+		userId: () => string
+		keyring: () => Promise<MasterKeyring>
+		oauth: McpOAuthStore
+	}
 
-	constructor(host: { sql: SqlStorage; userId: () => string; keyring: () => Promise<MasterKeyring> }) {
+	constructor(host: {
+		sql: SqlStorage
+		userId: () => string
+		keyring: () => Promise<MasterKeyring>
+		oauth: McpOAuthStore
+	}) {
 		this.host = host
 	}
 
@@ -127,13 +143,20 @@ export class McpServerStore {
 		return row
 	}
 
+	private record(row: Row) {
+		return toRecord(row, this.host.oauth.summary(row.name))
+	}
+
 	list(): Array<McpServerRecord> {
-		return this.host.sql.exec<Row>('SELECT * FROM mcp_servers ORDER BY name').toArray().map(toRecord)
+		return this.host.sql
+			.exec<Row>('SELECT * FROM mcp_servers ORDER BY name')
+			.toArray()
+			.map((row) => this.record(row))
 	}
 
 	get(name: string): McpServerRecord | null {
 		const row = this.row(name)
-		return row ? toRecord(row) : null
+		return row ? this.record(row) : null
 	}
 
 	async save(input: {
@@ -154,7 +177,14 @@ export class McpServerStore {
 		}
 		// replace without a new token keeps the sealed bearer only for the same origin
 		// (otherwise discovery would send it to a new host). Clearing is remove + re-add.
-		let sealed: { iv: string | null; ciphertext: string | null; keyId: string | null; kind: 'none' | 'bearer' } = {
+		const crossOrigin = existing !== null && !sameOrigin(existing.url, input.url)
+		if (existing && (crossOrigin || input.authorization)) this.host.oauth.clear(input.name)
+		let sealed: {
+			iv: string | null
+			ciphertext: string | null
+			keyId: string | null
+			kind: 'none' | 'bearer' | 'oauth'
+		} = {
 			iv: null,
 			ciphertext: null,
 			keyId: null,
@@ -171,6 +201,8 @@ export class McpServerStore {
 				keyId: existing.bearer_key_id,
 				kind: 'bearer',
 			}
+		} else if (existing && !crossOrigin && (JSON.parse(existing.auth_json) as { kind: string }).kind === 'oauth') {
+			sealed.kind = 'oauth'
 		}
 		const now = nowIso()
 		this.host.sql.exec(
@@ -193,13 +225,21 @@ export class McpServerStore {
 			existing?.created_at ?? now,
 			now,
 		)
-		return toRecord(this.require(input.name))
+		return this.record(this.require(input.name))
 	}
 
 	setDiscovery(name: string, outcome: McpDiscoveryOutcome): McpServerRecord {
 		this.require(name)
 		const now = nowIso()
-		if ('error' in outcome) {
+		if ('auth' in outcome) {
+			this.host.sql.exec(
+				`UPDATE mcp_servers SET status = ?, auth_json = '{"kind":"oauth"}', last_error_json = ?, updated_at = ? WHERE name = ?`,
+				outcome.auth.status,
+				JSON.stringify(outcome.auth.error),
+				now,
+				name,
+			)
+		} else if ('error' in outcome) {
 			this.host.sql.exec(
 				`UPDATE mcp_servers SET status = 'error', last_error_json = ?, updated_at = ? WHERE name = ?`,
 				JSON.stringify(outcome.error),
@@ -216,7 +256,42 @@ export class McpServerStore {
 				name,
 			)
 		}
-		return toRecord(this.require(name))
+		return this.record(this.require(name))
+	}
+
+	setAuthState(name: string, status: 'authenticating' | 'error', error: McpLastError): McpServerRecord {
+		return this.setDiscovery(name, { auth: { status, error } })
+	}
+
+	/** After a successful code exchange: oauth kind; status stays "error / Not discovered yet" until discovery runs. */
+	markOAuth(name: string): McpServerRecord {
+		this.require(name)
+		this.host.sql.exec(
+			`UPDATE mcp_servers SET auth_json = '{"kind":"oauth"}', bearer_iv = NULL, bearer_ciphertext = NULL, bearer_key_id = NULL, updated_at = ? WHERE name = ?`,
+			nowIso(),
+			name,
+		)
+		return this.get(name)!
+	}
+
+	/** The Authorization for a call: the sealed bearer, or a (refreshed) OAuth access token. */
+	async callAuthorization(
+		name: string,
+		options: { forceRefresh: boolean; refresher: McpTokenRefresher; staleAccessToken?: string },
+	) {
+		const row = this.require(name)
+		if ((JSON.parse(row.auth_json) as { kind: string }).kind !== 'oauth') return this.authorization(name)
+		const result = await this.host.oauth.accessToken(name, options)
+		if (result.ok) return `Bearer ${result.accessToken}`
+		this.setAuthState(name, result.status, { phase: 'token exchange', message: result.message, at: nowIso() })
+		if (result.status === 'error') {
+			throw new KodyError('mcp_call_failed', `MCP server "${name}": ${result.message}`, { status: 502 })
+		}
+		throw new KodyError(
+			'mcp_server_unauthorized',
+			`MCP server "${name}" needs authorization: ${result.message} Authorize it on /account/mcp-servers.`,
+			{ status: 401 },
+		)
 	}
 
 	setEnabled(name: string, enabled: boolean): McpServerRecord {
@@ -227,7 +302,7 @@ export class McpServerStore {
 			nowIso(),
 			name,
 		)
-		return toRecord(this.require(name))
+		return this.record(this.require(name))
 	}
 
 	setUsage(name: string, usage: IntegrationUsage): McpServerRecord {
@@ -238,11 +313,12 @@ export class McpServerStore {
 			nowIso(),
 			name,
 		)
-		return toRecord(this.require(name))
+		return this.record(this.require(name))
 	}
 
 	remove(name: string): { removed: boolean } {
 		const existed = this.row(name) !== null
+		this.host.oauth.clear(name)
 		this.host.sql.exec('DELETE FROM mcp_servers WHERE name = ?', name)
 		return { removed: existed }
 	}
@@ -259,6 +335,12 @@ export class McpServerStore {
 
 	/** Re-seals bearer tokens with the current master key (see secretRekey). */
 	async rekey(): Promise<{ resealed: number; remaining: number }> {
+		const a = await this.rekeyBearers()
+		const b = await this.host.oauth.rekey()
+		return { resealed: a.resealed + b.resealed, remaining: a.remaining + b.remaining }
+	}
+
+	private async rekeyBearers(): Promise<{ resealed: number; remaining: number }> {
 		const keyring = await this.host.keyring()
 		const rows = this.host.sql
 			.exec<Row>(

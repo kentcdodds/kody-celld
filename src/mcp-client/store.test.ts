@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { DatabaseSync } from 'node:sqlite'
 import { describe, it } from 'node:test'
 import { buildMasterKeyring } from '../lib/crypto.ts'
+import { McpOAuthStore, mcpOAuthSchema } from './oauth-store.ts'
 import { McpServerStore, mcpServerSchema, publicMcpServer } from './store.ts'
 
 /** Just enough of Durable Object `SqlStorage` for the store (same shim as provider-store.test.ts). */
@@ -25,9 +26,11 @@ function memorySql() {
 async function makeStore(key = 'store-test-master-key', previous?: string) {
 	const sql = memorySql()
 	sql.exec(mcpServerSchema)
+	sql.exec(mcpOAuthSchema)
 	let ring = await buildMasterKeyring(key, previous)
-	const store = new McpServerStore({ sql, userId: () => 'user_1', keyring: async () => ring })
-	return { store, sql, setRing: async (k: string, p?: string) => (ring = await buildMasterKeyring(k, p)) }
+	const oauth = new McpOAuthStore({ sql, userId: () => 'user_1', keyring: async () => ring })
+	const store = new McpServerStore({ sql, userId: () => 'user_1', keyring: async () => ring, oauth })
+	return { store, oauth, sql, setRing: async (k: string, p?: string) => (ring = await buildMasterKeyring(k, p)) }
 }
 
 const base = { url: 'http://172.30.1.5/mcp', enabled: true, usage: { mode: 'any' as const }, replace: false }
@@ -115,5 +118,78 @@ describe('McpServerStore', () => {
 		assert.deepEqual(await store.rekey(), { resealed: 1, remaining: 0 })
 		await setRing('new-key')
 		assert.equal(await store.authorization('home'), 'Bearer t')
+	})
+
+	it('authenticating state, oauth kind and the oauth summary on records', async () => {
+		const { store, oauth } = await makeStore()
+		await store.save({ ...base, name: 'home', authorization: null })
+		const parked = store.setAuthState('home', 'authenticating', {
+			phase: 'authorize',
+			message: 'Authorize it.',
+			at: 'now',
+		})
+		assert.equal(parked.status, 'authenticating')
+		assert.equal(parked.auth.kind, 'oauth')
+		await oauth.saveClient('home', { mode: 'dynamic', information: { client_id: 'cid' } })
+		await oauth.saveTokens('home', { access_token: 'at-secret', refresh_token: 'rt-secret', token_type: 'Bearer' })
+		const record = store.get('home')!
+		assert.equal(record.oauth?.hasRefreshToken, true)
+		assert.doesNotMatch(JSON.stringify(publicMcpServer(record)), /at-secret|rt-secret/)
+	})
+
+	it('replace to another origin, replace with a bearer, and remove all drop OAuth data', async () => {
+		const { store, oauth } = await makeStore()
+		await store.save({ ...base, name: 'home', authorization: null })
+		store.markOAuth('home')
+		await oauth.saveTokens('home', { access_token: 'at-1', token_type: 'Bearer' })
+		await store.save({ ...base, url: 'http://172.30.1.5/other', name: 'home', authorization: null, replace: true })
+		assert.equal(store.get('home')!.auth.kind, 'oauth', 'same-origin replace keeps oauth')
+		assert.equal((await oauth.tokens('home'))!.accessToken, 'at-1')
+		await store.save({
+			...base,
+			url: 'https://elsewhere.example/mcp',
+			name: 'home',
+			authorization: null,
+			replace: true,
+		})
+		assert.equal(store.get('home')!.auth.kind, 'none')
+		assert.equal(oauth.summary('home'), null)
+		store.markOAuth('home')
+		await oauth.saveTokens('home', { access_token: 'at-2', token_type: 'Bearer' })
+		await store.save({
+			...base,
+			url: 'https://elsewhere.example/mcp',
+			name: 'home',
+			authorization: 'Bearer b',
+			replace: true,
+		})
+		assert.equal(oauth.summary('home'), null, 'a bearer replace drops oauth')
+		store.markOAuth('home')
+		await oauth.saveTokens('home', { access_token: 'at-3', token_type: 'Bearer' })
+		store.remove('home')
+		assert.equal(oauth.summary('home'), null)
+	})
+
+	it('callAuthorization: bearer as before; oauth returns the access token or throws mcp_server_unauthorized and parks the server', async () => {
+		const { store, oauth } = await makeStore()
+		const refresher = async () => ({ access_token: 'x', token_type: 'Bearer' })
+		await store.save({ ...base, name: 'b', authorization: 'Bearer static' })
+		assert.equal(await store.callAuthorization('b', { forceRefresh: false, refresher }), 'Bearer static')
+		await store.save({ ...base, name: 'o', authorization: null })
+		store.markOAuth('o')
+		await assert.rejects(store.callAuthorization('o', { forceRefresh: false, refresher }), /mcp_server_unauthorized/)
+		assert.equal(store.get('o')!.status, 'authenticating')
+		await oauth.saveTokens('o', { access_token: 'at-1', token_type: 'Bearer', expires_in: 3600 })
+		assert.equal(await store.callAuthorization('o', { forceRefresh: false, refresher }), 'Bearer at-1')
+	})
+
+	it('rekey covers bearer and oauth secrets', async () => {
+		const { store, oauth, setRing } = await makeStore('r1')
+		await store.save({ ...base, name: 'b', authorization: 'Bearer static' })
+		await store.save({ ...base, name: 'o', authorization: null })
+		store.markOAuth('o')
+		await oauth.saveTokens('o', { access_token: 'at-1', refresh_token: 'rt-1', token_type: 'Bearer' })
+		await setRing('r2', 'r1')
+		assert.deepEqual(await store.rekey(), { resealed: 3, remaining: 0 })
 	})
 })

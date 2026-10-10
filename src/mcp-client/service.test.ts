@@ -4,6 +4,7 @@ import { describe, it } from 'node:test'
 import { buildMasterKeyring } from '../lib/crypto.ts'
 import { mcpConfigFromEnv } from './policy.ts'
 import { addMcpServer, callMcpTool, refreshMcpServer, type McpDeps } from './service.ts'
+import { McpOAuthStore, mcpOAuthSchema } from './oauth-store.ts'
 import { McpServerStore, mcpServerSchema } from './store.ts'
 import { startTestMcpServer } from './test-server.ts'
 
@@ -27,8 +28,10 @@ function memorySql() {
 async function setup(serverOptions: Parameters<typeof startTestMcpServer>[0] = {}) {
 	const sql = memorySql()
 	sql.exec(mcpServerSchema)
+	sql.exec(mcpOAuthSchema)
 	const ring = await buildMasterKeyring('service-test-key')
-	const store = new McpServerStore({ sql, userId: () => 'user_1', keyring: async () => ring })
+	const oauth = new McpOAuthStore({ sql, userId: () => 'user_1', keyring: async () => ring })
+	const store = new McpServerStore({ sql, userId: () => 'user_1', keyring: async () => ring, oauth })
 	const cell = {
 		mcpServerGet: async (name: string) => store.get(name),
 		mcpServerSave: async (input: Parameters<McpServerStore['save']>[0]) => store.save(input),

@@ -104,7 +104,7 @@ function assertResultSize(result: McpToolResult, max: number, server: string, to
 export async function callMcpTool(
 	deps: McpDeps,
 	input: { server: string; tool: string; args: unknown; packageName: string | null },
-): Promise<McpToolResult & { authKind: 'none' | 'bearer'; url: string }> {
+): Promise<McpToolResult & { authKind: 'none' | 'bearer' | 'oauth'; url: string }> {
 	if (
 		input.args !== undefined &&
 		(typeof input.args !== 'object' || input.args === null || Array.isArray(input.args))

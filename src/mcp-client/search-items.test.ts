@@ -11,6 +11,7 @@ const server = (over: Partial<McpServerRecord> = {}): McpServerRecord => ({
 	usage: { mode: 'any' },
 	auth: { kind: 'bearer' },
 	status: 'ready',
+	oauth: null,
 	lastError: null,
 	serverInfo: {
 		name: 'Home Assistant',
