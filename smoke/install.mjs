@@ -15,8 +15,8 @@ export async function smokeInstall({ mcp }) {
 	)
 	const notListed = await mcp.callDirectRaw('packageInstall', { source: 'https://example.com/pkg.tgz' })
 	assert(
-		notListed.isError && /KODY_PRIVATE_HOSTS/.test(JSON.stringify(notListed.payload)),
-		'hosts outside KODY_PRIVATE_HOSTS must be refused',
+		notListed.isError && /not an allowed package source host/.test(JSON.stringify(notListed.payload)),
+		'hosts outside the built-in public package defaults must be refused',
 		notListed.payload,
 	)
 	const badSpec = await mcp.callDirectRaw('packageInstall', { source: 'github:owner' })
