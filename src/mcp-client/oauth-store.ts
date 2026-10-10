@@ -308,9 +308,17 @@ export class McpOAuthStore {
 		}
 	}
 
+	private bumpGeneration(name: string) {
+		this.generation.set(name, (this.generation.get(name) ?? 0) + 1)
+	}
+
 	/** Synchronous, so a caller can re-check the server right before it. `create: false` never re-creates a cleared row. */
 	private writeTokens(name: string, tokens: SealedTokens, create: boolean) {
-		if (create) this.ensureRow(name)
+		if (create) {
+			// A new grant must fence off any refresh that started against an older grant.
+			this.bumpGeneration(name)
+			this.ensureRow(name)
+		}
 		const now = nowIso()
 		this.host.sql.exec(
 			`UPDATE mcp_server_oauth SET access_iv = ?, access_ciphertext = ?, access_key_id = ?, token_type = ?, scope = ?,
@@ -359,6 +367,7 @@ export class McpOAuthStore {
 	}
 
 	clearTokens(name: string) {
+		this.bumpGeneration(name)
 		this.host.sql.exec(
 			`UPDATE mcp_server_oauth SET access_iv = NULL, access_ciphertext = NULL, access_key_id = NULL, refresh_iv = NULL,
 			   refresh_ciphertext = NULL, refresh_key_id = NULL, token_issuer = NULL, token_type = NULL, scope = NULL,
@@ -526,7 +535,7 @@ export class McpOAuthStore {
 	}
 
 	clear(name: string) {
-		this.generation.set(name, (this.generation.get(name) ?? 0) + 1)
+		this.bumpGeneration(name)
 		this.inFlight.delete(name)
 		this.host.sql.exec('DELETE FROM mcp_server_oauth WHERE server_name = ?', name)
 		this.host.sql.exec('DELETE FROM mcp_server_oauth_pending WHERE server_name = ?', name)
@@ -557,14 +566,23 @@ export class McpOAuthStore {
 						keyId: row.k || undefined,
 					})
 					const next = await encryptSecretValue(keyring.current.key, this.host.userId(), plaintext)
+					// Optimistic: a concurrent refresh that rotated this ciphertext wins; do not overwrite it.
 					this.host.sql.exec(
-						`UPDATE mcp_server_oauth SET ${ivCol} = ?, ${ctCol} = ?, ${keyCol} = ? WHERE server_name = ?`,
+						`UPDATE mcp_server_oauth SET ${ivCol} = ?, ${ctCol} = ?, ${keyCol} = ? WHERE server_name = ? AND ${ctCol} = ?`,
 						next.iv,
 						next.ciphertext,
 						current,
 						row.server_name,
+						row.ct,
 					)
-					resealed++
+					const wrote = this.host.sql
+						.exec<{ ok: number }>(
+							`SELECT 1 AS ok FROM mcp_server_oauth WHERE server_name = ? AND ${ctCol} = ?`,
+							row.server_name,
+							next.ciphertext,
+						)
+						.toArray()[0]
+					if (wrote) resealed++
 				} catch (error) {
 					console.error(
 						`mcp oauth rekey: cannot decrypt ${ctCol} for "${row.server_name}":`,

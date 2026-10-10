@@ -51,6 +51,38 @@ export function mcpClientMetadataDocument(urls: McpOAuthUrls): Record<string, un
 	return { client_id: urls.clientMetadataUrl, ...clientMetadata(urls) }
 }
 
+/** RFC 8414 §3.3: the metadata `issuer` must match the URL used to fetch it (trailing slash optional). */
+export function assertAuthorizationServerIssuer(discovery: OAuthDiscoveryState) {
+	const metadata = discovery.authorizationServerMetadata as { issuer?: unknown } | undefined
+	const issuer = metadata?.issuer
+	if (typeof issuer !== 'string' || !issuer) {
+		throw new KodyError('mcp_oauth_failed', 'Authorization server metadata is missing issuer.', { status: 502 })
+	}
+	const expected = discovery.authorizationServerUrl.replace(/\/$/, '')
+	const actual = issuer.replace(/\/$/, '')
+	if (actual !== expected) {
+		throw new KodyError(
+			'mcp_oauth_failed',
+			`Authorization server issuer "${issuer}" does not match ${discovery.authorizationServerUrl}.`,
+			{ status: 502 },
+		)
+	}
+}
+
+/** Host the browser will hit on Continue (authorization_endpoint), falling back to the issuer host. */
+export function mcpAuthorizationEndpointHost(discovery: OAuthDiscoveryState): string {
+	const endpoint = (discovery.authorizationServerMetadata as { authorization_endpoint?: unknown } | undefined)
+		?.authorization_endpoint
+	if (typeof endpoint === 'string' && endpoint) {
+		try {
+			return new URL(endpoint).host
+		} catch {
+			/* fall through */
+		}
+	}
+	return new URL(discovery.authorizationServerUrl).host
+}
+
 /** RFC 9728 → RFC 8414 discovery through the policy fetch. null when the server advertises no authorization server metadata. */
 export async function probeMcpOAuth(
 	serverUrl: string,
@@ -67,7 +99,12 @@ export async function probeMcpOAuth(
 		throw failed(error, 'discovery')
 	}
 	if (!info.authorizationServerMetadata) return null
-	return { ...info, ...(params.resourceMetadataUrl ? { resourceMetadataUrl: params.resourceMetadataUrl.href } : {}) }
+	const discovery: OAuthDiscoveryState = {
+		...info,
+		...(params.resourceMetadataUrl ? { resourceMetadataUrl: params.resourceMetadataUrl.href } : {}),
+	}
+	assertAuthorizationServerIssuer(discovery)
+	return discovery
 }
 
 export function pickClientMode(
@@ -162,13 +199,22 @@ function randomState() {
 		.replace(/=+$/, '')
 }
 
-function failed(error: unknown, step: string): KodyError {
+function scrubSecrets(text: string, secrets: Array<string | null | undefined>) {
+	let out = text
+	for (const secret of secrets) {
+		if (!secret) continue
+		out = out.split(secret).join('[redacted]')
+	}
+	return out
+}
+
+function failed(error: unknown, step: string, secrets: Array<string | null | undefined> = []): KodyError {
 	const known = KodyError.fromUnknown(error)
 	if (known) return known
 	const message = error instanceof Error ? error.message : String(error)
-	return new KodyError('mcp_oauth_failed', `OAuth ${step} failed: ${message.replace(/[?#]\S*/g, '').slice(0, 300)}`, {
-		status: 502,
-	})
+	// Redact before truncating so a secret cut at the boundary cannot leak its prefix into lastError.
+	const cleaned = scrubSecrets(message.replace(/[?#]\S*/g, ''), secrets).slice(0, 300)
+	return new KodyError('mcp_oauth_failed', `OAuth ${step} failed: ${cleaned}`, { status: 502 })
 }
 
 export async function beginMcpAuthorization(input: {
@@ -216,11 +262,12 @@ export async function completeMcpAuthorization(input: {
 		state: input.state,
 		verifier: input.verifier,
 	})
+	const secret = (input.client as { client_secret?: string } | null)?.client_secret
 	let result
 	try {
 		result = await auth(provider, { serverUrl: input.serverUrl, authorizationCode: input.code, fetchFn: input.fetchFn })
 	} catch (error) {
-		throw failed(error, 'token exchange')
+		throw failed(error, 'token exchange', [input.code, input.verifier, secret])
 	}
 	if (result !== 'AUTHORIZED' || !provider.savedTokens) {
 		throw new KodyError('mcp_oauth_failed', 'The token exchange returned no tokens.', { status: 502 })

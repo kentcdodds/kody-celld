@@ -25,7 +25,11 @@ export function AccountMcpServerAuthorize(
 			<AccountManagementShell>
 				<AccountPageHeader
 					title={`Authorize MCP server "${d.name}"`}
-					description="Kody will send you to the server's sign-in page. Approve only if you added this server."
+					description={
+						d.authorizationServerHost
+							? `Continue opens ${d.authorizationServerHost}. Approve only if you added this server.`
+							: "Kody will send you to the server's sign-in page. Approve only if you added this server."
+					}
 					currentHref="/account/mcp-servers"
 				/>
 				<AccountManagementPanel ariaLabel="Authorization details">
@@ -34,7 +38,7 @@ export function AccountMcpServerAuthorize(
 						<dd>
 							<Code>{d.url}</Code>
 						</dd>
-						<dt>Sign-in at</dt>
+						<dt>Continue opens</dt>
 						<dd>{d.authorizationServerHost ?? <Muted>unknown</Muted>}</dd>
 						<dt>Kody identifies itself by</dt>
 						<dd>

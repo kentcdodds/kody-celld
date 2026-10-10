@@ -15,6 +15,7 @@ import {
 	assertBrowserRedirect,
 	beginMcpAuthorization,
 	completeMcpAuthorization,
+	mcpAuthorizationEndpointHost,
 	mcpAuthorizeUrl,
 	mcpOAuthScopes,
 	mcpOAuthUrls,
@@ -403,7 +404,8 @@ export async function describeMcpOAuth(deps: McpDeps, name: string): Promise<Mcp
 	return {
 		name: record.name,
 		url: record.url,
-		authorizationServerHost: new URL(discovery.authorizationServerUrl).host,
+		// Hosted shows where Continue sends the browser (authorization_endpoint), not only the issuer host.
+		authorizationServerHost: mcpAuthorizationEndpointHost(discovery),
 		clientMode,
 		scopes: mcpOAuthScopes(discovery),
 		canContinue: clientMode !== null,
@@ -451,7 +453,14 @@ export async function startMcpOAuth(
 
 export async function finishMcpOAuth(
 	deps: McpDeps,
-	input: { state: string; code: string | null; error: string | null; errorDescription: string | null },
+	input: {
+		state: string
+		code: string | null
+		error: string | null
+		errorDescription: string | null
+		/** RFC 9207 `iss` from the callback; required when the AS advertises authorization_response_iss_parameter_supported. */
+		iss?: string | null
+	},
 ): Promise<{ name: string; ok: boolean; replay: boolean; message: string | null }> {
 	const invalid = () =>
 		new KodyError(
@@ -466,12 +475,19 @@ export async function finishMcpOAuth(
 	const record = await deps.cell.mcpServerGet(pending.serverName)
 	if (claimed.expired || !record || new URL(record.url).origin !== pending.serverOrigin) throw invalid()
 	const park = async (phase: string, message: string) => {
-		await deps.cell.mcpServerSetDiscovery({
-			name: record.name,
-			outcome: {
-				auth: { status: 'authenticating', error: { phase, message, at: nowIso() }, origin: pending.serverOrigin },
-			},
-		})
+		// A cancelled or failed re-authorization must not mark a still-valid grant as needing auth.
+		if (!record.oauth?.hasAccessToken) {
+			await deps.cell.mcpServerSetDiscovery({
+				name: record.name,
+				outcome: {
+					auth: {
+						status: 'authenticating',
+						error: { phase, message, at: nowIso() },
+						origin: pending.serverOrigin,
+					},
+				},
+			})
+		}
 		return { name: record.name, ok: false, replay: false, message }
 	}
 	if (input.error) {
@@ -481,6 +497,18 @@ export async function finishMcpOAuth(
 		)
 	}
 	if (!input.code) return park('authorize', 'The provider returned no authorization code.')
+	if (claimed.discovery) {
+		const expected = claimed.discovery.authorizationServerUrl.replace(/\/$/, '')
+		const metadata = claimed.discovery.authorizationServerMetadata as
+			{ authorization_response_iss_parameter_supported?: unknown } | undefined
+		if (input.iss) {
+			if (input.iss.replace(/\/$/, '') !== expected) {
+				return park('authorize', `The provider's iss does not match the authorization server.`)
+			}
+		} else if (metadata?.authorization_response_iss_parameter_supported === true) {
+			return park('authorize', 'The provider omitted the required iss parameter.')
+		}
+	}
 	let done
 	try {
 		done = await completeMcpAuthorization({
@@ -497,7 +525,11 @@ export async function finishMcpOAuth(
 		const secret = (claimed.client?.information as { client_secret?: string } | undefined)?.client_secret
 		return park(
 			'token exchange',
-			redactSecrets(KodyError.fromUnknown(error)?.message ?? String(error), [input.code, pending.verifier, secret]),
+			redactSecrets(KodyError.fromUnknown(error)?.message ?? String(error), [
+				input.code,
+				pending.verifier,
+				secret,
+			]).slice(0, 300),
 		)
 	}
 	try {
@@ -534,14 +566,15 @@ export type McpServerResult = PublicMcpServer & {
 
 export function mcpServerResult(record: McpServerRecord, publicUrl: string): McpServerResult {
 	const urls = mcpOAuthUrls(publicUrl)
+	// Match hosted: authUrl only while authorization is pending, not on every non-ready OAuth status.
 	const authUrl =
-		record.auth.kind === 'oauth' && record.status !== 'ready' ? mcpAuthorizeUrl(publicUrl, record.name) : null
+		record.auth.kind === 'oauth' && record.status === 'authenticating' ? mcpAuthorizeUrl(publicUrl, record.name) : null
 	const nextStep =
 		record.status === 'ready'
 			? `Connected with ${record.tools.length} tool(s). Call them as kody.mcp[${JSON.stringify(record.name)}].<tool>(input); search({ domain: "mcp:${record.name}" }) lists them.`
-			: authUrl && record.status === 'authenticating'
+			: authUrl
 				? `The server requires OAuth authorization. Ask the user to open ${authUrl} to authorize Kody. If the provider rejects Kody's origin or redirect URI, allow ${urls.clientOrigin} and ${urls.callbackUrl}${urls.clientMetadataUrl ? ` (client id ${urls.clientMetadataUrl})` : ''}. Then check mcpServerList.`
-				: `Status "${record.status}": ${record.lastError?.message ?? 'unknown error'}${authUrl ? ` Authorize at ${authUrl}.` : ' Fix it and call mcpServerRefresh or mcpServerReconnect.'}`
+				: `Status "${record.status}": ${record.lastError?.message ?? 'unknown error'} Fix it and call mcpServerRefresh or mcpServerReconnect.`
 	return {
 		...publicMcpServer(record),
 		hasRefreshToken: record.oauth?.hasRefreshToken ?? false,

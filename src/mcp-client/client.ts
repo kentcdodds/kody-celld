@@ -159,7 +159,14 @@ export function createPolicyFetch(config: McpConfig, options: PolicyFetchOptions
 
 /** The fetch every OAuth request (discovery, registration, token, refresh) goes through. */
 export function oauthPolicyFetch(config: McpConfig, base?: typeof fetch): typeof fetch {
-	return createPolicyFetch(config, { authorization: null, base, strictRedirects: true })
+	const policy = createPolicyFetch(config, { authorization: null, base, strictRedirects: true })
+	// Bound every hop so a slow or malicious provider cannot hang a serialized refresh indefinitely.
+	return ((input: RequestInfo | URL, init: RequestInit = {}) =>
+		policy(input, {
+			...init,
+			// Prefer the caller's signal when present (tests); otherwise apply the configured timeout.
+			signal: init.signal ?? AbortSignal.timeout(config.callTimeoutMs),
+		})) as typeof fetch
 }
 
 /** Removes each secret (and, for `Scheme value` secrets, the bare value) from remote-supplied text. */

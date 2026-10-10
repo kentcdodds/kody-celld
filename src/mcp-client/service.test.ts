@@ -360,7 +360,8 @@ describe('OAuth servers', () => {
 		const record = await addMcpServer(deps, { name: 'gh', url })
 		assert.equal(record.status, 'error')
 		assert.match(record.lastError!.message, /pre-registered OAuth client/)
-		assert.notEqual(mcpServerResult(record, deps.publicUrl).authUrl, null)
+		// authUrl matches hosted: only while status is authenticating.
+		assert.equal(mcpServerResult(record, deps.publicUrl).authUrl, null)
 		await assert.rejects(startMcpOAuth(deps, 'gh'), /mcp_oauth_client_required/)
 	})
 
@@ -451,6 +452,28 @@ describe('OAuth servers', () => {
 		})
 		assert.equal(denied.ok, false)
 		assert.match(store.get('oa')!.lastError!.message, /access_denied: User said no/)
+	})
+
+	it('a cancelled re-authorization leaves a still-valid grant ready', async () => {
+		const { deps, server, store } = await setup({ oauth: { mode: 'dynamic' } })
+		await addMcpServer(deps, { name: 'oa', url })
+		await authorizeThroughBrowser(deps, server, 'oa')
+		assert.equal(store.get('oa')!.status, 'ready')
+		const { authorizationUrl } = await startMcpOAuth(deps, 'oa')
+		const state = new URL(authorizationUrl).searchParams.get('state')!
+		const denied = await finishMcpOAuth(deps, {
+			state,
+			code: null,
+			error: 'access_denied',
+			errorDescription: 'User said no',
+		})
+		assert.equal(denied.ok, false)
+		assert.match(denied.message ?? '', /access_denied/)
+		const record = store.get('oa')!
+		assert.equal(record.status, 'ready')
+		assert.equal(record.oauth!.hasAccessToken, true)
+		const sum = await callMcpTool(deps, { server: 'oa', tool: 'add', args: { a: 1, b: 2 }, packageName: null })
+		assert.equal(sum.content[0]!.text, '3')
 	})
 
 	it('a replace to another origin drops the grant: the old access token never reaches the new origin', async () => {

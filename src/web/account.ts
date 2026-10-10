@@ -59,6 +59,10 @@ const flashes: Record<string, PageFlash> = {
 	run_reopened: { kind: 'ok', text: 'Run reopened.' },
 	mcp_auth_success: { kind: 'ok', text: 'Authorized. The MCP server is connected.' },
 	mcp_auth_error: { kind: 'error', text: 'Authorization did not finish; see the server status below.' },
+	mcp_oauth_client_error: {
+		kind: 'error',
+		text: 'Could not save or remove the OAuth client. Check the client id and secret, then try again.',
+	},
 }
 
 const noReferrer = { 'referrer-policy': 'no-referrer' }
@@ -947,6 +951,7 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 					code: url.searchParams.get('code'),
 					error: url.searchParams.get('error'),
 					errorDescription: url.searchParams.get('error_description'),
+					iss: url.searchParams.get('iss'),
 				})
 				const nameParam = encodeURIComponent(result.name)
 				// A replayed callback must not claim success: the first attempt may have failed.
@@ -989,6 +994,7 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 			if (post) {
 				const name = form.name ?? ''
 				const record = name ? await cell.mcpServerGet(name) : null
+				let clientError: string | null = null
 				if (record) {
 					if (form.action === 'refresh') {
 						try {
@@ -1004,14 +1010,18 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 							})
 							await audit('mcp_server.oauth_client_set', name, { clientId: (form.clientId ?? '').trim(), via: 'web' })
 						} catch (error) {
-							if (!KodyError.fromUnknown(error)) throw error
+							const known = KodyError.fromUnknown(error)
+							if (!known) throw error
+							clientError = known.message
 						}
 					} else if (form.action === 'oauth_client_remove') {
 						try {
 							await removeMcpOAuthClient(mcpDeps({ env, userCell }), name)
 							await audit('mcp_server.oauth_client_removed', name, { via: 'web' })
 						} catch (error) {
-							if (!KodyError.fromUnknown(error)) throw error
+							const known = KodyError.fromUnknown(error)
+							if (!known) throw error
+							clientError = known.message
 						}
 					} else if (form.action === 'enable' || form.action === 'disable') {
 						await cell.mcpServerSetEnabled({ name, enabled: form.action === 'enable' })
@@ -1031,6 +1041,7 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 						await audit('mcp_server.ungrant', name, { packageName: form.packageName, via: 'web' })
 					}
 				}
+				if (clientError) return redirect('/account/mcp-servers?flash=mcp_oauth_client_error')
 				return redirect('/account/mcp-servers')
 			}
 			const servers = await cell.mcpServerList()
@@ -1055,7 +1066,7 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 						enabled: s.enabled,
 						authKind: s.auth.kind,
 						authorizeHref:
-							s.auth.kind === 'oauth' && s.status !== 'ready'
+							s.auth.kind === 'oauth' && s.status === 'authenticating'
 								? `/account/mcp-servers/${encodeURIComponent(s.name)}/authorize`
 								: null,
 						hasRefreshToken: s.oauth?.hasRefreshToken ?? false,

@@ -57,12 +57,13 @@ OAuth server. A bearer token and OAuth are exclusive: a server added with
 1. `mcpServerAdd({ name, url })` saves the server with
    `status: 'authenticating'` and returns an `authUrl`
    (`{origin}/account/mcp-servers/<name>/authorize`) plus a `nextStep` that
-   says what to do. Calls fail with `mcp_server_unauthorized` (with the
-   `authUrl` and the reason) until the user authorizes; so do calls to an
+   says what to do. `authUrl` is set only while `status` is `authenticating`
+   (matching hosted). Calls fail with `mcp_server_unauthorized` (with the
+   authorize link and the reason) until the user authorizes; so do calls to an
    OAuth server in `status: 'error'` that has no grant yet.
 2. The user opens `authUrl` while signed in. The consent page names the server,
-   its authorization server and how Kody will identify itself; **Continue**
-   sends the browser to the provider.
+   where Continue opens (the authorization endpoint host) and how Kody will
+   identify itself; **Continue** sends the browser to the provider.
 3. The provider redirects back to the callback
    (`{origin}/account/mcp-servers/oauth/callback`). Kody exchanges the code
    (PKCE S256), seals the tokens with your keyring, lists the tools, and lands
