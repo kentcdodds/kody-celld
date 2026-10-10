@@ -14,21 +14,57 @@
  * - `frame-ancestors 'none'` + `X-Frame-Options: DENY` protect the OAuth
  *   consent screen and account pages from clickjacking.
  * - `form-action` keeps browser POSTs on this origin, plus the loopback
- *   redirect URIs MCP clients register for the OAuth code flow.
+ *   redirect URIs MCP clients register for the OAuth code flow. A page whose
+ *   form redirects elsewhere over plain http (the MCP OAuth consent page for an
+ *   allowlisted LAN authorization server) widens it with
+ *   `contentSecurityPolicyWithFormAction`.
  */
-const contentSecurityPolicy = [
-	"default-src 'none'",
-	"base-uri 'none'",
-	"object-src 'none'",
-	"frame-ancestors 'none'",
-	"form-action 'self' https: http://localhost:* http://127.0.0.1:*",
-	"img-src 'self' data: https:",
-	"font-src 'self' data:",
-	"style-src 'self' 'unsafe-inline'",
-	"script-src 'self'",
-	"connect-src 'self'",
-	"manifest-src 'self'",
-].join('; ')
+const formAction =
+	"form-action 'self' https: http://localhost:* http://127.0.0.1:*"
+
+function buildContentSecurityPolicy(formActionDirective: string) {
+	return [
+		"default-src 'none'",
+		"base-uri 'none'",
+		"object-src 'none'",
+		"frame-ancestors 'none'",
+		formActionDirective,
+		"img-src 'self' data: https:",
+		"font-src 'self' data:",
+		"style-src 'self' 'unsafe-inline'",
+		"script-src 'self'",
+		"connect-src 'self'",
+		"manifest-src 'self'",
+	].join('; ')
+}
+
+const contentSecurityPolicy = buildContentSecurityPolicy(formAction)
+
+/** The first-party CSP with `origins` (bare http(s) origins only) added to `form-action`. */
+export function contentSecurityPolicyWithFormAction(
+	origins: Array<string>,
+): string {
+	for (const origin of origins) {
+		let parsed: URL | null = null
+		try {
+			parsed = new URL(origin)
+		} catch {
+			/* refused below */
+		}
+		if (
+			!parsed ||
+			(parsed.protocol !== 'http:' && parsed.protocol !== 'https:') ||
+			parsed.origin !== origin
+		) {
+			throw new Error(
+				`form-action source must be a bare http(s) origin, got "${origin}".`,
+			)
+		}
+	}
+	return origins.length
+		? buildContentSecurityPolicy(`${formAction} ${origins.join(' ')}`)
+		: contentSecurityPolicy
+}
 
 export const firstPartySecurityHeaders: Readonly<Record<string, string>> = {
 	'content-security-policy': contentSecurityPolicy,

@@ -1,4 +1,5 @@
 import type { Env } from '../env.ts'
+import { contentSecurityPolicyWithFormAction } from '../app/security-headers.ts'
 import { getUserCell } from '../execute/engine.ts'
 import { recordAudit } from '../lib/audit.ts'
 import { mcpCell, mcpDeps } from '../capabilities/mcp-servers.ts'
@@ -983,11 +984,18 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 						},
 					})
 				}
-				const d = await describeMcpOAuth(mcpDeps({ env, userCell }), name)
+				const { formActionOrigin, ...d } = await describeMcpOAuth(mcpDeps({ env, userCell }), name)
 				return view(session, {
 					title: `Authorize ${d.name}`,
 					current: '/account/mcp-servers',
-					headers: { 'referrer-policy': 'no-referrer', 'cache-control': 'no-store' },
+					headers: {
+						'referrer-policy': 'no-referrer',
+						'cache-control': 'no-store',
+						// Continue redirects to the provider; an http LAN authorization server must be allowed in form-action.
+						...(formActionOrigin
+							? { 'content-security-policy': contentSecurityPolicyWithFormAction([formActionOrigin]) }
+							: {}),
+					},
 					data: { page: 'accountMcpServerAuthorize', csrf: session.csrf, ...d },
 				})
 			}

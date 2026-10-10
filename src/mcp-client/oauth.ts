@@ -293,6 +293,29 @@ export async function refreshMcpTokens(input: {
 	})
 }
 
+/**
+ * The origin the consent page must add to its CSP `form-action` so Continue can
+ * redirect there: only an http authorize endpoint that `assertBrowserRedirect`
+ * accepts (an allowlisted LAN host). https is already allowed; anything else is refused anyway.
+ */
+export function mcpBrowserFormActionOrigin(discovery: OAuthDiscoveryState, config: McpConfig): string | null {
+	const endpoint = (discovery.authorizationServerMetadata as { authorization_endpoint?: unknown } | undefined)
+		?.authorization_endpoint
+	if (typeof endpoint !== 'string') return null
+	let url: URL
+	try {
+		url = new URL(endpoint)
+	} catch {
+		return null
+	}
+	if (url.protocol !== 'http:') return null
+	try {
+		return assertBrowserRedirect(url, config).origin
+	} catch {
+		return null
+	}
+}
+
 /** The provider authorize URL is where we send the user's browser: https, or http to an allowlisted host only. */
 export function assertBrowserRedirect(url: URL, config: McpConfig): URL {
 	if (url.protocol === 'https:') return url

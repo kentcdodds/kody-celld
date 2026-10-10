@@ -3,6 +3,7 @@ import { describe, it } from 'node:test'
 import { oauthPolicyFetch } from './client.ts'
 import {
 	assertBrowserRedirect,
+	mcpBrowserFormActionOrigin,
 	beginMcpAuthorization,
 	completeMcpAuthorization,
 	mcpAuthorizeUrl,
@@ -186,5 +187,30 @@ describe('assertBrowserRedirect', () => {
 		for (const bad of ['javascript:alert(1)', 'data:text/html,x', 'http://idp.example.com/a']) {
 			assert.throws(() => assertBrowserRedirect(new URL(bad), config), /mcp_oauth_failed/)
 		}
+	})
+})
+
+describe('mcpBrowserFormActionOrigin', () => {
+	const discovery = (endpoint: string) =>
+		({
+			authorizationServerUrl: 'http://172.30.1.5',
+			authorizationServerMetadata: { authorization_endpoint: endpoint },
+		}) as never
+	it('returns the origin only for an http authorize endpoint on an allowlisted host', () => {
+		assert.equal(
+			mcpBrowserFormActionOrigin(discovery('http://172.30.1.5:8123/auth/authorize'), config),
+			'http://172.30.1.5:8123',
+		)
+		assert.equal(
+			mcpBrowserFormActionOrigin(discovery('https://idp.example.com/authorize'), config),
+			null,
+			'https is already allowed',
+		)
+		assert.equal(
+			mcpBrowserFormActionOrigin(discovery('http://idp.example.com/authorize'), config),
+			null,
+			'public http is refused',
+		)
+		assert.equal(mcpBrowserFormActionOrigin(discovery('javascript:alert(1)'), config), null)
 	})
 })

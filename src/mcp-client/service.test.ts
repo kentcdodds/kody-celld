@@ -388,6 +388,11 @@ describe('OAuth servers', () => {
 		const { deps, server } = await setup({ oauth: { mode: 'dynamic' } })
 		await addMcpServer(deps, { name: 'oa', url })
 		const described = await describeMcpOAuth(deps, 'oa')
+		assert.equal(
+			described.formActionOrigin,
+			'http://172.30.1.5',
+			'the consent page must allow the LAN authorize origin in form-action',
+		)
 		assert.equal(described.clientMode, 'dynamic')
 		assert.equal(described.authorizationServerHost, '172.30.1.5')
 		assert.equal(described.canContinue, true)

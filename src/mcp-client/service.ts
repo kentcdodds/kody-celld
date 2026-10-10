@@ -21,6 +21,7 @@ import {
 	mcpOAuthUrls,
 	pickClientMode,
 	probeMcpOAuth,
+	mcpBrowserFormActionOrigin,
 } from './oauth.ts'
 import type { McpOAuthClient, McpOAuthClientMode, McpOAuthPending } from './oauth-store.ts'
 import { assertMcpServerName, assertMcpUrl, normalizeBearerToken, type McpConfig } from './policy.ts'
@@ -382,6 +383,8 @@ export type McpOAuthDescription = {
 	scopes: Array<string>
 	canContinue: boolean
 	message: string | null
+	/** An http authorize origin the consent page must allow in CSP form-action (allowlisted LAN AS), else null. */
+	formActionOrigin: string | null
 }
 
 export async function describeMcpOAuth(deps: McpDeps, name: string): Promise<McpOAuthDescription> {
@@ -396,6 +399,7 @@ export async function describeMcpOAuth(deps: McpDeps, name: string): Promise<Mcp
 			scopes: [],
 			canContinue: false,
 			message: 'This server advertises no OAuth authorization server.',
+			formActionOrigin: null,
 		}
 	}
 	const stored = await deps.cell.mcpServerOAuthLoad(record.name)
@@ -412,6 +416,7 @@ export async function describeMcpOAuth(deps: McpDeps, name: string): Promise<Mcp
 		scopes: mcpOAuthScopes(discovery),
 		canContinue: clientMode !== null,
 		message: clientMode ? null : needsClientMessage,
+		formActionOrigin: mcpBrowserFormActionOrigin(discovery, deps.config),
 	}
 }
 
