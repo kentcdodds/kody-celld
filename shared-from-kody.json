@@ -320,17 +320,17 @@
     {
       "path": "src/jobs/schedule.ts",
       "source": "packages/shared/src/jobs/schedule.ts",
-      "reason": "Hosted schedule lives in @kody-internal/shared (croner). celld keeps a local parser until a published shared core package exists."
+      "reason": "Hosted schedule lives in @kody-internal/shared (croner). celld keeps a local parser until a published shared core package exists. Cleanup: #69 (replace with @kody/core, then delete interim copy and docs)."
     },
     {
       "path": "src/secrets/placeholders.ts",
       "source": "packages/worker/src/mcp/secrets/placeholders.ts",
-      "reason": "Same placeholder grammar, local implementation. Path and helpers differ; will move into a shared core package later."
+      "reason": "Same placeholder grammar, local implementation. Path and helpers differ; will move into a shared core package later. Cleanup: #69 (replace with @kody/core, then delete interim copy and docs)."
     },
     {
       "path": "src/packages/manifest.ts",
       "source": "packages/worker/src/package-registry/manifest.ts",
-      "reason": "Same package.json contract surface, local validator. Hosted manifest is larger (apps, billing, org). Shared core later."
+      "reason": "Same package.json contract surface, local validator. Hosted manifest is larger (apps, billing, org). Shared core later. Cleanup: #69 (replace with @kody/core, then delete interim copy and docs)."
     }
   ]
 }

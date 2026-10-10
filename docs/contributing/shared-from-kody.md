@@ -47,13 +47,24 @@ hosted Kody, 17 differed from kody main. Choices:
 | `universal/package-readme-images.ts`   | delist | No `/assets/` route                           |
 | `universal/routes.ts`                  | delist | celld route table only                        |
 
-Contract modules (`src/jobs/schedule.ts`, `src/secrets/placeholders.ts`,
-`src/packages/manifest.ts`) and `public/styles.css` are listed as adapted until
-a shared `@kody/core` package exists. Principle pages under
+`public/styles.css` is adapted (self-hosted CSS subset). Principle pages under
 `docs/principles/` (except the celld-owned index and celld-only pages) are
 verbatim.
+
+## Interim contract modules (second lane)
+
+These three adapted copies are an interim second lane, not the end state:
+
+- `src/jobs/schedule.ts`
+- `src/secrets/placeholders.ts`
+- `src/packages/manifest.ts`
+
+Replace them with a shared `@kody/core` package, then delete the interim copies
+and every doc about them. Tracked in
+[#69](https://github.com/kentcdodds/kody-celld/issues/69).
 
 ## Related
 
 - [Match hosted first](../principles/match-hosted-first.md)
 - [Keep agent context lean](../principles/lean-agent-context.md)
+- [#69 Replace interim contract modules with @kody/core](https://github.com/kentcdodds/kody-celld/issues/69)
