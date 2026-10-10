@@ -15,7 +15,9 @@
 type PackageFilesTextKind = 'markdown' | 'code' | 'text'
 export type PackageFilesMediaKind = 'image' | 'video' | 'audio'
 export type PackageFilesContentKind =
-	PackageFilesTextKind | PackageFilesMediaKind | 'binary'
+	| PackageFilesTextKind
+	| PackageFilesMediaKind
+	| 'binary'
 
 export const maxPackageFilePreviewBytes = 10 * 1024 * 1024
 

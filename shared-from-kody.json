@@ -1,0 +1,336 @@
+{
+  "kodyRepo": "kentcdodds/kody",
+  "kodyCommit": "0bf31fb32793eedadd13b63aaf442408a37debec",
+  "updatedAt": "2026-10-10T23:54:09Z",
+  "notes": "Verbatim files must match upstream bytes at kodyCommit. Adapted files share a path with hosted Kody but are intentionally different; sync:kody reports their diffs and does not overwrite them.",
+  "files": [
+    {
+      "path": "client/clipboard.ts",
+      "source": "packages/worker/client/clipboard.ts",
+      "sha256": "f2c026b21c1d937668048651ab711cf694c5bf7b73500b2a3a339d13172610f5",
+      "kind": "ui"
+    },
+    {
+      "path": "client/copy-code-block.tsx",
+      "source": "packages/worker/client/copy-code-block.tsx",
+      "sha256": "7594aeadd0be236153e6ff74f57e02e3776cc62cd90ec8aaea9870baa2947841",
+      "kind": "ui"
+    },
+    {
+      "path": "client/doc-youtube-embed.tsx",
+      "source": "packages/worker/client/doc-youtube-embed.tsx",
+      "sha256": "abfae1fe8f0cd054eb2b1b95de3efbf01ca04bbb5fe51629c01b659c2ef2dd26",
+      "kind": "ui"
+    },
+    {
+      "path": "client/double-check.ts",
+      "source": "packages/worker/client/double-check.ts",
+      "sha256": "c26042837bf4a00a47dbefd09c11c49cb304e372120f48457ed2be1d39fb9729",
+      "kind": "ui"
+    },
+    {
+      "path": "client/event-mixin.ts",
+      "source": "packages/worker/client/event-mixin.ts",
+      "sha256": "95857dde6dd572397b16ae648593ece182249fc6f57b57a53efac3c630d06cfb",
+      "kind": "ui"
+    },
+    {
+      "path": "client/format-timestamp.ts",
+      "source": "packages/worker/client/format-timestamp.ts",
+      "sha256": "f3877e1cc7fa66cc595eaaf30ab9db4f157ecd0d5fc4a995acd7955fd94fe40b",
+      "kind": "ui"
+    },
+    {
+      "path": "client/markdown-first-party.ts",
+      "source": "packages/worker/client/markdown-first-party.ts",
+      "sha256": "477084ddf159e8db68a92bbf13059d1d780021a1c2badb04e9418cd7cdecd9d6",
+      "kind": "ui"
+    },
+    {
+      "path": "client/markdown-heading-anchor.tsx",
+      "source": "packages/worker/client/markdown-heading-anchor.tsx",
+      "sha256": "2a32014247c12307eb13890a0043d02705189f9e8896b4ab7cced28560df3f30",
+      "kind": "ui"
+    },
+    {
+      "path": "client/markdown-view.tsx",
+      "source": "packages/worker/client/markdown-view.tsx",
+      "sha256": "ece56db2298d9e1c80a017b1b008e325e68fc3d5de1caa6ef6202815860cd3fd",
+      "kind": "ui"
+    },
+    {
+      "path": "client/search-filter.ts",
+      "source": "packages/worker/client/search-filter.ts",
+      "sha256": "6fb47bb7d7c7256afc62a857df6c86ed9fcdecdee0f1d98ba38ddd683a1fcadc",
+      "kind": "ui"
+    },
+    {
+      "path": "client/syntax-highlight.tsx",
+      "source": "packages/worker/client/syntax-highlight.tsx",
+      "sha256": "ede176f3a5c4dfedc1b8e93d55ac418a0b85b9aedeafe0951d30f9e898222433",
+      "kind": "ui"
+    },
+    {
+      "path": "client/toast.ts",
+      "source": "packages/worker/client/toast.ts",
+      "sha256": "00323d90c3edfb4be38293063854075511886fa6df65c01dae57c0610730eb8c",
+      "kind": "ui"
+    },
+    {
+      "path": "client/youtube-light-player.tsx",
+      "source": "packages/worker/client/youtube-light-player.tsx",
+      "sha256": "e02f22bf1860e78824abca7a975a7d220100f451a1f68408aeedfcea3fca90d4",
+      "kind": "ui"
+    },
+    {
+      "path": "docs/principles/cleanup.md",
+      "source": "docs/principles/cleanup.md",
+      "sha256": "8748ae11f5ef5f960871f84a2f67ac1d4c68f0b0085dd9cca9419fcfd5a808c8",
+      "kind": "principle"
+    },
+    {
+      "path": "docs/principles/delete-off-the-common-path.md",
+      "source": "docs/principles/delete-off-the-common-path.md",
+      "sha256": "99140c77466cb70ab7613c6e6788b5b6625c7387a7693b43f8273b920ed8c2f0",
+      "kind": "principle"
+    },
+    {
+      "path": "docs/principles/examples-over-prose.md",
+      "source": "docs/principles/examples-over-prose.md",
+      "sha256": "a6b95a19f6f40e43059cbaf0459c59a49435bb31d4395c88b09e40fd8815c496",
+      "kind": "principle"
+    },
+    {
+      "path": "docs/principles/fail-loudly.md",
+      "source": "docs/principles/fail-loudly.md",
+      "sha256": "4a6d5104fe0d0d2bd2bca2cbaba8a0dd822c0a58d2b5f5f713ef818aba555b91",
+      "kind": "principle"
+    },
+    {
+      "path": "docs/principles/fix-the-root-bottleneck.md",
+      "source": "docs/principles/fix-the-root-bottleneck.md",
+      "sha256": "ceef8c01f66f01ce71beb3e86d75f62e3d5aa35cd2e450aad630227d9922df9f",
+      "kind": "principle"
+    },
+    {
+      "path": "docs/principles/generic-platform.md",
+      "source": "docs/principles/generic-platform.md",
+      "sha256": "c2d364d8932169792d349d55b4bbed6650756743d9de51dd5bf0acfd938b9ca5",
+      "kind": "principle"
+    },
+    {
+      "path": "docs/principles/lean-agent-context.md",
+      "source": "docs/principles/lean-agent-context.md",
+      "sha256": "f534ad9bfac6ccc63fe416044a3d1c782c474dde673ded132674f16ec584c264",
+      "kind": "principle"
+    },
+    {
+      "path": "docs/principles/no-invasive-test-only-code.md",
+      "source": "docs/principles/no-invasive-test-only-code.md",
+      "sha256": "d3d19c51d14a92b663c1abb261a866f2b5df47df1aaf403b152e13db488b6e57",
+      "kind": "principle"
+    },
+    {
+      "path": "docs/principles/normalized-source-of-truth.md",
+      "source": "docs/principles/normalized-source-of-truth.md",
+      "sha256": "967fb09bb9b5c98a5800ea5ef0f4f0d111dd272d2d1649f90114d1dd18df2968",
+      "kind": "principle"
+    },
+    {
+      "path": "docs/principles/test-the-workflow.md",
+      "source": "docs/principles/test-the-workflow.md",
+      "sha256": "21ca6af926a6aa574c8da7552253963bfd5d0c818783ff6f3d01f85b110cf964",
+      "kind": "principle"
+    },
+    {
+      "path": "docs/principles/two-way-doors.md",
+      "source": "docs/principles/two-way-doors.md",
+      "sha256": "2c69a56065125c0ba8c2cef68919af12b77ee24f3a28f5a9e2683cec1ac3ecdf",
+      "kind": "principle"
+    },
+    {
+      "path": "public/fonts/bricolage-grotesque-latin-ext.woff2",
+      "source": "packages/worker/public/fonts/bricolage-grotesque-latin-ext.woff2",
+      "sha256": "1d04719f1325400ea4267e630dba29b02af87eb094d7d71d2e4d80a05479d07a",
+      "kind": "asset"
+    },
+    {
+      "path": "public/fonts/bricolage-grotesque-latin.woff2",
+      "source": "packages/worker/public/fonts/bricolage-grotesque-latin.woff2",
+      "sha256": "85f55a58a31e61a2e19e8bb25fed503181bf2a6b4cab76c589992cfaac377447",
+      "kind": "asset"
+    },
+    {
+      "path": "public/fonts/wix-madefor-text-italic-latin-ext.woff2",
+      "source": "packages/worker/public/fonts/wix-madefor-text-italic-latin-ext.woff2",
+      "sha256": "e46b49fb25ed748fe6b56ad2fbf222114aa0505b085ec565b292c524f8149c9f",
+      "kind": "asset"
+    },
+    {
+      "path": "public/fonts/wix-madefor-text-italic-latin.woff2",
+      "source": "packages/worker/public/fonts/wix-madefor-text-italic-latin.woff2",
+      "sha256": "a716c9eeb15ba012899a26aba136fbbe94a8012160e3eae3a4218d03f7b12d8d",
+      "kind": "asset"
+    },
+    {
+      "path": "public/fonts/wix-madefor-text-latin-ext.woff2",
+      "source": "packages/worker/public/fonts/wix-madefor-text-latin-ext.woff2",
+      "sha256": "27f8e65e5bac10aa91eb870d25eba39250c5f09325649f81b73c476912277087",
+      "kind": "asset"
+    },
+    {
+      "path": "public/fonts/wix-madefor-text-latin.woff2",
+      "source": "packages/worker/public/fonts/wix-madefor-text-latin.woff2",
+      "sha256": "4d1e9ffda308f709db183c9132d5ee5c5afb7d932ff9a32b0b54b52f998836f2",
+      "kind": "asset"
+    },
+    {
+      "path": "universal/doc-youtube.ts",
+      "source": "packages/worker/universal/doc-youtube.ts",
+      "sha256": "61fa527e4060531da46a4b17f5bb40b5e222746b3de11f0d78f95fc47902bcb0",
+      "kind": "ui"
+    },
+    {
+      "path": "universal/highlight-cache-header.ts",
+      "source": "packages/worker/universal/highlight-cache-header.ts",
+      "sha256": "77c6b2d749983314a53f19ab895ed600e836b1781f146e412fb598ab74c2c4dc",
+      "kind": "ui"
+    },
+    {
+      "path": "universal/highlight-cache-request.ts",
+      "source": "packages/worker/universal/highlight-cache-request.ts",
+      "sha256": "1d1a774da85849c5a11573774ed25a215df9aac4b02c7f1bd48452dd705053bb",
+      "kind": "ui"
+    },
+    {
+      "path": "universal/highlighted-code.ts",
+      "source": "packages/worker/universal/highlighted-code.ts",
+      "sha256": "7051396a58821f58d464fe4ec66a6853969e80046506a7a8423907d0e00ebdb5",
+      "kind": "ui"
+    },
+    {
+      "path": "universal/icon-glyphs.tsx",
+      "source": "packages/worker/universal/icon-glyphs.tsx",
+      "sha256": "0fea8241d39aebbb03f4611f8297690aea1f0d8e6fc61b2c220f7a16fa50be65",
+      "kind": "ui"
+    },
+    {
+      "path": "universal/icon.tsx",
+      "source": "packages/worker/universal/icon.tsx",
+      "sha256": "5669bb0e417e6a6aaafb6a4410978165a577f03ff81293f206ff2cfa2c3aed5a",
+      "kind": "ui"
+    },
+    {
+      "path": "universal/package-file-media.ts",
+      "source": "packages/worker/universal/package-file-media.ts",
+      "sha256": "2cd50bebe012028bcb2c50e97eff90b68c006278da6a10ae59e154d1341c225c",
+      "kind": "ui"
+    },
+    {
+      "path": "universal/styles/style-primitives.ts",
+      "source": "packages/worker/universal/styles/style-primitives.ts",
+      "sha256": "b560a1f4df6e19c0de86046fc6d8b5703959d661d3111d1bad18529bc15d19e0",
+      "kind": "ui"
+    },
+    {
+      "path": "universal/styles/tokens.ts",
+      "source": "packages/worker/universal/styles/tokens.ts",
+      "sha256": "ebacb966ab62098737d53af90ebfd53e11e98cd9f8466185c53b31a74bad23df",
+      "kind": "ui"
+    },
+    {
+      "path": "universal/user-avatar.tsx",
+      "source": "packages/worker/universal/user-avatar.tsx",
+      "sha256": "814c0f4395cb0613007c7d9cac2705bf29c524b6c1fba4f65886e0af1303d4b4",
+      "kind": "ui"
+    },
+    {
+      "path": "universal/youtube-watch.ts",
+      "source": "packages/worker/universal/youtube-watch.ts",
+      "sha256": "348355fc94a4896ff41dda55160a7fed6f13141611c769cb0883c9816dfde50e",
+      "kind": "ui"
+    }
+  ],
+  "adapted": [
+    {
+      "path": "client/app-root.tsx",
+      "source": "packages/worker/client/app-root.tsx",
+      "reason": "celld shell dispatches AppLoaderData route pages; hosted mounts a different App/router stack."
+    },
+    {
+      "path": "client/client-router.tsx",
+      "source": "packages/worker/client/client-router.tsx",
+      "reason": "celld keeps a small Navigation API helper; hosted has a full client-side router (~1.3k lines) this project does not use."
+    },
+    {
+      "path": "client/copy-text-button.tsx",
+      "source": "packages/worker/client/copy-text-button.tsx",
+      "reason": "Wrapped with remix clientEntry for celld island hydration (entry.tsx registers it); hosted exports a plain component."
+    },
+    {
+      "path": "client/entry.tsx",
+      "source": "packages/worker/client/entry.tsx",
+      "reason": "Island registry and Navigation API stop for forms; hosted boots Sentry/frames and a different client stack."
+    },
+    {
+      "path": "client/package-files-explorer.tsx",
+      "source": "packages/worker/client/package-files-explorer.tsx",
+      "reason": "Adds an embedded prop so the package detail page can host the explorer without a second title/back link."
+    },
+    {
+      "path": "client/site-footer.tsx",
+      "source": "packages/worker/client/site-footer.tsx",
+      "reason": "Self-hosted footer nav and version string; hosted points at product marketing links."
+    },
+    {
+      "path": "client/site-header.tsx",
+      "source": "packages/worker/client/site-header.tsx",
+      "reason": "Account/console nav for a single-node deploy; hosted header includes org switcher and billing chrome."
+    },
+    {
+      "path": "client/toaster.tsx",
+      "source": "packages/worker/client/toaster.tsx",
+      "reason": "Wrapped with remix clientEntry for island hydration."
+    },
+    {
+      "path": "universal/loader-data.ts",
+      "source": "packages/worker/universal/loader-data.ts",
+      "reason": "AppLoaderData union is shaped for celld pages only; hosted carries billing, onboarding, and public-community payloads."
+    },
+    {
+      "path": "universal/package-files.ts",
+      "source": "packages/worker/universal/package-files.ts",
+      "reason": "Hosted community / public-tree / raw-file href helpers are not ported (those routes do not exist here)."
+    },
+    {
+      "path": "universal/package-readme-images.ts",
+      "source": "packages/worker/universal/package-readme-images.ts",
+      "reason": "No /assets/ community route; README images stay ordinary links."
+    },
+    {
+      "path": "universal/routes.ts",
+      "source": "packages/worker/universal/routes.ts",
+      "reason": "Typed route table covers celld paths only (/signin, /console, \u2026); hosted has many more public and org routes."
+    },
+    {
+      "path": "public/styles.css",
+      "source": "packages/worker/public/styles.css",
+      "reason": "Self-hosted subset of the design-system CSS; full hosted sheet includes marketing and org surfaces not present here."
+    },
+    {
+      "path": "src/jobs/schedule.ts",
+      "source": "packages/shared/src/jobs/schedule.ts",
+      "reason": "Hosted schedule lives in @kody-internal/shared (croner). celld keeps a local parser until a published shared core package exists."
+    },
+    {
+      "path": "src/secrets/placeholders.ts",
+      "source": "packages/worker/src/mcp/secrets/placeholders.ts",
+      "reason": "Same placeholder grammar, local implementation. Path and helpers differ; will move into a shared core package later."
+    },
+    {
+      "path": "src/packages/manifest.ts",
+      "source": "packages/worker/src/package-registry/manifest.ts",
+      "reason": "Same package.json contract surface, local validator. Hosted manifest is larger (apps, billing, org). Shared core later."
+    }
+  ]
+}

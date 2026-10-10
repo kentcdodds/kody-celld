@@ -19,6 +19,8 @@ This file is a map, not the docs. Open the page that owns the task:
   [docs/contributing/celld-compat.md](./docs/contributing/celld-compat.md)
 - Web UI (mirrors hosted; port upstream diffs):
   [docs/web-ui.md](./docs/web-ui.md)
+- Verbatim sync lock (`npm run sync:kody`):
+  [docs/contributing/shared-from-kody.md](./docs/contributing/shared-from-kody.md)
 - Architecture: [docs/architecture.md](./docs/architecture.md)
 
 ## Where things live

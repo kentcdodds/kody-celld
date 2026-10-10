@@ -5,10 +5,10 @@ Load only the page the task needs.
 
 kody-celld is a faithful self-host of
 [hosted Kody](https://github.com/kentcdodds/kody). Shared principle pages are
-copied from that repo's `docs/principles/` (currently pinned to commit
-`0d02fe04`). Do not hand-edit them. Change them upstream in hosted Kody, then
-copy the updated page here in the same PR and note the new commit. A CI sync
-lock for these pages is planned separately.
+copied from that repo and pinned in
+[`shared-from-kody.json`](../../shared-from-kody.json). Do not hand-edit them.
+Change them upstream in hosted Kody, then run `npm run sync:kody`. See
+[shared-from-kody.md](../contributing/shared-from-kody.md).
 
 ## Shared (synced from kody)
 
