@@ -12,8 +12,12 @@ export async function smokeBlobs({ mcp, user, token }) {
 	const statusBody = await status.json()
 	assert(status.status === 200, 'GET /admin/blobs failed', statusBody)
 	const { blobs: providerInfo, bucketBound } = statusBody
-	assert(providerInfo.provider === 'r2' || providerInfo.provider === 's3', 'unknown blob provider', providerInfo)
-	assert(providerInfo.provider !== 'r2' || bucketBound, 'r2 provider without a BLOBS binding', providerInfo)
+	assert(
+		providerInfo.provider === 'binding' || providerInfo.provider === 's3',
+		'unknown blob provider',
+		providerInfo,
+	)
+	assert(providerInfo.provider !== 'binding' || bucketBound, 'binding provider without a BLOBS binding', providerInfo)
 	assert(!credentialPattern.test(JSON.stringify(providerInfo)), 'ADMIN BLOB STATUS LEAKED CREDENTIALS')
 	log('provider', { provider: providerInfo.provider, bucketBound, maxBytes: providerInfo.maxBytes })
 
