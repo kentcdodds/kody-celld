@@ -90,55 +90,95 @@ function truncateUtf8(text: string, max: number) {
 		: new TextDecoder().decode(encoded.slice(0, max)).replace(/�$/, '') + ' …[truncated]'
 }
 
-/** Fetch that enforces the URL policy on every hop, follows redirects by hand and keeps auth same-origin. */
-function policyFetch(
-	config: McpConfig,
-	authorization: string | null,
-	base: typeof fetch,
-	onPolicyError: (e: KodyError) => void,
-): typeof fetch {
+export type PolicyFetchOptions = {
+	/** A static credential (bearer server or OAuth access token). null: keep the caller's own Authorization header. */
+	authorization: string | null
+	base?: typeof fetch
+	onPolicyError?: (e: KodyError) => void
+	onChallenge?: (wwwAuthenticate: string) => void
+	/** OAuth requests: a non-GET/HEAD request only follows a same-origin 307/308. */
+	strictRedirects?: boolean
+}
+
+/** Fetch that enforces the URL policy on every hop, follows redirects by hand and keeps Authorization on the first origin. */
+export function createPolicyFetch(config: McpConfig, options: PolicyFetchOptions): typeof fetch {
+	const base = options.base ?? fetch
+	const fail = (kody: KodyError) => {
+		options.onPolicyError?.(kody)
+		return kody
+	}
 	return (async (input: RequestInfo | URL, init: RequestInit = {}) => {
 		let url = new URL(input instanceof Request ? input.url : String(input))
 		const origin = url.origin
+		const method = (init.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase()
+		const authorization = options.authorization ?? new Headers(init.headers).get('authorization')
 		for (let hop = 0; ; hop++) {
 			try {
 				url = assertMcpUrl(url.href, config)
 				await assertResolvedHostAllowed(url, config, base)
 			} catch (error) {
-				const kody = KodyError.fromUnknown(error)!
-				onPolicyError(kody)
-				throw kody
+				throw fail(KodyError.fromUnknown(error)!)
 			}
 			const headers = new Headers(init.headers)
 			if (authorization && url.origin === origin) headers.set('authorization', authorization)
 			else headers.delete('authorization')
 			const response = await base(url.href, { ...init, headers, redirect: 'manual' })
+			if (response.status === 401) {
+				const challenge = response.headers.get('www-authenticate')
+				if (challenge) options.onChallenge?.(challenge)
+			}
 			const location = response.headers.get('location')
 			if (response.status < 300 || response.status >= 400 || !location) return response
 			await response.body?.cancel().catch(() => {})
 			if (hop >= mcpLimits.maxRedirects) {
-				const kody = new KodyError(
-					'mcp_call_failed',
-					`MCP server redirected more than ${mcpLimits.maxRedirects} times.`,
-					{ status: 502 },
+				throw fail(
+					new KodyError('mcp_call_failed', `MCP server redirected more than ${mcpLimits.maxRedirects} times.`, {
+						status: 502,
+					}),
 				)
-				onPolicyError(kody)
-				throw kody
 			}
-			url = new URL(location, url)
+			const next = new URL(location, url)
+			if (
+				options.strictRedirects &&
+				method !== 'GET' &&
+				method !== 'HEAD' &&
+				(next.origin !== url.origin || (response.status !== 307 && response.status !== 308))
+			) {
+				throw fail(
+					new KodyError(
+						'mcp_call_failed',
+						`OAuth ${method} to ${url.origin} was redirected (${response.status}) to ${next.origin}; only same-origin 307/308 redirects are followed.`,
+						{ status: 502 },
+					),
+				)
+			}
+			url = next
 		}
 	}) as typeof fetch
 }
 
-/** Removes the credential (full header value and the part after the scheme) from remote-supplied text. */
-function redact(text: string, authorization: string | null) {
-	if (!authorization) return text
-	const secrets = new Set([authorization])
-	const credential = authorization.replace(/^\S+\s+/, '')
-	if (credential) secrets.add(credential)
+/** The fetch every OAuth request (discovery, registration, token, refresh) goes through. */
+export function oauthPolicyFetch(config: McpConfig, base?: typeof fetch): typeof fetch {
+	return createPolicyFetch(config, { authorization: null, base, strictRedirects: true })
+}
+
+/** Removes each secret (and, for `Scheme value` secrets, the bare value) from remote-supplied text. */
+export function redactSecrets(text: string, secrets: Array<string | null | undefined>): string {
+	const all = new Set<string>()
+	for (const secret of secrets) {
+		if (!secret) continue
+		all.add(secret)
+		const credential = secret.replace(/^\S+\s+/, '')
+		if (credential) all.add(credential)
+	}
 	let out = text
-	for (const secret of [...secrets].sort((a, b) => b.length - a.length)) out = out.split(secret).join('[redacted]')
+	for (const secret of [...all].sort((a, b) => b.length - a.length)) out = out.split(secret).join('[redacted]')
 	return out
+}
+
+export function httpStatusOf(error: unknown): number | undefined {
+	const status = KodyError.fromUnknown(error)?.details?.httpStatus
+	return typeof status === 'number' ? status : undefined
 }
 
 function toKodyError(
@@ -147,6 +187,7 @@ function toKodyError(
 	policyError: KodyError | null,
 	timeoutMs: number,
 	authorization: string | null,
+	challenge: string | null,
 ) {
 	if (policyError) return policyError
 	const known = KodyError.fromUnknown(error)
@@ -162,8 +203,8 @@ function toKodyError(
 	}
 	return new KodyError(
 		'mcp_call_failed',
-		`MCP ${phase} failed${httpStatus ? ` (HTTP ${httpStatus})` : ''}: ${truncateUtf8(redact(message, authorization).replace(/[?#]\S*/g, ''), 300)}`,
-		{ status: 502, details: { phase, ...(httpStatus ? { httpStatus } : {}) } },
+		`MCP ${phase} failed${httpStatus ? ` (HTTP ${httpStatus})` : ''}: ${truncateUtf8(redactSecrets(message, [authorization]).replace(/[?#]\S*/g, ''), 300)}`,
+		{ status: 502, details: { phase, ...(httpStatus ? { httpStatus } : {}), ...(challenge ? { challenge } : {}) } },
 	)
 }
 
@@ -174,9 +215,17 @@ async function withClient<T>(
 ): Promise<T> {
 	let policyError: KodyError | null = null
 	const timeout = options.config.callTimeoutMs
+	let challenge: string | null = null
 	const transport = new StreamableHTTPClientTransport(new URL(target.url), {
-		fetch: policyFetch(options.config, target.authorization, options.fetch ?? fetch, (e) => {
-			policyError = e
+		fetch: createPolicyFetch(options.config, {
+			authorization: target.authorization,
+			base: options.fetch ?? fetch,
+			onPolicyError: (e) => {
+				policyError = e
+			},
+			onChallenge: (c) => {
+				challenge = c
+			},
 		}),
 	})
 	const client = new Client(
@@ -188,7 +237,7 @@ async function withClient<T>(
 		await client.connect(transport, { timeout })
 		return await run(client, (next) => (phase = next), timeout)
 	} catch (error) {
-		throw toKodyError(error, phase, policyError, timeout, target.authorization)
+		throw toKodyError(error, phase, policyError, timeout, target.authorization, challenge)
 	} finally {
 		await client.close().catch(() => {})
 	}

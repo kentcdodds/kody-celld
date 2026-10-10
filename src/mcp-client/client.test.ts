@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { callServerTool, capTools, discoverServer, mcpLimits, type McpTool } from './client.ts'
+import {
+	callServerTool,
+	capTools,
+	createPolicyFetch,
+	discoverServer,
+	httpStatusOf,
+	mcpLimits,
+	oauthPolicyFetch,
+	redactSecrets,
+	type McpTool,
+} from './client.ts'
 import { mcpConfigFromEnv } from './policy.ts'
 import { startTestMcpServer } from './test-server.ts'
 
@@ -179,5 +189,84 @@ describe('capTools total size', () => {
 		const capped = capTools(tools)
 		assert.ok(JSON.stringify(capped).length <= mcpLimits.maxTotalToolBytes)
 		assert.ok(capped.length > 0)
+	})
+})
+
+describe('createPolicyFetch', () => {
+	const config = mcpConfigFromEnv({ KODY_MCP_ALLOW_PRIVATE_HOSTS: '172.30.0.0/16' })
+	function recorder(routes: Record<string, (init: RequestInit) => Response>) {
+		const seen: Array<{ url: string; method: string; authorization: string | null }> = []
+		const base = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
+			const url = String(input)
+			seen.push({
+				url,
+				method: (init.method ?? 'GET').toUpperCase(),
+				authorization: new Headers(init.headers).get('authorization'),
+			})
+			const route = routes[url]
+			return route ? route(init) : new Response('ok')
+		}) as typeof fetch
+		return { base, seen }
+	}
+
+	it('keeps a caller Authorization on its first origin and drops it after a cross-origin redirect', async () => {
+		const { base, seen } = recorder({
+			'http://172.30.1.5/token': () =>
+				new Response(null, { status: 302, headers: { location: 'http://172.30.1.6/elsewhere' } }),
+		})
+		const f = createPolicyFetch(config, { authorization: null, base })
+		await f('http://172.30.1.5/token', { headers: { authorization: 'Basic abc' } })
+		assert.equal(seen[0]!.authorization, 'Basic abc')
+		assert.equal(seen[1]!.url, 'http://172.30.1.6/elsewhere')
+		assert.equal(seen[1]!.authorization, null)
+	})
+
+	it('a static authorization wins over the caller header', async () => {
+		const { base, seen } = recorder({})
+		const f = createPolicyFetch(config, { authorization: 'Bearer static', base })
+		await f('http://172.30.1.5/mcp', { headers: { authorization: 'Bearer other' } })
+		assert.equal(seen[0]!.authorization, 'Bearer static')
+	})
+
+	it('strict redirects: a POST follows only a same-origin 307/308', async () => {
+		const { base } = recorder({
+			'http://172.30.1.5/a': () => new Response(null, { status: 302, headers: { location: 'http://172.30.1.5/b' } }),
+			'http://172.30.1.5/c': () => new Response(null, { status: 307, headers: { location: 'http://172.30.1.6/d' } }),
+			'http://172.30.1.5/e': () => new Response(null, { status: 308, headers: { location: '/f' } }),
+		})
+		const f = oauthPolicyFetch(config, base)
+		await assert.rejects(f('http://172.30.1.5/a', { method: 'POST', body: 'x' }), /mcp_call_failed|redirect/)
+		await assert.rejects(f('http://172.30.1.5/c', { method: 'POST', body: 'x' }), /mcp_call_failed|redirect/)
+		const ok = await f('http://172.30.1.5/e', { method: 'POST', body: 'x' })
+		assert.equal(await ok.text(), 'ok')
+		const get = await f('http://172.30.1.5/a')
+		assert.equal(await get.text(), 'ok', 'GET still follows a 302')
+	})
+
+	it('reports the WWW-Authenticate challenge of a 401', async () => {
+		const challenge = 'Bearer resource_metadata="http://172.30.1.5/.well-known/oauth-protected-resource/mcp"'
+		const { base } = recorder({
+			'http://172.30.1.5/mcp': () => new Response('no', { status: 401, headers: { 'www-authenticate': challenge } }),
+		})
+		let seen: string | null = null
+		const f = createPolicyFetch(config, { authorization: null, base, onChallenge: (c) => (seen = c) })
+		await f('http://172.30.1.5/mcp')
+		assert.equal(seen, challenge)
+	})
+})
+
+describe('redactSecrets / httpStatusOf', () => {
+	it('scrubs every secret and the bare credential after a scheme', () => {
+		const out = redactSecrets('a=at-1 b=Bearer rt-2 c=rt-2 d=sec', ['Bearer at-1', 'rt-2', 'sec', null])
+		assert.equal(out, 'a=[redacted] b=Bearer [redacted] c=[redacted] d=[redacted]')
+	})
+
+	it('discovery against a 401 server reports httpStatus 401 and the challenge', async () => {
+		const server = startTestMcpServer({ bearer: 'tok' })
+		const error = await discoverServer({ url, authorization: null }, { config, fetch: server.fetch }).then(
+			() => null,
+			(e: unknown) => e,
+		)
+		assert.equal(httpStatusOf(error), 401)
 	})
 })
