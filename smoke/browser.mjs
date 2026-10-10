@@ -7,7 +7,7 @@
 // rendered from inline HTML (no network needed). Set SMOKE_BROWSER_TARGET_HOST
 // to the name the browser can use to reach this process (host.docker.internal
 // for the compose.browser.yaml sidecar) to also exercise URL navigation; that
-// host must be in KODY_BROWSER_ALLOW_PRIVATE_HOSTS on the server.
+// host must be in KODY_PRIVATE_HOSTS on the server.
 import { randomBytes } from 'node:crypto'
 import { createServer } from 'node:http'
 import { adminToken, assert, baseUrl, log, sha256 } from './lib.mjs'

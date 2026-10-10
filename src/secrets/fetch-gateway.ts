@@ -5,7 +5,8 @@ import { executeRun } from '../execute/engine.ts'
 import type { RuntimeProps } from '../execute/runtime-host.ts'
 import { integrationEventPayload, type IntegrationRecord } from '../integrations/store.ts'
 import { dispatchTopic } from '../packages/subscriptions.ts'
-import { isCredentialTransportAllowed, isHostApproved, parseInsecureHostAllowance, requestHost } from './host-policy.ts'
+import { privateHostsFromEnv } from '../lib/private-hosts-env.ts'
+import { isCredentialTransportAllowed, isHostApproved, requestHost } from './host-policy.ts'
 import {
 	collectPlaceholders,
 	containsSecretPlaceholder,
@@ -119,7 +120,7 @@ export class FetchGateway extends WorkerEntrypoint<Env, RuntimeProps> {
 			...providerRefs.map((p) => `secret/${p.provider}:${p.ref}`),
 		]
 
-		const allowInsecure = parseInsecureHostAllowance(this.env.KODY_ALLOW_INSECURE_SECRET_HOSTS)
+		const allowInsecure = privateHostsFromEnv(this.env)
 		if (!isCredentialTransportAllowed(url, allowInsecure)) {
 			record({ outcome: 'denied', status: 403, secrets, reason: 'insecure_scheme' })
 			return deny(

@@ -4,7 +4,7 @@ import { KodyError } from '../lib/errors.ts'
 import {
 	describePackageSource,
 	fetchPackageSource,
-	packageSourceHostsFromEnv,
+	packageSourceHostPolicyFromEnv,
 	parsePackageSource,
 	packageFileView,
 	previewPackageSource,
@@ -186,7 +186,7 @@ export const packageInstall = defineCapability<{ source: string; subdir?: string
 	domain: 'packages',
 	name: 'packageInstall',
 	description:
-		'Install (or update) a package from a remote source: github:owner/repo[/subdir][#ref], a github.com URL, a public kody.codes/@owner/leaf[.git] listing (read-only smart-HTTP clone), a .tar.gz/.tgz URL, or a JSON file-map URL. Pass "as" to fork under a new package.json name. The server downloads it (hosts limited by KODY_PACKAGE_SOURCE_HOSTS) and saves it like packageSave. Secrets are never transferred.',
+		'Install (or update) a package from a remote source: github:owner/repo[/subdir][#ref], a github.com URL, a public kody.codes/@owner/leaf[.git] listing (read-only smart-HTTP clone), a .tar.gz/.tgz URL, or a JSON file-map URL. Pass "as" to fork under a new package.json name. The server downloads it (built-in public hosts; private/LAN via KODY_PRIVATE_HOSTS) and saves it like packageSave. Secrets are never transferred.',
 	tags: ['packages', 'write'],
 	keywords: [
 		'install from github',
@@ -227,7 +227,7 @@ export default async function main() {
 		}
 		if (typeof args.source !== 'string') throw new KodyError('invalid_args', '"source" is required.')
 		const source = parsePackageSource(args.source, typeof args.subdir === 'string' ? args.subdir : undefined)
-		const fetched = await fetchPackageSource(source, { allowedHosts: packageSourceHostsFromEnv(ctx.env) })
+		const fetched = await fetchPackageSource(source, packageSourceHostPolicyFromEnv(ctx.env))
 		const fork = typeof args.as === 'string' && args.as.trim() !== '' ? args.as.trim() : null
 		let files = fetched.files
 		let savedSource = fetched.source
@@ -305,7 +305,7 @@ export default async function main() {
 		if (args.path !== undefined && typeof args.path !== 'string') {
 			throw new KodyError('invalid_args', '"path" must be a string.')
 		}
-		const preview = await previewPackageSource(source, { allowedHosts: packageSourceHostsFromEnv(ctx.env) })
+		const preview = await previewPackageSource(source, packageSourceHostPolicyFromEnv(ctx.env))
 		const file = typeof args.path === 'string' ? packageFileView(preview.files, args.path) : undefined
 		return {
 			source: preview.source,
@@ -384,7 +384,7 @@ export const packageUpdate = defineCapability<{ name: string }>({
 				`Package "${args.name}" was saved from "${pkg.source}", not a remote source. Use packageInstall with a source.`,
 			)
 		}
-		const fetched = await fetchPackageSource(source, { allowedHosts: packageSourceHostsFromEnv(ctx.env) })
+		const fetched = await fetchPackageSource(source, packageSourceHostPolicyFromEnv(ctx.env))
 		const saved = await ctx.userCell.packageSave({ files: fetched.files, source: fetched.source })
 		if (saved.name !== pkg.name) {
 			throw new KodyError(

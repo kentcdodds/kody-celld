@@ -20,6 +20,7 @@ import { defaultPublisher, renamePackageFiles } from '../capabilities/community.
 import { fetchPackageSourceCached } from '../packages/fetched-package-cache.ts'
 import {
 	fetchPackageSource,
+	packageSourceHostPolicyFromEnv,
 	packageSourceHostsFromEnv,
 	parsePackageSource,
 	packagePreviewFromFetched,
@@ -274,7 +275,7 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 		if (post) return redirect(url.pathname)
 		const ref = decodePreviewSource(detailPath.source)
 		const fetched = await fetchPackageSourceCached(parsePackageSource(ref.source, ref.subdir), {
-			allowedHosts: packageSourceHostsFromEnv(env),
+			...packageSourceHostPolicyFromEnv(env),
 		})
 		const preview = packagePreviewFromFetched(fetched)
 		// Pin the commit into the URL so Install (and later file clicks) resolve the
@@ -588,9 +589,9 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 					try {
 						const source = parsePackageSource(form.source, form.subdir || null)
 						if (form.action === 'preview') {
-							preview = await previewPackageSource(source, { allowedHosts: packageSourceHostsFromEnv(env) })
+							preview = await previewPackageSource(source, packageSourceHostPolicyFromEnv(env))
 						} else {
-							const fetched = await fetchPackageSource(source, { allowedHosts: packageSourceHostsFromEnv(env) })
+							const fetched = await fetchPackageSource(source, packageSourceHostPolicyFromEnv(env))
 							const forkAs = form.action === 'fork' ? (form.as || '').trim() : ''
 							if (form.action === 'fork' && !forkAs) {
 								throw new KodyError('invalid_args', 'Fork requires a new package name in "as".')

@@ -40,9 +40,9 @@ describe('browser config', () => {
 				browserConfigFromEnv({
 					KODY_BROWSER_PROVIDER: 'browserless',
 					KODY_BROWSER_URL: 'http://b:3000',
-					KODY_BROWSER_ALLOW_PRIVATE_HOSTS: 'ok.home,10.0.0.0/99',
+					KODY_PRIVATE_HOSTS: 'ok.home,10.0.0.0/99',
 				}),
-			/KODY_BROWSER_ALLOW_PRIVATE_HOSTS: "10\.0\.0\.0\/99"/,
+			/KODY_PRIVATE_HOSTS: "10\.0\.0\.0\/99"/,
 		)
 	})
 
@@ -51,7 +51,7 @@ describe('browser config', () => {
 			KODY_BROWSER_PROVIDER: 'cloudflare',
 			KODY_BROWSER_CF_ACCOUNT_ID: 'acc/1',
 			KODY_BROWSER_TOKEN: 'unit-test-token-not-real',
-			KODY_BROWSER_ALLOW_PRIVATE_HOSTS: 'Dash.Home.LAN, *.lab.internal',
+			KODY_PRIVATE_HOSTS: 'Dash.Home.LAN, *.lab.internal',
 		})
 		assert.equal(config?.baseUrl, 'https://api.cloudflare.com/client/v4/accounts/acc%2F1/browser-rendering')
 		assert.deepEqual(config?.allowPrivateHosts, ['dash.home.lan', '*.lab.internal'])

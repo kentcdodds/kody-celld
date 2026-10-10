@@ -18,7 +18,7 @@ import { isInvalidGrant } from './oauth-store.ts'
 import { mcpConfigFromEnv } from './policy.ts'
 import { startTestMcpServer } from './test-server.ts'
 
-const config = mcpConfigFromEnv({ KODY_MCP_ALLOW_PRIVATE_HOSTS: '172.30.0.0/16' })
+const config = mcpConfigFromEnv({ KODY_PRIVATE_HOSTS: '172.30.0.0/16' })
 const serverUrl = 'http://172.30.1.5/mcp'
 const httpsUrls = mcpOAuthUrls('https://kody.example.com/')
 const httpUrls = mcpOAuthUrls('http://localhost:8080')

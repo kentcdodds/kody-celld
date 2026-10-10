@@ -14,7 +14,7 @@ import {
 import { mcpConfigFromEnv } from './policy.ts'
 import { startTestMcpServer } from './test-server.ts'
 
-const config = mcpConfigFromEnv({ KODY_MCP_ALLOW_PRIVATE_HOSTS: '172.30.0.0/16', KODY_MCP_CALL_TIMEOUT_MS: '2000' })
+const config = mcpConfigFromEnv({ KODY_PRIVATE_HOSTS: '172.30.0.0/16', KODY_MCP_CALL_TIMEOUT_MS: '2000' })
 const url = 'http://172.30.1.5:8123/mcp'
 const text = (t: string) => ({ content: [{ type: 'text', text: t }], isError: false })
 
@@ -193,7 +193,7 @@ describe('capTools total size', () => {
 })
 
 describe('createPolicyFetch', () => {
-	const policyConfig = mcpConfigFromEnv({ KODY_MCP_ALLOW_PRIVATE_HOSTS: '172.30.0.0/16' })
+	const policyConfig = mcpConfigFromEnv({ KODY_PRIVATE_HOSTS: '172.30.0.0/16' })
 	function recorder(routes: Record<string, (init: RequestInit) => Response>) {
 		const seen: Array<{ url: string; method: string; authorization: string | null }> = []
 		const base = (async (input: RequestInfo | URL, init: RequestInit = {}) => {

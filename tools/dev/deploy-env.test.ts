@@ -1,6 +1,6 @@
 // Regression: Docker deployments and CI only see the KODY_* vars that the
 // compose files forward and the entrypoint's tunable_vars() regex passes on.
-// The external MCP server vars must reach every deployment shape.
+// The private-host and MCP server vars must reach every deployment shape.
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { describe, it } from 'node:test'
@@ -10,7 +10,7 @@ function read(relative: string): string {
 }
 
 const mcpVars = [
-	'KODY_MCP_ALLOW_PRIVATE_HOSTS',
+	'KODY_PRIVATE_HOSTS',
 	'KODY_MCP_CALL_TIMEOUT_MS',
 	'KODY_DNS_RESOLVER_URL',
 	'KODY_QUOTA_MCP_SERVERS',
@@ -39,8 +39,8 @@ describe('deployment env forwarding (external MCP servers)', () => {
 	})
 
 	for (const file of ['.github/workflows/ci.yml', '.github/workflows/publish.yml']) {
-		it(`${file} allowlists the smoke MCP mock host`, () => {
-			assert.match(read(file), /KODY_MCP_ALLOW_PRIVATE_HOSTS: 127\.0\.0\.1,localhost,host\.docker\.internal/)
+		it(`${file} allowlists the smoke private hosts`, () => {
+			assert.match(read(file), /KODY_PRIVATE_HOSTS: 127\.0\.0\.1,localhost,host\.docker\.internal/)
 		})
 	}
 })

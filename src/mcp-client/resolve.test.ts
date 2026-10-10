@@ -10,7 +10,7 @@ const resolver = (answers: Record<string, Array<{ type: number; data: string }>>
 		return Response.json({ Status: status, Answer: answers[key] ?? [] })
 	}) as typeof fetch
 
-const config = mcpConfigFromEnv({ KODY_MCP_ALLOW_PRIVATE_HOSTS: '172.30.0.0/16,ha.home' })
+const config = mcpConfigFromEnv({ KODY_PRIVATE_HOSTS: '172.30.0.0/16,ha.home' })
 
 describe('assertResolvedHostAllowed', () => {
 	it('passes public answers and allowlisted private ranges', async () => {

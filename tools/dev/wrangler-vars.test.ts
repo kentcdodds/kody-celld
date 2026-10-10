@@ -20,7 +20,7 @@ const wrangler = parseJsonc(readFileSync(new URL('../../wrangler.jsonc', import.
 	vars: Record<string, string>
 }
 
-const forbiddenExact = new Set(['KODY_BROWSER_ALLOW_PRIVATE_HOSTS', 'KODY_ALLOW_INSECURE_SECRET_HOSTS'])
+const forbiddenExact = new Set(['KODY_PRIVATE_HOSTS'])
 
 describe('wrangler.jsonc vars (single-node inheritance)', () => {
 	it('does not ship email, private-host, or insecure-host smoke defaults', () => {

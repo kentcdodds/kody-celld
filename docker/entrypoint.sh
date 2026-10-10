@@ -21,7 +21,7 @@ done
 # Runtime limits / quota defaults (docs/operations.md) are plain KODY_* vars
 # that the Worker reads from its bindings; list the ones that are set.
 tunable_vars() {
-	compgen -v | grep -E '^KODY_(EXECUTE|RUN|RESPONSE|AUDIT|MCP|QUOTA|AI|SEARCH|VECTOR|QDRANT|BLOB|BROWSER|WEBHOOK|EMAIL|NPM|ESM|PACKAGE|DNS)_' || true
+	compgen -v | grep -E '^KODY_(EXECUTE|RUN|RESPONSE|AUDIT|MCP|QUOTA|AI|SEARCH|VECTOR|QDRANT|BLOB|BROWSER|WEBHOOK|EMAIL|NPM|ESM|PACKAGE|DNS|PRIVATE)_' || true
 }
 
 random_hex() {
@@ -84,9 +84,6 @@ run_single() {
 		echo "KODY_ADMIN_TOKEN=$KODY_ADMIN_TOKEN"
 		echo "KODY_MASTER_KEY=$KODY_MASTER_KEY"
 		echo "KODY_PUBLIC_URL=$KODY_PUBLIC_URL"
-		if [[ -n "${KODY_ALLOW_INSECURE_SECRET_HOSTS:-}" ]]; then
-			echo "KODY_ALLOW_INSECURE_SECRET_HOSTS=$KODY_ALLOW_INSECURE_SECRET_HOSTS"
-		fi
 		if [[ -n "${KODY_MASTER_KEY_PREVIOUS:-}" ]]; then
 			echo "KODY_MASTER_KEY_PREVIOUS=$KODY_MASTER_KEY_PREVIOUS"
 		fi

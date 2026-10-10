@@ -72,7 +72,7 @@ function settledHit(key: string): Promise<FetchedPackage> | null {
 
 export async function fetchPackageSourceCached(
 	source: PackageSource,
-	options: { allowedHosts: Array<string>; fetch?: FetchLike | undefined },
+	options: { allowedHosts: Array<string>; privateHosts?: Array<string>; fetch?: FetchLike | undefined },
 ): Promise<FetchedPackage> {
 	const key = fetchedPackageCacheKey(source)
 	const cached = settledHit(key)

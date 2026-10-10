@@ -72,10 +72,10 @@ export function AccountPackages(
 						</Actions>
 					</StackedForm>
 					<Lede>
-						Allowed source hosts: <Code>{d.sourceHosts.join(', ')}</Code> (
-						<Code>KODY_PACKAGE_SOURCE_HOSTS</Code>). Public kody.codes listing
-						URLs clone read-only via <Code>.git</Code>; secrets are never
-						transferred.
+						Allowed public source hosts: <Code>{d.sourceHosts.join(', ')}</Code>
+						. Private/LAN sources need <Code>KODY_PRIVATE_HOSTS</Code>. Public
+						kody.codes listing URLs clone read-only via <Code>.git</Code>;
+						secrets are never transferred.
 					</Lede>
 				</AccountManagementPanel>
 				{preview ? (

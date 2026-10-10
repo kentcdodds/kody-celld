@@ -59,15 +59,12 @@ const rendered = {
 		KODY_ADMIN_TOKEN: adminToken,
 		KODY_MASTER_KEY: masterKey,
 		KODY_PUBLIC_URL: publicUrl,
-		...(process.env.KODY_ALLOW_INSECURE_SECRET_HOSTS
-			? { KODY_ALLOW_INSECURE_SECRET_HOSTS: process.env.KODY_ALLOW_INSECURE_SECRET_HOSTS }
-			: {}),
 		...(process.env.KODY_MASTER_KEY_PREVIOUS ? { KODY_MASTER_KEY_PREVIOUS: process.env.KODY_MASTER_KEY_PREVIOUS } : {}),
 		// Runtime limits and quota defaults (docs/operations.md); unset/empty = built-in default.
 		...Object.fromEntries(
 			Object.entries(process.env).filter(
 				([name, value]) =>
-					/^KODY_(EXECUTE|RUN|RESPONSE|AUDIT|MCP|QUOTA|AI|SEARCH|VECTOR|QDRANT|BLOB|BROWSER|WEBHOOK|EMAIL|NPM|ESM|PACKAGE)_/.test(
+					/^KODY_(EXECUTE|RUN|RESPONSE|AUDIT|MCP|QUOTA|AI|SEARCH|VECTOR|QDRANT|BLOB|BROWSER|WEBHOOK|EMAIL|NPM|ESM|PACKAGE|DNS|PRIVATE)_/.test(
 						name,
 					) &&
 					value !== undefined &&

@@ -30,8 +30,8 @@ describe('normalizeAllowlistEntry', () => {
 		assert.throws(() => normalizeAllowlistEntry('::ffff:0:0/96'), /"::ffff:0:0\/96".*IPv4.*0\.0\.0\.0\/0/)
 		assert.throws(() => normalizeAllowlistEntry('::ffff:10.0.0.0/104'), /"::ffff:10\.0\.0\.0\/104".*10\.0\.0\.0\/8/)
 		assert.throws(
-			() => parseHostAllowlist('[::ffff:10.0.0.0]/104', 'KODY_MCP_ALLOW_PRIVATE_HOSTS'),
-			/KODY_MCP_ALLOW_PRIVATE_HOSTS: .*IPv4.*10\.0\.0\.0\/8/,
+			() => parseHostAllowlist('[::ffff:10.0.0.0]/104', 'KODY_PRIVATE_HOSTS'),
+			/KODY_PRIVATE_HOSTS: .*IPv4.*10\.0\.0\.0\/8/,
 		)
 	})
 	it('rejects anything else', () => {
@@ -61,8 +61,8 @@ describe('parseHostAllowlist', () => {
 	})
 	it('names the variable and the bad entry', () => {
 		assert.throws(
-			() => parseHostAllowlist('ok.home,10.0.0.0/40', 'KODY_MCP_ALLOW_PRIVATE_HOSTS'),
-			/KODY_MCP_ALLOW_PRIVATE_HOSTS: "10\.0\.0\.0\/40"/,
+			() => parseHostAllowlist('ok.home,10.0.0.0/40', 'KODY_PRIVATE_HOSTS'),
+			/KODY_PRIVATE_HOSTS: "10\.0\.0\.0\/40"/,
 		)
 	})
 })

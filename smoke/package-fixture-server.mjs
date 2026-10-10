@@ -94,7 +94,7 @@ function serveGit(req, res, url, repoDir) {
  *
  * Host is SMOKE_ECHO_HOST (host.docker.internal in Docker CI) so the kody
  * container can fetch it; that host must be listed exactly in
- * KODY_PACKAGE_SOURCE_HOSTS (it is private by name).
+ * KODY_PRIVATE_HOSTS (it is private by name).
  */
 export async function startPackageFixtureServer(port = Number(process.env.SMOKE_PACKAGE_FIXTURE_PORT ?? 9798)) {
 	const host = process.env.SMOKE_ECHO_HOST ?? '127.0.0.1'

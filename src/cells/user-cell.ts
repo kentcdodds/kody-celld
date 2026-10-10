@@ -55,7 +55,8 @@ import {
 	type IntegrationRecord,
 	type TokenResolution,
 } from '../integrations/store.ts'
-import { normalizeSecretHost, parseInsecureHostAllowance } from '../secrets/host-policy.ts'
+import { privateHostsFromEnv } from '../lib/private-hosts-env.ts'
+import { normalizeSecretHost } from '../secrets/host-policy.ts'
 import type { SecretScope } from '../secrets/placeholders.ts'
 import {
 	SecretProviderStore,
@@ -564,7 +565,7 @@ export class UserCell extends DurableObject<Env> {
 			sql: this.ctx.storage.sql,
 			userId: () => this.userId,
 			keyring: () => this.keyring(),
-			insecureAllowance: parseInsecureHostAllowance(env.KODY_ALLOW_INSECURE_SECRET_HOSTS),
+			insecureAllowance: privateHostsFromEnv(env),
 			fetch: (input, init) => fetch(input, init),
 		})
 		this.secretProviders = new SecretProviderStore(this.ctx.storage.sql)

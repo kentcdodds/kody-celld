@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { assertMcpServerName, assertMcpUrl, mcpConfigFromEnv, normalizeBearerToken } from './policy.ts'
 
-const config = mcpConfigFromEnv({ KODY_MCP_ALLOW_PRIVATE_HOSTS: '172.30.0.0/16,ha.home,*.lab.home' })
+const config = mcpConfigFromEnv({ KODY_PRIVATE_HOSTS: '172.30.0.0/16,ha.home,*.lab.home' })
 
 describe('mcpConfigFromEnv', () => {
 	it('defaults to an empty list and 30 s', () => {
@@ -21,10 +21,7 @@ describe('mcpConfigFromEnv', () => {
 		)
 	})
 	it('reports bad values as config_error', () => {
-		assert.throws(
-			() => mcpConfigFromEnv({ KODY_MCP_ALLOW_PRIVATE_HOSTS: '10.0.0.0/40' }),
-			/config_error|KODY_MCP_ALLOW_PRIVATE_HOSTS/,
-		)
+		assert.throws(() => mcpConfigFromEnv({ KODY_PRIVATE_HOSTS: '10.0.0.0/40' }), /config_error|KODY_PRIVATE_HOSTS/)
 		assert.throws(() => mcpConfigFromEnv({ KODY_MCP_CALL_TIMEOUT_MS: '10' }), /KODY_MCP_CALL_TIMEOUT_MS/)
 	})
 })
@@ -37,11 +34,8 @@ describe('assertMcpUrl', () => {
 		assert.equal(assertMcpUrl('https://x.lab.home/mcp', config).hostname, 'x.lab.home')
 	})
 	it('refuses private hosts off the list, plain http to public hosts, credentials and odd schemes', () => {
-		assert.throws(
-			() => assertMcpUrl('http://192.168.1.1/mcp', config),
-			/mcp_host_not_allowed|KODY_MCP_ALLOW_PRIVATE_HOSTS/,
-		)
-		assert.throws(() => assertMcpUrl('https://localhost/mcp', config), /KODY_MCP_ALLOW_PRIVATE_HOSTS/)
+		assert.throws(() => assertMcpUrl('http://192.168.1.1/mcp', config), /mcp_host_not_allowed|KODY_PRIVATE_HOSTS/)
+		assert.throws(() => assertMcpUrl('https://localhost/mcp', config), /KODY_PRIVATE_HOSTS/)
 		assert.throws(() => assertMcpUrl('http://mcp.example.com/mcp', config), /https/)
 		assert.throws(() => assertMcpUrl('https://u:p@mcp.example.com/mcp', config), /credentials/)
 		assert.throws(() => assertMcpUrl('ftp://mcp.example.com/', config), /http/)

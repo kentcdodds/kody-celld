@@ -485,7 +485,7 @@ export async function smokeWeb({ user, mcp }) {
 		`/account/package-preview/${Buffer.from(JSON.stringify(['https://example.com/pkg.tgz'])).toString('base64url')}/files`,
 	)
 	assert(
-		unlistedPreview.status >= 400 && unlistedPreview.text.includes('KODY_PACKAGE_SOURCE_HOSTS'),
+		unlistedPreview.status >= 400 && unlistedPreview.text.includes('KODY_PRIVATE_HOSTS'),
 		'preview explorer refuses public hosts outside the allowlist',
 		unlistedPreview.status,
 	)
