@@ -3,12 +3,12 @@
 //
 //   node smoke/run.mjs                 # all scenarios, skips the ~1-2 minute real-cron wait
 //   node smoke/run.mjs --wait-cron     # also waits for celld's cron trigger to fire a job
-//   node smoke/run.mjs --only secrets  # one scenario (mcp | packages | secrets | jobs | runs | limits | memory | blobs | browser | webhooks | email | mail-bridge | integrations | mcp-servers | secret-providers | oauth-server | web | npm | install | community)
+//   node smoke/run.mjs --only secrets  # one scenario (mcp | packages | secrets | jobs | runs | limits | memory | blobs | browser | webhooks | email | mail-bridge | integrations | mcp-servers | mcp-oauth | secret-providers | oauth-server | web | npm | install | community)
 //   SMOKE_OFFLINE=1 node smoke/run.mjs      # skip the parts that need esm.sh / GitHub
 //   SMOKE_AI_MOCK=1 node smoke/run.mjs --only memory  # with smoke/ai-mock-server.mjs + KODY_AI_* set
 //   SMOKE_MAIL_BRIDGE=1 node smoke/run.mjs --only mail-bridge  # real SMTP sidecar (needs `npm ci` in mail-bridge/)
 //
-// Env: KODY_URL, KODY_ADMIN_TOKEN, SMOKE_ECHO_PORT, SMOKE_MCP_PORT, SMOKE_OAUTH_PORT, SMOKE_VAULT_PORT, SMOKE_EXPECT_TIMEOUT_MS, SMOKE_AI_MOCK,
+// Env: KODY_URL, KODY_ADMIN_TOKEN, SMOKE_ECHO_PORT, SMOKE_MCP_PORT, SMOKE_MCP_OAUTH_PORT, SMOKE_OAUTH_PORT, SMOKE_VAULT_PORT, SMOKE_EXPECT_TIMEOUT_MS, SMOKE_AI_MOCK,
 //      SMOKE_BROWSER_TARGET_HOST (browser scenario skips itself when no provider is configured)
 import { baseUrl, bootstrapUser, log, SmokeError } from './lib.mjs'
 import { smokeBlobs } from './blobs.mjs'
@@ -23,6 +23,7 @@ import { smokeLimits } from './limits.mjs'
 import { smokeMailBridge } from './mail-bridge.mjs'
 import { smokeMcp } from './mcp.mjs'
 import { smokeMcpServers } from './mcp-servers.mjs'
+import { smokeMcpOAuth } from './mcp-oauth.mjs'
 import { smokeMemory } from './memory.mjs'
 import { smokeNpm } from './npm.mjs'
 import { smokeOAuthServer } from './oauth-server.mjs'
@@ -53,6 +54,7 @@ const scenarios = [
 	['mail-bridge', smokeMailBridge],
 	['integrations', smokeIntegrations],
 	['mcp-servers', smokeMcpServers],
+	['mcp-oauth', smokeMcpOAuth],
 	['secret-providers', smokeSecretProviders],
 	['oauth-server', smokeOAuthServer],
 	['web', smokeWeb],
@@ -63,7 +65,7 @@ const scenarios = [
 
 if (scenarios.length === 0) {
 	console.error(
-		`Unknown scenario "${only}". Choose one of: mcp, packages, secrets, jobs, runs, limits, memory, blobs, browser, webhooks, email, mail-bridge, integrations, mcp-servers, secret-providers, oauth-server, web, npm, install, community`,
+		`Unknown scenario "${only}". Choose one of: mcp, packages, secrets, jobs, runs, limits, memory, blobs, browser, webhooks, email, mail-bridge, integrations, mcp-servers, mcp-oauth, secret-providers, oauth-server, web, npm, install, community`,
 	)
 	process.exit(2)
 }
