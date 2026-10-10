@@ -97,10 +97,12 @@ Kody picks the first client mode that applies, per server:
    publicly. On an `http:` origin the document is not served (`404`). The
    authorization server fetches this URL itself, so it must be reachable
    **from the provider**, which for a public provider means from the
-   internet. On an internal-only deployment, either publish just that path,
-   for example with a Cloudflare Tunnel public hostname limited to
-   `^/oauth/client-metadata\.json$`, so the rest of Kody stays private, or
-   use a pre-registered client, which takes precedence.
+   internet. The advertised URL uses the hostname in `KODY_PUBLIC_URL`;
+   publishing the path on a different public hostname does not help. On an
+   internal-only deployment, either make that same hostname reachable for
+   just that path (for example a Cloudflare Tunnel public hostname for
+   `KODY_PUBLIC_URL` limited to `^/oauth/client-metadata\.json$`), or use a
+   pre-registered client, which takes precedence.
 3. **Dynamic client registration** (RFC 7591), when the authorization server
    has a `registration_endpoint`. The registered client is stored and reused.
 4. Otherwise the server stays in `status: 'error'` with a message saying it
