@@ -3,8 +3,14 @@ import { recordAudit } from '../lib/audit.ts'
 import { KodyError } from '../lib/errors.ts'
 import { limitsFromEnv } from '../lib/limits.ts'
 import { mcpConfigFromEnv } from '../mcp-client/policy.ts'
-import { addMcpServer, refreshMcpServer, type McpAdminCell, type McpDeps } from '../mcp-client/service.ts'
-import { publicMcpServer } from '../mcp-client/store.ts'
+import {
+	addMcpServer,
+	mcpServerResult,
+	reconnectMcpServer,
+	refreshMcpServer,
+	type McpAdminCell,
+	type McpDeps,
+} from '../mcp-client/service.ts'
 import { defineCapability, defineDomain, type CapabilityContext } from './define.ts'
 
 export const mcpServersDomain = defineDomain({
@@ -14,7 +20,8 @@ export const mcpServersDomain = defineDomain({
 	guide: `1. mcpServerAdd({ name: 'home', url: 'https://…/mcp', bearerToken? }) connects and lists the server's tools.
 2. search({ domain: 'mcp:home' }) lists its tools with input schemas.
 3. Call one: const r = await kody.mcp['home'].tool_name({ ... }) → { content, structuredContent?, isError }.
-4. mcpServerLock({ name, packageName }) restricts a server to packages (unlocking is done on /account/mcp-servers).`,
+4. mcpServerLock({ name, packageName }) restricts a server to packages (unlocking is done on /account/mcp-servers).
+5. OAuth servers: open authUrl from mcpServerAdd/mcpServerList; mcpServerReconnect({ name }) retries (refresh first) and returns a fresh authUrl when the user must authorize again.`,
 })
 
 export function mcpCell(ctx: Pick<CapabilityContext, 'userCell'>) {
@@ -26,6 +33,7 @@ export function mcpDeps(ctx: Pick<CapabilityContext, 'env' | 'userCell'>): McpDe
 		cell: mcpCell(ctx),
 		config: mcpConfigFromEnv(ctx.env),
 		maxResultBytes: limitsFromEnv(ctx.env).mcpContentLimitBytes,
+		publicUrl: ctx.env.KODY_PUBLIC_URL,
 	}
 }
 
@@ -67,7 +75,8 @@ export const mcpServerAdd = defineCapability<{
 	domain: 'mcpServers',
 	name: 'mcpServerAdd',
 	description:
-		'Add a remote MCP server (Streamable HTTP) and discover its tools. bearerToken (optional) is stored encrypted and never returned; a bare token is sent as "Bearer <token>". The server is saved even when discovery fails (status "error" with lastError); fix it and call mcpServerRefresh. Pass replace: true to overwrite an existing name (its lock, enabled state and bearer are kept unless given; a looser usage is refused; unlocking is done on /account/mcp-servers).',
+		'Add a remote MCP server (Streamable HTTP) and discover its tools. bearerToken (optional) is stored encrypted and never returned; a bare token is sent as "Bearer <token>". The server is saved even when discovery fails (status "error" with lastError); fix it and call mcpServerRefresh. Pass replace: true to overwrite an existing name (its lock, enabled state and bearer are kept unless given; a looser usage is refused; unlocking is done on /account/mcp-servers).' +
+		' Servers that need OAuth come back with status "authenticating" and an authUrl the user must open to authorize Kody (nextStep says what to do).',
 	tags: ['mcp', 'write'],
 	keywords: ['add mcp server', 'connect mcp', 'remote mcp', 'home assistant', 'mcp client', 'kody.mcp'],
 	inputSchema: {
@@ -91,7 +100,7 @@ export const mcpServerAdd = defineCapability<{
 		guardManagement(ctx)
 		const record = await addMcpServer(mcpDeps(ctx), args)
 		await audit(ctx, 'mcp_server.add', record.name, { url: record.url, auth: record.auth.kind, status: record.status })
-		return publicMcpServer(record)
+		return mcpServerResult(record, ctx.env.KODY_PUBLIC_URL)
 	},
 })
 
@@ -105,7 +114,8 @@ export const mcpServerList = defineCapability({
 	inputSchema: { type: 'object', properties: {} },
 	readOnly: true,
 	async handler(_args, ctx) {
-		return { servers: (await mcpCell(ctx).mcpServerList()).map(publicMcpServer) }
+		const list = await mcpCell(ctx).mcpServerList()
+		return { servers: list.map((r) => mcpServerResult(r, ctx.env.KODY_PUBLIC_URL)) }
 	},
 })
 
@@ -120,7 +130,28 @@ export const mcpServerRefresh = defineCapability<{ name: string }>({
 		guardManagement(ctx)
 		const record = await refreshMcpServer(mcpDeps(ctx), args.name)
 		await audit(ctx, 'mcp_server.refresh', record.name, { status: record.status })
-		return publicMcpServer(record)
+		return mcpServerResult(record, ctx.env.KODY_PUBLIC_URL)
+	},
+})
+
+export const mcpServerReconnect = defineCapability<{ name?: string; server?: string }>({
+	domain: 'mcpServers',
+	name: 'mcpServerReconnect',
+	description:
+		'Retry a saved MCP server that is failed, disconnected or waiting for OAuth. Tries the stored OAuth refresh token first, then re-lists tools. An authUrl in the result means the user must authorize again. `server` is accepted as an alias of `name`.',
+	tags: ['mcp', 'write'],
+	keywords: ['reconnect mcp server', 'mcp oauth', 'reauthorize mcp', 'retry mcp server'],
+	inputSchema: { type: 'object', properties: { name: nameSchema, server: nameSchema } },
+	async handler(args, ctx) {
+		guardManagement(ctx)
+		if (args.name !== undefined && args.server !== undefined && args.name !== args.server) {
+			throw new KodyError('invalid_args', 'Pass either name or server, not two different values.')
+		}
+		const name = args.name ?? args.server
+		if (!name) throw new KodyError('invalid_args', 'name is required.')
+		const record = await reconnectMcpServer(mcpDeps(ctx), name)
+		await audit(ctx, 'mcp_server.reconnect', record.name, { status: record.status })
+		return mcpServerResult(record, ctx.env.KODY_PUBLIC_URL)
 	},
 })
 
@@ -139,7 +170,7 @@ export const mcpServerSetEnabled = defineCapability<{ name: string; enabled: boo
 		guardManagement(ctx)
 		const record = await mcpCell(ctx).mcpServerSetEnabled({ name: args.name, enabled: args.enabled })
 		await audit(ctx, 'mcp_server.enabled', record.name, { enabled: record.enabled })
-		return publicMcpServer(record)
+		return mcpServerResult(record, ctx.env.KODY_PUBLIC_URL)
 	},
 })
 
@@ -165,7 +196,7 @@ export const mcpServerLock = defineCapability<{ name: string; packageName: strin
 		const usage = parseIntegrationUsage({ mode: 'packages', packages: [...new Set([...packages, args.packageName])] })
 		const updated = await mcpCell(ctx).mcpServerSetUsage({ name: args.name, usage })
 		await audit(ctx, 'mcp_server.lock', args.name, { packageName: args.packageName })
-		return publicMcpServer(updated)
+		return mcpServerResult(updated, ctx.env.KODY_PUBLIC_URL)
 	},
 })
 
@@ -188,6 +219,7 @@ export const mcpServerCapabilities = [
 	mcpServerAdd,
 	mcpServerList,
 	mcpServerRefresh,
+	mcpServerReconnect,
 	mcpServerSetEnabled,
 	mcpServerLock,
 	mcpServerRemove,
