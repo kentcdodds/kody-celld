@@ -1,6 +1,5 @@
-import { hostMatchesAllowlist, isPrivateIp, parseHostAllowlist } from '../lib/host-allowlist.ts'
+import { hostMatchesAllowlist, isPrivateHostname, parseHostAllowlist } from '../lib/host-allowlist.ts'
 import { KodyError } from '../lib/errors.ts'
-import { isPrivateHostname } from '../lib/private-hosts.ts'
 
 export type McpEnv = {
 	KODY_MCP_ALLOW_PRIVATE_HOSTS?: string
@@ -57,7 +56,7 @@ export function assertMcpUrl(raw: string, config: McpConfig): URL {
 	url.hash = ''
 	const host = url.hostname.toLowerCase()
 	if (hostMatchesAllowlist(host, config.allowPrivateHosts)) return url
-	if (isPrivateHostname(host) || isPrivateIp(host)) {
+	if (isPrivateHostname(host)) {
 		throw new KodyError(
 			'mcp_host_not_allowed',
 			`"${host}" is a loopback/private host. Add it (or its CIDR range) to KODY_MCP_ALLOW_PRIVATE_HOSTS on the server to use it.`,

@@ -136,6 +136,24 @@ export function isPrivateIp(host: string): boolean {
 	return ip.version === 4 ? isPrivateV4(ip.value) : isPrivateV6(ip.value)
 }
 
+/**
+ * True for hostnames that are private by name (localhost, `.local` / `.internal`, single-label)
+ * or by literal address (the union of every range `isPrivateIp` covers). Names that merely
+ * *resolve* to private space cannot be checked here.
+ */
+export function isPrivateHostname(hostname: string): boolean {
+	const host = hostname.toLowerCase()
+	if (isPrivateIp(host)) return true
+	if (host.includes(':')) return false
+	return (
+		host === 'localhost' ||
+		host.endsWith('.localhost') ||
+		host.endsWith('.internal') ||
+		host.endsWith('.local') ||
+		!host.includes('.')
+	)
+}
+
 /** An entry that is well-formed but can never match; its message is shown as is. */
 class UnmatchableEntryError extends Error {}
 

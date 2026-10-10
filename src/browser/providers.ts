@@ -1,6 +1,5 @@
 import { KodyError } from '../lib/errors.ts'
-import { isPrivateHostname } from '../lib/private-hosts.ts'
-import { hostMatchesAllowlist } from '../lib/host-allowlist.ts'
+import { hostMatchesAllowlist, isPrivateHostname } from '../lib/host-allowlist.ts'
 import type { BrowserConfig } from './config.ts'
 
 export type WaitUntil = 'load' | 'domcontentloaded' | 'networkidle0' | 'networkidle2'

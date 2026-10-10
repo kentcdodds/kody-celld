@@ -1,6 +1,5 @@
 import { KodyError } from '../lib/errors.ts'
-import { hostMatchesAllowlist, isPrivateIp, parseIpLiteral } from '../lib/host-allowlist.ts'
-import { isPrivateHostname } from '../lib/private-hosts.ts'
+import { hostMatchesAllowlist, isPrivateHostname, parseIpLiteral } from '../lib/host-allowlist.ts'
 import type { McpConfig } from './policy.ts'
 
 type DnsJson = { Status?: number; Answer?: Array<{ type: number; data: string }> }
@@ -42,10 +41,8 @@ export async function assertResolvedHostAllowed(url: URL, config: McpConfig, fet
 		throw refuse(`Could not resolve "${host}" through KODY_DNS_RESOLVER_URL (no A/AAAA records).`)
 	}
 	for (const address of addresses) {
-		if (
-			(isPrivateHostname(address.includes(':') ? `[${address}]` : address) || isPrivateIp(address)) &&
-			!hostMatchesAllowlist(address, config.allowPrivateHosts)
-		) {
+		const literal = address.includes(':') ? `[${address}]` : address
+		if (isPrivateHostname(literal) && !hostMatchesAllowlist(address, config.allowPrivateHosts)) {
 			throw refuse(
 				`"${host}" resolves to private address ${address}. Add the address or its range to KODY_MCP_ALLOW_PRIVATE_HOSTS to allow it.`,
 			)
