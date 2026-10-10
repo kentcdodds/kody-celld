@@ -83,13 +83,26 @@ describe('McpOAuthStore', () => {
 		assert.equal((await store.tokens('home'))!.accessToken, 'at-1')
 	})
 
-	it('keeps the old refresh token when a token response omits one', async () => {
+	it('a new grant that omits refresh_token clears the previous grant refresh; a refresh response keeps it', async () => {
 		const { store } = await makeOAuth()
-		await store.saveTokens('home', { access_token: 'at-1', refresh_token: 'rt-1', token_type: 'Bearer' })
+		await store.saveClient('home', dynamicClient)
+		await store.saveTokens('home', { access_token: 'at-1', refresh_token: 'rt-old', token_type: 'Bearer' })
 		await store.saveTokens('home', { access_token: 'at-2', token_type: 'Bearer' })
-		const tokens = (await store.tokens('home'))!
-		assert.equal(tokens.accessToken, 'at-2')
-		assert.equal(tokens.refreshToken, 'rt-1')
+		const afterGrant = (await store.tokens('home'))!
+		assert.equal(afterGrant.accessToken, 'at-2')
+		assert.equal(afterGrant.refreshToken, null, 'new authorization must not inherit the prior refresh token')
+		await store.saveTokens('home', {
+			access_token: 'at-3',
+			refresh_token: 'rt-keep',
+			token_type: 'Bearer',
+			expires_in: 1,
+		})
+		const refreshed = await store.accessToken('home', {
+			forceRefresh: true,
+			refresher: async () => ({ access_token: 'at-4', token_type: 'Bearer' }),
+		})
+		assert.deepEqual(refreshed, { ok: true, accessToken: 'at-4' })
+		assert.equal((await store.tokens('home'))!.refreshToken, 'rt-keep')
 	})
 
 	it('pending attempts are single-claim and expire', async () => {

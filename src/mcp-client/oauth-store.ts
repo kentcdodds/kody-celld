@@ -337,7 +337,6 @@ export class McpOAuthStore {
 			now,
 			name,
 		)
-		// RFC 6749 §6: a refresh response may omit refresh_token; keep the stored one then.
 		if (tokens.refresh) {
 			this.host.sql.exec(
 				'UPDATE mcp_server_oauth SET refresh_iv = ?, refresh_ciphertext = ?, refresh_key_id = ? WHERE server_name = ?',
@@ -346,7 +345,15 @@ export class McpOAuthStore {
 				tokens.refresh.keyId,
 				name,
 			)
+		} else if (create) {
+			// A new authorization-code grant replaces the whole credential lineage. Do not keep an
+			// older refresh token when the new response omits one (that would mix grants).
+			this.host.sql.exec(
+				'UPDATE mcp_server_oauth SET refresh_iv = NULL, refresh_ciphertext = NULL, refresh_key_id = NULL WHERE server_name = ?',
+				name,
+			)
 		}
+		// RFC 6749 §6: a refresh response (create: false) may omit refresh_token; keep the stored one then.
 	}
 
 	async saveTokens(name: string, tokens: OAuthTokens) {
