@@ -7,6 +7,7 @@ import {
 	completeMcpAuthorization,
 	mcpAuthorizeUrl,
 	mcpClientMetadataDocument,
+	mcpOAuthScopes,
 	mcpOAuthUrls,
 	pickClientMode,
 	probeMcpOAuth,
@@ -83,6 +84,23 @@ describe('probeMcpOAuth / pickClientMode', () => {
 			url.pathname.startsWith('/.well-known/') ? new Response('nope', { status: 404 }) : null,
 		)
 		assert.equal(await probeMcpOAuth(serverUrl, oauthPolicyFetch(config, server.fetch)), null)
+	})
+})
+
+describe('probe failures and scopes', () => {
+	it('reports a failing authorization server as mcp_oauth_failed, not as unsupported', async () => {
+		const server = startTestMcpServer({ oauth: { mode: 'dynamic' } })
+		server.setRespond((url) =>
+			url.pathname === '/.well-known/oauth-authorization-server' ? new Response('down', { status: 503 }) : null,
+		)
+		await assert.rejects(probeMcpOAuth(serverUrl, oauthPolicyFetch(config, server.fetch)), /mcp_oauth_failed/)
+	})
+
+	it('takes scopes from the challenge, else from the resource metadata', async () => {
+		const server = startTestMcpServer({ oauth: { mode: 'dynamic' } })
+		const discovery = (await probeMcpOAuth(serverUrl, oauthPolicyFetch(config, server.fetch)))!
+		assert.deepEqual(mcpOAuthScopes(discovery, 'Bearer scope="a b"'), ['a', 'b'])
+		assert.deepEqual(mcpOAuthScopes(discovery), ['mcp'])
 	})
 })
 

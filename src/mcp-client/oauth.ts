@@ -64,8 +64,7 @@ export async function probeMcpOAuth(
 	try {
 		info = await discoverOAuthServerInfo(serverUrl, { resourceMetadataUrl: params.resourceMetadataUrl, fetchFn })
 	} catch (error) {
-		if (KodyError.fromUnknown(error)) throw error
-		return null
+		throw failed(error, 'discovery')
 	}
 	if (!info.authorizationServerMetadata) return null
 	return { ...info, ...(params.resourceMetadataUrl ? { resourceMetadataUrl: params.resourceMetadataUrl.href } : {}) }
