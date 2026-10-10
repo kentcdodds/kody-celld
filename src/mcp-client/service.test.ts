@@ -463,14 +463,15 @@ describe('OAuth servers', () => {
 		assert.ok(sentToNew.every((r) => !issued.some((t) => r.authorization!.includes(t))))
 	})
 
-	it('startMcpOAuth refuses an unsafe authorize URL', async () => {
-		const { deps, server } = await setup({ oauth: { mode: 'dynamic' } })
+	it('startMcpOAuth refuses an unsafe authorize URL before storing a pending attempt', async () => {
+		const { deps, server, sql } = await setup({ oauth: { mode: 'dynamic' } })
 		await addMcpServer(deps, { name: 'oa', url })
 		server.setRespond((u) =>
 			u.pathname === '/.well-known/oauth-authorization-server'
 				? Response.json({
 						issuer: 'http://172.30.1.5',
-						authorization_endpoint: 'javascript:alert(1)',
+						// a valid URL the SDK accepts, but http to a host outside KODY_MCP_ALLOW_PRIVATE_HOSTS
+						authorization_endpoint: 'http://203.0.113.9/authorize',
 						token_endpoint: 'http://172.30.1.5/token',
 						registration_endpoint: 'http://172.30.1.5/register',
 						response_types_supported: ['code'],
@@ -478,7 +479,8 @@ describe('OAuth servers', () => {
 					})
 				: null,
 		)
-		await assert.rejects(startMcpOAuth(deps, 'oa'), /mcp_oauth_failed/)
+		await assert.rejects(startMcpOAuth(deps, 'oa'), /mcp_oauth_failed[\s\S]*Refusing to send the browser/)
+		assert.deepEqual(sql.exec('SELECT state FROM mcp_server_oauth_pending').toArray(), [])
 	})
 
 	it('a cross-origin replace while the code exchange runs: no tokens saved, the new record untouched', async () => {
@@ -553,5 +555,28 @@ describe('OAuth servers', () => {
 			{ hasRefreshToken: ready.hasRefreshToken, oauthClientMode: ready.oauthClientMode },
 			{ hasRefreshToken: true, oauthClientMode: 'dynamic' },
 		)
+	})
+
+	it('a client metadata document start is labelled metadata even when an old dynamic client is stored', async () => {
+		const { deps, oauth } = await setup({ oauth: { mode: 'metadata' } })
+		deps.publicUrl = 'https://kody.example.com'
+		await addMcpServer(deps, { name: 'ha', url })
+		await oauth.saveClient('ha', { mode: 'dynamic', information: { client_id: 'dyn-old' } })
+		const started = await startMcpOAuth(deps, 'ha')
+		assert.equal(started.clientMode, 'metadata')
+		assert.deepEqual(
+			{ mode: oauth.summary('ha')!.clientMode, id: oauth.summary('ha')!.clientId },
+			{ mode: 'metadata', id: 'https://kody.example.com/oauth/client-metadata.json' },
+		)
+	})
+
+	it('the consent page and start refuse a server that is not OAuth; a pre-registered client can still be set', async () => {
+		const { deps } = await setup({ bearer: undefined })
+		const open = await addMcpServer(deps, { name: 'open', url })
+		assert.deepEqual({ status: open.status, kind: open.auth.kind }, { status: 'ready', kind: 'none' })
+		await assert.rejects(describeMcpOAuth(deps, 'open'), /mcp_server_not_found/)
+		await assert.rejects(startMcpOAuth(deps, 'open'), /mcp_server_not_found/)
+		const withClient = await setMcpOAuthClient(deps, 'open', { clientId: 'cid', clientSecret: null })
+		assert.equal(withClient.oauth?.clientMode, 'preregistered')
 	})
 })

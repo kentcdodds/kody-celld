@@ -342,9 +342,10 @@ export async function reconnectMcpServer(deps: McpDeps, name: string): Promise<M
 	return refreshMcpServer(deps, record.name)
 }
 
-async function requireOAuthServer(deps: McpDeps, name: string) {
+/** `oauthOnly`: the consent page and start (a server without auth is a 404 there); the client form also accepts 'none'. */
+async function requireOAuthServer(deps: McpDeps, name: string, options: { oauthOnly: boolean } = { oauthOnly: false }) {
 	const record = await deps.cell.mcpServerGet(assertMcpServerName(name))
-	if (!record || record.auth.kind === 'bearer') {
+	if (!record || record.auth.kind === 'bearer' || (options.oauthOnly && record.auth.kind !== 'oauth')) {
 		throw new KodyError('mcp_server_not_found', `MCP server "${name}" is not an OAuth server.`, { status: 404 })
 	}
 	return record
@@ -381,7 +382,7 @@ export type McpOAuthDescription = {
 }
 
 export async function describeMcpOAuth(deps: McpDeps, name: string): Promise<McpOAuthDescription> {
-	const record = await requireOAuthServer(deps, name)
+	const record = await requireOAuthServer(deps, name, { oauthOnly: true })
 	const discovery = await probeMcpOAuth(record.url, oauthFetch(deps))
 	if (!discovery) {
 		return {
@@ -414,7 +415,7 @@ export async function startMcpOAuth(
 	deps: McpDeps,
 	name: string,
 ): Promise<{ authorizationUrl: string; clientMode: McpOAuthClientMode }> {
-	const record = await requireOAuthServer(deps, name)
+	const record = await requireOAuthServer(deps, name, { oauthOnly: true })
 	const fetchFn = oauthFetch(deps)
 	const discovery = await probeMcpOAuth(record.url, fetchFn)
 	if (!discovery) {
@@ -441,7 +442,8 @@ export async function startMcpOAuth(
 		verifier: begun.verifier,
 		redirectUri: urls.callbackUrl,
 		serverOrigin: new URL(record.url).origin,
-		client: begun.savedClient ? { mode: stored.client?.mode ?? clientMode, information: begun.savedClient } : null,
+		// The SDK saves a client on every path (CIMD included), so the label is the mode this attempt used.
+		client: begun.savedClient ? { mode: clientMode, information: begun.savedClient } : null,
 		discovery: begun.discovery,
 	})
 	return { authorizationUrl: begun.authorizationUrl.href, clientMode }

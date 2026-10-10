@@ -960,7 +960,12 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 				)
 			}
 			if (segments[2] === 'authorize' && segments.length === 3) {
-				const name = decodeURIComponent(segments[1] ?? '')
+				let name: string
+				try {
+					name = decodeURIComponent(segments[1] ?? '')
+				} catch {
+					throw new KodyError('mcp_server_not_found', 'MCP server was not found.', { status: 404 })
+				}
 				if (post) {
 					const started = await startMcpOAuth(mcpDeps({ env, userCell }), name)
 					await audit('mcp_server.authorize', name, { clientMode: started.clientMode })
@@ -1002,8 +1007,12 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 							if (!KodyError.fromUnknown(error)) throw error
 						}
 					} else if (form.action === 'oauth_client_remove') {
-						await removeMcpOAuthClient(mcpDeps({ env, userCell }), name)
-						await audit('mcp_server.oauth_client_removed', name, { via: 'web' })
+						try {
+							await removeMcpOAuthClient(mcpDeps({ env, userCell }), name)
+							await audit('mcp_server.oauth_client_removed', name, { via: 'web' })
+						} catch (error) {
+							if (!KodyError.fromUnknown(error)) throw error
+						}
 					} else if (form.action === 'enable' || form.action === 'disable') {
 						await cell.mcpServerSetEnabled({ name, enabled: form.action === 'enable' })
 						await audit('mcp_server.enabled', name, { enabled: form.action === 'enable', via: 'web' })

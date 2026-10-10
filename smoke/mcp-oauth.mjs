@@ -118,6 +118,16 @@ export async function smokeMcpOAuth(ctx) {
 			page.status === 200 && page.text.includes('Authorize') && !leaks(page.text),
 			'account page shows Authorize, no tokens',
 		)
+		const malformed = await browser.get('/account/mcp-servers/%E0%A4%A/authorize')
+		assert(malformed.status === 404, 'a malformed server name on the consent path is a 404', malformed.status)
+		await mcp.call('mcpServerAdd', { name: 'smoke-oauth-bearer', url: mock.url, bearerToken: 'not-an-oauth-token' })
+		const removeClient = await browser.post('/account/mcp-servers', {
+			...hiddenInputs(page.text),
+			name: 'smoke-oauth-bearer',
+			action: 'oauth_client_remove',
+		})
+		assert(removeClient.status === 303, 'removing the OAuth client of a bearer server redirects', removeClient.status)
+		await mcp.call('mcpServerRemove', { name: 'smoke-oauth-bearer' })
 		const removed = await mcp.call('mcpServerRemove', { name: 'smoke-oauth' })
 		assert(removed.removed === true, 'remove')
 		log('remove', 'done')

@@ -193,17 +193,17 @@ describe('capTools total size', () => {
 })
 
 describe('createPolicyFetch', () => {
-	const config = mcpConfigFromEnv({ KODY_MCP_ALLOW_PRIVATE_HOSTS: '172.30.0.0/16' })
+	const policyConfig = mcpConfigFromEnv({ KODY_MCP_ALLOW_PRIVATE_HOSTS: '172.30.0.0/16' })
 	function recorder(routes: Record<string, (init: RequestInit) => Response>) {
 		const seen: Array<{ url: string; method: string; authorization: string | null }> = []
 		const base = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
-			const url = String(input)
+			const requested = String(input)
 			seen.push({
-				url,
+				url: requested,
 				method: (init.method ?? 'GET').toUpperCase(),
 				authorization: new Headers(init.headers).get('authorization'),
 			})
-			const route = routes[url]
+			const route = routes[requested]
 			return route ? route(init) : new Response('ok')
 		}) as typeof fetch
 		return { base, seen }
@@ -214,7 +214,7 @@ describe('createPolicyFetch', () => {
 			'http://172.30.1.5/token': () =>
 				new Response(null, { status: 302, headers: { location: 'http://172.30.1.6/elsewhere' } }),
 		})
-		const f = createPolicyFetch(config, { authorization: null, base })
+		const f = createPolicyFetch(policyConfig, { authorization: null, base })
 		await f('http://172.30.1.5/token', { headers: { authorization: 'Basic abc' } })
 		assert.equal(seen[0]!.authorization, 'Basic abc')
 		assert.equal(seen[1]!.url, 'http://172.30.1.6/elsewhere')
@@ -223,7 +223,7 @@ describe('createPolicyFetch', () => {
 
 	it('a static authorization wins over the caller header', async () => {
 		const { base, seen } = recorder({})
-		const f = createPolicyFetch(config, { authorization: 'Bearer static', base })
+		const f = createPolicyFetch(policyConfig, { authorization: 'Bearer static', base })
 		await f('http://172.30.1.5/mcp', { headers: { authorization: 'Bearer other' } })
 		assert.equal(seen[0]!.authorization, 'Bearer static')
 	})
@@ -234,7 +234,7 @@ describe('createPolicyFetch', () => {
 			'http://172.30.1.5/c': () => new Response(null, { status: 307, headers: { location: 'http://172.30.1.6/d' } }),
 			'http://172.30.1.5/e': () => new Response(null, { status: 308, headers: { location: '/f' } }),
 		})
-		const f = oauthPolicyFetch(config, base)
+		const f = oauthPolicyFetch(policyConfig, base)
 		await assert.rejects(f('http://172.30.1.5/a', { method: 'POST', body: 'x' }), /mcp_call_failed|redirect/)
 		await assert.rejects(f('http://172.30.1.5/c', { method: 'POST', body: 'x' }), /mcp_call_failed|redirect/)
 		const ok = await f('http://172.30.1.5/e', { method: 'POST', body: 'x' })
@@ -249,7 +249,7 @@ describe('createPolicyFetch', () => {
 			'http://172.30.1.5/mcp': () => new Response('no', { status: 401, headers: { 'www-authenticate': challenge } }),
 		})
 		let seen: string | null = null
-		const f = createPolicyFetch(config, { authorization: null, base, onChallenge: (c) => (seen = c) })
+		const f = createPolicyFetch(policyConfig, { authorization: null, base, onChallenge: (c) => (seen = c) })
 		await f('http://172.30.1.5/mcp')
 		assert.equal(seen, challenge)
 	})
