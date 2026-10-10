@@ -23,6 +23,7 @@ import {
 	pickClientMode,
 	probeMcpOAuth,
 } from './oauth.ts'
+import { oauthAttemptIdentityMatches } from './oauth-identity.ts'
 import type { McpOAuthClient, McpOAuthClientMode, McpOAuthPending } from './oauth-store.ts'
 import { assertMcpServerName, assertMcpUrl, normalizeBearerToken, type McpConfig } from './policy.ts'
 import { assertResolvedHostAllowed } from './resolve.ts'
@@ -506,13 +507,14 @@ export async function finishMcpOAuth(
 		}
 		return { name: record.name, ok: false, replay: false, message }
 	}
-	// The attempt is bound to the server row and client it started with (#50, #55): if either changed, nothing of it
-	// (no park, no token request) may reach the server. completeOAuth re-checks both after the exchange for changes during it.
+	// Bound to the server row + client the attempt started with (#50, #55): completeOAuth re-checks with the same helper.
 	if (
-		!pending.serverId ||
-		record.id !== pending.serverId ||
-		!pending.clientId ||
-		claimed.client?.information.client_id !== pending.clientId
+		!oauthAttemptIdentityMatches({
+			pendingServerId: pending.serverId,
+			pendingClientId: pending.clientId,
+			serverId: record.id,
+			clientId: claimed.client?.information.client_id,
+		})
 	) {
 		return {
 			name: record.name,

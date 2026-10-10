@@ -3,6 +3,7 @@ import { decryptWithKeyring, encryptSecretValue, randomId, type MasterKeyring } 
 import { KodyError } from '../lib/errors.ts'
 import type { McpServerInfo, McpTool } from './client.ts'
 import type { OAuthClientInformationMixed, OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js'
+import { oauthAttemptIdentityMatches } from './oauth-identity.ts'
 import type { McpOAuthStore, McpOAuthSummary, McpTokenRefresher } from './oauth-store.ts'
 
 export const mcpServerSchema = `
@@ -296,10 +297,12 @@ export class McpServerStore {
 			row.url !== input.serverUrl ||
 			!sameOrigin(row.url, input.serverOrigin) ||
 			kind === 'bearer' ||
-			!input.serverId ||
-			row.id !== input.serverId ||
-			!input.clientId ||
-			this.host.oauth.storedClientId(input.name) !== input.clientId
+			!oauthAttemptIdentityMatches({
+				pendingServerId: input.serverId,
+				pendingClientId: input.clientId,
+				serverId: row.id,
+				clientId: this.host.oauth.storedClientId(input.name),
+			})
 		) {
 			throw new KodyError(
 				'mcp_oauth_state_invalid',
