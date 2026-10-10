@@ -1,6 +1,6 @@
 # celld compatibility
 
-celld is not workerd. Things this codebase already works around — do not undo
+celld is not workerd. Things this codebase already works around: do not undo
 them without re-testing on celld.
 
 ## Worker Loader import resolution
@@ -12,7 +12,7 @@ full path and every import is rewritten to a real relative path
 
 ## Module types
 
-Worker Loader modules must be **JS strings or wasm** — no `text`/`json` module
+Worker Loader modules must be **JS strings or wasm**, not `text`/`json` module
 types. JSON becomes `export default {...}`; docs are left out of the graph.
 
 ## RPC error shape

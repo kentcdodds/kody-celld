@@ -4,3 +4,15 @@ package-lock.json
 public/build
 # CLA recorder serializes with tabs; keep that file stable for git diffs.
 .github/cla-signers.json
+# Synced verbatim from kentcdodds/kody docs/principles (see docs/principles/index.md).
+docs/principles/cleanup.md
+docs/principles/delete-off-the-common-path.md
+docs/principles/examples-over-prose.md
+docs/principles/fail-loudly.md
+docs/principles/fix-the-root-bottleneck.md
+docs/principles/generic-platform.md
+docs/principles/lean-agent-context.md
+docs/principles/no-invasive-test-only-code.md
+docs/principles/normalized-source-of-truth.md
+docs/principles/test-the-workflow.md
+docs/principles/two-way-doors.md

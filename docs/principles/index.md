@@ -6,7 +6,7 @@ Load only the page the task needs.
 kody-celld is a faithful self-host of
 [hosted Kody](https://github.com/kentcdodds/kody). Shared principle pages are
 copied from that repo's `docs/principles/` (currently pinned to commit
-`0d02fe04`). Do not hand-edit them — change them upstream in hosted Kody, then
+`0d02fe04`). Do not hand-edit them. Change them upstream in hosted Kody, then
 copy the updated page here in the same PR and note the new commit. A CI sync
 lock for these pages is planned separately.
 
@@ -43,7 +43,7 @@ Related maps that live only in hosted Kody (open them there):
 Do not copy these into the repo. Read them at the source when a change touches
 coupling, consistency, merge size, or privilege:
 
-[Epic Programming Principles](https://www.epicweb.dev/principles) — AHA, Do as
+[Epic Programming Principles](https://www.epicweb.dev/principles): AHA, Do as
 little as possible, Avoid tight coupling, Colocation, Keep it consistent, Don't
 sync state, Least privilege, Small merge requests, and more.
 

@@ -16,7 +16,7 @@ back:
 
 ```ts
 const retiredPackageAppRuntimeMessage =
-  'kody.app.runtime was removed; every package app is a fetch handler and receives the mount-stripped path. There is no configured runtime mode.'
+	'kody.app.runtime was removed; every package app is a fetch handler and receives the mount-stripped path. There is no configured runtime mode.'
 ```
 
 (`packages/worker/src/package-registry/manifest.ts`.) Stored stamps with
