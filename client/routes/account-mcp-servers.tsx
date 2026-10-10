@@ -29,7 +29,7 @@ export function AccountMcpServers(
 					<RecordTable
 						mode="none"
 						ariaLabel="MCP servers"
-						emptyLabel="No MCP servers. Add one with: await kody.mcpServerAdd({ name: 'home', url: 'https://…/mcp', bearerToken: '…' })"
+						emptyLabel="No MCP servers. Add one with: await kody.mcpServerAdd({ name: 'home', url: 'https://…/mcp', bearerToken: '…' }). OAuth servers show an Authorize link."
 						countLabel={`${d.servers.length} total`}
 						columns={[
 							{ key: 'name', label: 'Name', primary: true },
@@ -47,7 +47,11 @@ export function AccountMcpServers(
 										<br />
 										<Muted small>
 											{s.host} ·{' '}
-											{s.authKind === 'bearer' ? 'bearer token' : 'no auth'}
+											{s.authKind === 'bearer'
+												? 'bearer token'
+												: s.authKind === 'oauth'
+													? `OAuth${s.hasRefreshToken ? '' : ' (no refresh token)'}`
+													: 'no auth'}
 										</Muted>
 									</span>
 								),
@@ -68,6 +72,14 @@ export function AccountMcpServers(
 											<>
 												<br />
 												<Muted small>{s.lastError}</Muted>
+											</>
+										) : null}
+										{s.authorizeHref ? (
+											<>
+												<br />
+												<a href={s.authorizeHref} rel="noopener noreferrer">
+													Authorize
+												</a>
 											</>
 										) : null}
 									</span>

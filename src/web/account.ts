@@ -3,7 +3,7 @@ import { getUserCell } from '../execute/engine.ts'
 import { recordAudit } from '../lib/audit.ts'
 import { mcpCell, mcpDeps } from '../capabilities/mcp-servers.ts'
 import { parseIntegrationUsage } from '../integrations/oauth.ts'
-import { refreshMcpServer } from '../mcp-client/service.ts'
+import { describeMcpOAuth, finishMcpOAuth, refreshMcpServer, startMcpOAuth } from '../mcp-client/service.ts'
 import { KodyError } from '../lib/errors.ts'
 import { loadEmailConfig } from '../email/service.ts'
 import { getMemoryCell } from '../capabilities/memory.ts'
@@ -50,11 +50,20 @@ const flashes: Record<string, PageFlash> = {
 	run_ignored: { kind: 'ok', text: 'Run marked ignored.' },
 	run_resolved: { kind: 'ok', text: 'Run marked resolved.' },
 	run_reopened: { kind: 'ok', text: 'Run reopened.' },
+	mcp_auth_success: { kind: 'ok', text: 'Authorized. The MCP server is connected.' },
+	mcp_auth_error: { kind: 'error', text: 'Authorization did not finish; see the server status below.' },
 }
 
 function view(
 	session: WebSession,
-	input: { title: string; current: string; data: AppLoaderData; flash?: PageFlash | null; status?: number },
+	input: {
+		title: string
+		current: string
+		data: AppLoaderData
+		flash?: PageFlash | null
+		status?: number
+		headers?: Record<string, string>
+	},
 ) {
 	return renderPage({
 		title: input.title,
@@ -62,6 +71,7 @@ function view(
 		session: appSessionOf(session),
 		flash: input.flash ?? null,
 		...(input.status === undefined ? {} : { status: input.status }),
+		...(input.headers ? { headers: input.headers } : {}),
 		data: input.data,
 	})
 }
@@ -131,7 +141,7 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 	const alias = request.method === 'GET' ? accountAliasLocation(url) : null
 	if (alias) return redirect(alias)
 	const session = await readWebSession(request, env)
-	if (!session) return redirect(`/signin?flash=signin_required&next=${encodeURIComponent(url.pathname)}`)
+	if (!session) return redirect(`/signin?flash=signin_required&next=${encodeURIComponent(url.pathname + url.search)}`)
 	const userCell = getUserCell(env, session.user.id)
 	await userCell.init(session.user.id)
 	const flash = flashes[url.searchParams.get('flash') ?? ''] ?? null
@@ -920,6 +930,47 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 
 		case 'mcp-servers': {
 			const cell = mcpCell({ userCell })
+			if (segments[1] === 'oauth' && segments[2] === 'callback' && segments.length === 3) {
+				if (request.method === 'HEAD') return new Response(null, { status: 200 })
+				if (post) return new Response(null, { status: 405, headers: { allow: 'GET, HEAD' } })
+				const result = await finishMcpOAuth(mcpDeps({ env, userCell }), {
+					state: url.searchParams.get('state') ?? '',
+					code: url.searchParams.get('code'),
+					error: url.searchParams.get('error'),
+					errorDescription: url.searchParams.get('error_description'),
+				})
+				const nameParam = encodeURIComponent(result.name)
+				// A replayed callback must not claim success: the first attempt may have failed.
+				if (result.replay) return redirect(`/account/mcp-servers?name=${nameParam}`)
+				await audit(result.ok ? 'mcp_server.oauth_connected' : 'mcp_server.oauth_failed', result.name, {
+					...(result.message ? { message: result.message } : {}),
+				})
+				return redirect(
+					`/account/mcp-servers?flash=${result.ok ? 'mcp_auth_success' : 'mcp_auth_error'}&name=${nameParam}`,
+				)
+			}
+			if (segments[2] === 'authorize' && segments.length === 3) {
+				const name = decodeURIComponent(segments[1] ?? '')
+				if (post) {
+					const started = await startMcpOAuth(mcpDeps({ env, userCell }), name)
+					await audit('mcp_server.authorize', name, { clientMode: started.clientMode })
+					return new Response(null, {
+						status: 303,
+						headers: {
+							location: started.authorizationUrl,
+							'cache-control': 'no-store',
+							'referrer-policy': 'no-referrer',
+						},
+					})
+				}
+				const d = await describeMcpOAuth(mcpDeps({ env, userCell }), name)
+				return view(session, {
+					title: `Authorize ${d.name}`,
+					current: '/account/mcp-servers',
+					headers: { 'referrer-policy': 'no-referrer', 'cache-control': 'no-store' },
+					data: { page: 'accountMcpServerAuthorize', csrf: session.csrf, ...d },
+				})
+			}
 			if (post) {
 				const name = form.name ?? ''
 				const record = name ? await cell.mcpServerGet(name) : null
@@ -971,6 +1022,11 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 						lastError: s.lastError ? `${s.lastError.phase}: ${s.lastError.message}` : null,
 						enabled: s.enabled,
 						authKind: s.auth.kind,
+						authorizeHref:
+							s.auth.kind === 'oauth' && s.status !== 'ready'
+								? `/account/mcp-servers/${encodeURIComponent(s.name)}/authorize`
+								: null,
+						hasRefreshToken: s.oauth?.hasRefreshToken ?? false,
 						usage:
 							s.usage.mode === 'any'
 								? { mode: 'any' as const, packages: [] }

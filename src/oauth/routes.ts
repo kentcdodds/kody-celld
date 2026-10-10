@@ -3,7 +3,9 @@ import { sessionSignature } from '../auth/cookies.ts'
 import { constantTimeEqualString } from '../auth/password.ts'
 import type { Env } from '../env.ts'
 import { recordAudit } from '../lib/audit.ts'
+import { mcpClientMetadataPath } from '../mcp-client/oauth.ts'
 import { renderPage } from '#app/render.tsx'
+import { clientMetadataResponse } from './client-metadata.ts'
 import { appSessionOf, readForm, redirect } from '../web/http.ts'
 import { assertCsrf, readWebSession } from '../web/session.ts'
 import {
@@ -66,6 +68,13 @@ export async function handleOAuth(request: Request, env: Env, url: URL): Promise
 			? protectedResourceMetadata(issuer)
 			: authorizationServerMetadata(issuer)
 		return Response.json(body, { headers: { ...corsHeaders, 'cache-control': 'public, max-age=300' } })
+	}
+
+	if (url.pathname === mcpClientMetadataPath) {
+		if (request.method !== 'GET' && request.method !== 'HEAD') {
+			return new Response(null, { status: 405, headers: { allow: 'GET, HEAD' } })
+		}
+		return clientMetadataResponse(issuer)
 	}
 
 	try {

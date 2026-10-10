@@ -8,6 +8,7 @@ import { AccountIntegrations } from './account-integrations.tsx'
 import { AccountJobs } from './account-jobs.tsx'
 import { AccountJobDetail } from './account-jobs-detail.tsx'
 import { AccountMemories } from './account-memories.tsx'
+import { AccountMcpServerAuthorize } from './account-mcp-server-authorize.tsx'
 import { AccountMcpServers } from './account-mcp-servers.tsx'
 import { AccountMcpOauthClients } from './account-mcp-oauth-clients.tsx'
 import { AccountPackages } from './account-packages.tsx'
@@ -89,6 +90,8 @@ export function RouteView(
 				return <AccountIntegrations data={data} pathname={pathname} />
 			case 'accountMcpServers':
 				return <AccountMcpServers data={data} pathname={pathname} />
+			case 'accountMcpServerAuthorize':
+				return <AccountMcpServerAuthorize data={data} pathname={pathname} />
 			case 'accountEmail':
 				return <AccountEmail data={data} pathname={pathname} />
 			case 'accountSessions':

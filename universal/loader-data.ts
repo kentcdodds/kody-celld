@@ -223,6 +223,8 @@ export type McpServerView = {
 	lastError: string | null
 	enabled: boolean
 	authKind: 'none' | 'bearer' | 'oauth'
+	authorizeHref: string | null
+	hasRefreshToken: boolean
 	usage: { mode: 'any' | 'packages'; packages: Array<string> }
 	tools: Array<{ name: string; description: string }>
 }
@@ -479,6 +481,17 @@ export type AppLoaderData =
 			page: 'accountMcpServers'
 			csrf: string
 			servers: Array<McpServerView>
+	  }
+	| {
+			page: 'accountMcpServerAuthorize'
+			csrf: string
+			name: string
+			url: string
+			authorizationServerHost: string | null
+			clientMode: 'preregistered' | 'metadata' | 'dynamic' | null
+			scopes: Array<string>
+			canContinue: boolean
+			message: string | null
 	  }
 	| {
 			page: 'accountEmail'
