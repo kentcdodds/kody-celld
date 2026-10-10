@@ -54,6 +54,8 @@ const flashes: Record<string, PageFlash> = {
 	mcp_auth_error: { kind: 'error', text: 'Authorization did not finish; see the server status below.' },
 }
 
+const noReferrer = { 'referrer-policy': 'no-referrer' }
+
 function view(
 	session: WebSession,
 	input: {
@@ -931,8 +933,8 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 		case 'mcp-servers': {
 			const cell = mcpCell({ userCell })
 			if (segments[1] === 'oauth' && segments[2] === 'callback' && segments.length === 3) {
-				if (request.method === 'HEAD') return new Response(null, { status: 200 })
-				if (post) return new Response(null, { status: 405, headers: { allow: 'GET, HEAD' } })
+				if (request.method === 'HEAD') return new Response(null, { status: 200, headers: noReferrer })
+				if (post) return new Response(null, { status: 405, headers: { allow: 'GET, HEAD', ...noReferrer } })
 				const result = await finishMcpOAuth(mcpDeps({ env, userCell }), {
 					state: url.searchParams.get('state') ?? '',
 					code: url.searchParams.get('code'),
@@ -941,12 +943,13 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 				})
 				const nameParam = encodeURIComponent(result.name)
 				// A replayed callback must not claim success: the first attempt may have failed.
-				if (result.replay) return redirect(`/account/mcp-servers?name=${nameParam}`)
+				if (result.replay) return redirect(`/account/mcp-servers?name=${nameParam}`, noReferrer)
 				await audit(result.ok ? 'mcp_server.oauth_connected' : 'mcp_server.oauth_failed', result.name, {
 					...(result.message ? { message: result.message } : {}),
 				})
 				return redirect(
 					`/account/mcp-servers?flash=${result.ok ? 'mcp_auth_success' : 'mcp_auth_error'}&name=${nameParam}`,
+					noReferrer,
 				)
 			}
 			if (segments[2] === 'authorize' && segments.length === 3) {
