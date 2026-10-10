@@ -6,7 +6,17 @@ import {
 	AccountManagementShell,
 	AccountPageHeader,
 } from './account-management-components.tsx'
-import { ActionForm, Badge, Code, DangerForm, Muted } from './form-controls.tsx'
+import {
+	ActionForm,
+	Badge,
+	Code,
+	CsrfInput,
+	DangerForm,
+	Field,
+	Hidden,
+	Muted,
+	SubmitButton,
+} from './form-controls.tsx'
 import { RecordTable } from './record-table.tsx'
 
 type Data = Extract<AppLoaderData, { page: 'accountMcpServers' }>
@@ -149,6 +159,55 @@ export function AccountMcpServers(
 											fields={{ action: 'remove', name: s.name }}
 											label="Remove"
 										/>
+										{s.authKind !== 'bearer' ? (
+											<details>
+												<summary>OAuth client</summary>
+												{s.oauthClient?.mode === 'preregistered' ? (
+													<span>
+														<Code>{s.oauthClient.clientId}</Code>{' '}
+														<Muted small>
+															{s.oauthClient.hasSecret
+																? 'secret set'
+																: 'no secret'}
+														</Muted>{' '}
+														<DangerForm
+															action={action}
+															csrf={d.csrf}
+															fields={{
+																action: 'oauth_client_remove',
+																name: s.name,
+															}}
+															label="Remove OAuth client"
+														/>
+													</span>
+												) : (
+													<form method="post" action={action}>
+														<CsrfInput token={d.csrf} />
+														<Hidden name="action" value="oauth_client_set" />
+														<Hidden name="name" value={s.name} />
+														<Field
+															label="Client ID"
+															name="clientId"
+															id={`client-id-${s.name}`}
+															required
+															maxlength={512}
+															autocomplete="off"
+														/>
+														<Field
+															label="Client secret (optional)"
+															name="clientSecret"
+															id={`client-secret-${s.name}`}
+															type="password"
+															maxlength={4096}
+															autocomplete="off"
+														/>
+														<SubmitButton variant="secondary">
+															Save OAuth client
+														</SubmitButton>
+													</form>
+												)}
+											</details>
+										) : null}
 									</span>
 								),
 							},

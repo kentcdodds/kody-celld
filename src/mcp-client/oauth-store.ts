@@ -1,6 +1,7 @@
 import type { OAuthDiscoveryState } from '@modelcontextprotocol/sdk/client/auth.js'
 import type { OAuthClientInformationMixed, OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js'
 import { isTokenExpired } from '../integrations/oauth.ts'
+import { KodyError } from '../lib/errors.ts'
 import { decryptWithKeyring, encryptSecretValue, type MasterKeyring } from '../lib/crypto.ts'
 import { redactSecrets } from './client.ts'
 
@@ -215,6 +216,23 @@ export class McpOAuthStore {
 			nowIso(),
 			name,
 		)
+	}
+
+	/** An operator-supplied client (account page only). Replaces any stored client and drops the tokens issued to it. */
+	async setPreregisteredClient(name: string, input: { clientId: string; clientSecret: string | null }) {
+		const clientId = input.clientId.trim()
+		const clientSecret = input.clientSecret?.trim() || null
+		if (!clientId || clientId.length > 512 || /[\r\n]/.test(clientId)) {
+			throw new KodyError('invalid_args', 'OAuth client id must be 1-512 characters on one line.')
+		}
+		if (clientSecret && (clientSecret.length > 4096 || /[\r\n]/.test(clientSecret))) {
+			throw new KodyError('invalid_args', 'OAuth client secret must be at most 4096 characters on one line.')
+		}
+		this.clearClient(name)
+		await this.saveClient(name, {
+			mode: 'preregistered',
+			information: { client_id: clientId, ...(clientSecret ? { client_secret: clientSecret } : {}) },
+		})
 	}
 
 	/** The SDK hands back client information (DCR result, or an issuer-stamped stored client): keep the stored mode. */

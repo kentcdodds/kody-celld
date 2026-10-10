@@ -63,6 +63,8 @@ export type McpServerCell = {
 		tokens: OAuthTokens
 		savedClient: OAuthClientInformationMixed | null
 	}): Promise<McpServerRecord>
+	mcpServerOAuthSetClient(input: { name: string; clientId: string; clientSecret: string | null }): Promise<void>
+	mcpServerOAuthClearClient(name: string): Promise<void>
 }
 
 /** Every `mcpServer*` UserCell RPC with its real record type (the generated RPC stub types collapse `unknown` fields to `never`). */
@@ -334,6 +336,26 @@ async function requireOAuthServer(deps: McpDeps, name: string) {
 		throw new KodyError('mcp_server_not_found', `MCP server "${name}" is not an OAuth server.`, { status: 404 })
 	}
 	return record
+}
+
+export async function setMcpOAuthClient(
+	deps: McpDeps,
+	name: string,
+	input: { clientId: string; clientSecret: string | null },
+): Promise<McpServerRecord> {
+	const record = await requireOAuthServer(deps, name)
+	await deps.cell.mcpServerOAuthSetClient({
+		name: record.name,
+		clientId: input.clientId,
+		clientSecret: input.clientSecret,
+	})
+	return refreshMcpServer(deps, record.name)
+}
+
+export async function removeMcpOAuthClient(deps: McpDeps, name: string): Promise<McpServerRecord> {
+	const record = await requireOAuthServer(deps, name)
+	await deps.cell.mcpServerOAuthClearClient(record.name)
+	return refreshMcpServer(deps, record.name)
 }
 
 export type McpOAuthDescription = {

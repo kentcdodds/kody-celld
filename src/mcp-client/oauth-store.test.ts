@@ -236,4 +236,17 @@ describe('McpOAuthStore', () => {
 		assert.equal(store.summary('home'), null)
 		assert.equal(await store.tokens('home'), null)
 	})
+
+	it('pre-registered client: sealed secret, replaces a dynamic client, clears tokens, validates input', async () => {
+		const { store, sql } = await makeOAuth()
+		await store.saveClient('gh', dynamicClient)
+		await store.saveTokens('gh', { access_token: 'at-1', refresh_token: 'rt-1', token_type: 'Bearer' })
+		await store.setPreregisteredClient('gh', { clientId: 'Iv1.abc', clientSecret: 'gh-secret' })
+		assert.equal(store.summary('gh')!.clientMode, 'preregistered')
+		assert.equal(store.summary('gh')!.hasAccessToken, false)
+		assert.doesNotMatch(JSON.stringify(sql.exec('SELECT * FROM mcp_server_oauth').toArray()), /gh-secret/)
+		assert.equal((await store.client('gh'))!.information.client_secret, 'gh-secret')
+		await assert.rejects(store.setPreregisteredClient('gh', { clientId: '', clientSecret: null }), /invalid_args/)
+		await assert.rejects(store.setPreregisteredClient('gh', { clientId: 'a\nb', clientSecret: null }), /invalid_args/)
+	})
 })

@@ -225,6 +225,8 @@ export type McpServerView = {
 	authKind: 'none' | 'bearer' | 'oauth'
 	authorizeHref: string | null
 	hasRefreshToken: boolean
+	/** The stored OAuth client; the secret itself is never exposed. */
+	oauthClient: { clientId: string; hasSecret: boolean; mode: string } | null
 	usage: { mode: 'any' | 'packages'; packages: Array<string> }
 	tools: Array<{ name: string; description: string }>
 }

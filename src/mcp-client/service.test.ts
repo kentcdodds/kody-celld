@@ -12,7 +12,9 @@ import {
 	finishMcpOAuth,
 	mcpServerResult,
 	reconnectMcpServer,
+	removeMcpOAuthClient,
 	refreshMcpServer,
+	setMcpOAuthClient,
 	startMcpOAuth,
 	type McpDeps,
 	type McpServerCell,
@@ -84,6 +86,11 @@ async function setup(serverOptions: Parameters<typeof startTestMcpServer>[0] = {
 			await oauth.saveTokens(input.name, input.tokens)
 			return store.markOAuth(input.name)
 		},
+		mcpServerOAuthSetClient: async (input) => {
+			if (!store.get(input.name)) throw new Error('mcp_server_not_found')
+			await oauth.setPreregisteredClient(input.name, { clientId: input.clientId, clientSecret: input.clientSecret })
+		},
+		mcpServerOAuthClearClient: async (name: string) => oauth.clearClient(name),
 	}
 	const server = startTestMcpServer({
 		// an OAuth test server checks only its own access tokens
@@ -331,6 +338,24 @@ describe('OAuth servers', () => {
 		assert.match(record.lastError!.message, /pre-registered OAuth client/)
 		assert.notEqual(mcpServerResult(record, deps.publicUrl).authUrl, null)
 		await assert.rejects(startMcpOAuth(deps, 'gh'), /mcp_oauth_client_required/)
+	})
+
+	it('pre-registered client: a server without DCR/CIMD becomes authorizable and exchanges with client_secret_basic', async () => {
+		const { deps, server } = await setup({
+			oauth: { mode: 'preregistered', clients: { 'Iv1.abc': { secret: 'gh-secret' } } },
+		})
+		const parked = await addMcpServer(deps, { name: 'gh', url })
+		assert.equal(parked.status, 'error')
+		const ready = await setMcpOAuthClient(deps, 'gh', { clientId: 'Iv1.abc', clientSecret: 'gh-secret' })
+		assert.equal(ready.status, 'authenticating')
+		const finished = await authorizeThroughBrowser(deps, server, 'gh')
+		assert.equal(finished.ok, true)
+		assert.deepEqual(
+			server.oauth!.tokenRequests.map((r) => r.clientId),
+			['Iv1.abc'],
+		)
+		const removed = await removeMcpOAuthClient(deps, 'gh')
+		assert.equal(removed.status, 'error')
 	})
 
 	it('consent → callback → ready; calls work; an expired access token is refreshed once and the call retried', async () => {

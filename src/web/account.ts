@@ -3,7 +3,14 @@ import { getUserCell } from '../execute/engine.ts'
 import { recordAudit } from '../lib/audit.ts'
 import { mcpCell, mcpDeps } from '../capabilities/mcp-servers.ts'
 import { parseIntegrationUsage } from '../integrations/oauth.ts'
-import { describeMcpOAuth, finishMcpOAuth, refreshMcpServer, startMcpOAuth } from '../mcp-client/service.ts'
+import {
+	describeMcpOAuth,
+	finishMcpOAuth,
+	refreshMcpServer,
+	removeMcpOAuthClient,
+	setMcpOAuthClient,
+	startMcpOAuth,
+} from '../mcp-client/service.ts'
 import { KodyError } from '../lib/errors.ts'
 import { loadEmailConfig } from '../email/service.ts'
 import { getMemoryCell } from '../capabilities/memory.ts'
@@ -984,6 +991,19 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 						} catch (error) {
 							if (!KodyError.fromUnknown(error)) throw error
 						}
+					} else if (form.action === 'oauth_client_set') {
+						try {
+							await setMcpOAuthClient(mcpDeps({ env, userCell }), name, {
+								clientId: form.clientId ?? '',
+								clientSecret: form.clientSecret ?? null,
+							})
+							await audit('mcp_server.oauth_client_set', name, { clientId: (form.clientId ?? '').trim(), via: 'web' })
+						} catch (error) {
+							if (!KodyError.fromUnknown(error)) throw error
+						}
+					} else if (form.action === 'oauth_client_remove') {
+						await removeMcpOAuthClient(mcpDeps({ env, userCell }), name)
+						await audit('mcp_server.oauth_client_removed', name, { via: 'web' })
 					} else if (form.action === 'enable' || form.action === 'disable') {
 						await cell.mcpServerSetEnabled({ name, enabled: form.action === 'enable' })
 						await audit('mcp_server.enabled', name, { enabled: form.action === 'enable', via: 'web' })
@@ -1030,6 +1050,9 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 								? `/account/mcp-servers/${encodeURIComponent(s.name)}/authorize`
 								: null,
 						hasRefreshToken: s.oauth?.hasRefreshToken ?? false,
+						oauthClient: s.oauth?.clientMode
+							? { clientId: s.oauth.clientId ?? '', hasSecret: s.oauth.hasClientSecret, mode: s.oauth.clientMode }
+							: null,
 						usage:
 							s.usage.mode === 'any'
 								? { mode: 'any' as const, packages: [] }

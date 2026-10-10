@@ -1295,6 +1295,20 @@ export class UserCell extends DurableObject<Env> {
 		return this.mcpServers.markOAuth(input.name)
 	}
 
+	async mcpServerOAuthSetClient(input: { name: string; clientId: string; clientSecret: string | null }) {
+		if (!this.mcpServers.get(input.name)) {
+			throw new KodyError('mcp_server_not_found', `MCP server "${input.name}" was not found.`, { status: 404 })
+		}
+		await this.mcpOAuth.setPreregisteredClient(input.name, {
+			clientId: input.clientId,
+			clientSecret: input.clientSecret,
+		})
+	}
+
+	async mcpServerOAuthClearClient(name: string) {
+		this.mcpOAuth.clearClient(name)
+	}
+
 	// -------------------------------------------------------- secret providers
 
 	async secretProviderBind(input: {
