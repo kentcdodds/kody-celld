@@ -57,8 +57,9 @@ OAuth server. A bearer token and OAuth are exclusive: a server added with
 1. `mcpServerAdd({ name, url })` saves the server with
    `status: 'authenticating'` and returns an `authUrl`
    (`{origin}/account/mcp-servers/<name>/authorize`) plus a `nextStep` that
-   says what to do. Calls fail with `mcp_server_unauthorized` until the user
-   authorizes.
+   says what to do. Calls fail with `mcp_server_unauthorized` (with the
+   `authUrl` and the reason) until the user authorizes; so do calls to an
+   OAuth server in `status: 'error'` that has no grant yet.
 2. The user opens `authUrl` while signed in. The consent page names the server,
    its authorization server and how Kody will identify itself; **Continue**
    sends the browser to the provider.
@@ -69,9 +70,15 @@ OAuth server. A bearer token and OAuth are exclusive: a server added with
    authorization expires after 15 minutes and works once: a replayed
    callback changes nothing, and an unknown `state` is refused
    (`mcp_oauth_state_invalid`).
-4. The server is `ready`; `mcpServerList` shows `authUrl: null` and
-   `oauth.hasRefreshToken`. Tokens, client secrets and PKCE verifiers never
-   appear in capability results, errors, run history, logs or HTML.
+4. The server is `ready`; `mcpServerList` shows `authUrl: null`,
+   `hasRefreshToken` and `oauthClientMode` (`'preregistered'`, `'metadata'`,
+   `'dynamic'` or `null`; the same values are under `oauth`). Tokens, client
+   secrets and PKCE verifiers never appear in capability results, errors, run
+   history, logs or HTML.
+
+If the server is removed or replaced (another origin, or a bearer token) while
+the provider round trip is running, the callback saves nothing and reports an
+error; start again from the new server's `authUrl`.
 
 `{origin}` is always the origin of `KODY_PUBLIC_URL`, never the request host.
 
@@ -134,9 +141,30 @@ once (followed by one retry) when a call gets a `401`. Refreshes are
 serialized per server, so concurrent calls never race a rotating refresh
 token. When the provider rejects the refresh token, the server goes back to
 `authenticating` with an `authUrl`; the user reauthorizes. `mcpServerReconnect({
-name })` forces a refresh and re-lists the tools, and returns the current
-`status` and `authUrl`. Like the other management capabilities, it is refused
-from package code.
+name })` forces a refresh when the grant has a refresh token (a grant without
+one, such as a GitHub OAuth app's, is kept as is), re-lists the tools, and
+returns the current `status` and `authUrl`. Like the other management
+capabilities, it is refused from package code.
+
+### Troubleshooting
+
+- **The provider rejects the redirect URI or the origin** (`invalid_request`,
+  "redirect_uri mismatch", "origin not allowed"): allow the three values from
+  [What to allow at the provider](#what-to-allow-at-the-provider) there, then
+  authorize again.
+- **"needs a pre-registered OAuth client"** (`status: 'error'`, or
+  `mcp_oauth_client_required` when starting): the authorization server offers
+  neither registration nor client metadata documents. Create an OAuth app at
+  the provider and enter it under **OAuth client** (see
+  [Pre-registered client](#pre-registered-client-github)).
+- **A LAN authorization server is refused** (`mcp_host_not_allowed` on the
+  consent page, or a `lastError` naming the authorization server's host): add the
+  authorization server's host to `KODY_MCP_ALLOW_PRIVATE_HOSTS`, not only the
+  MCP server's host (see [LAN authorization servers](#lan-authorization-servers)).
+- **The refresh token was rejected** (`status: 'authenticating'`, "The refresh
+  token was rejected; authorize again"): open `authUrl` and authorize again.
+  After a transient refresh failure (`status: 'error'`, tokens kept),
+  `mcpServerReconnect({ name })` retries the refresh and re-lists the tools.
 
 ## Call tools
 
