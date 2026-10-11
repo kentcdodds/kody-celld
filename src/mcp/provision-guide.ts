@@ -2,7 +2,8 @@ import { KODY_CELLD_VERSION } from '../env.ts'
 
 /**
  * The `guide:provision` search guide: what kody-celld provides in place of Cloudflare-only features.
- * Kept in its own module (no runtime imports) so a test can pin it to the code it describes.
+ * Kept in its own module so a test can pin it to the code it describes. It only imports the
+ * version constant from env.ts (no Worker runtime, cells, or capability registry).
  */
 export const provisionGuide = {
 	id: 'guide:provision',
