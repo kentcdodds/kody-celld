@@ -12,7 +12,7 @@
 export default {
 	async email(message, env) {
 		const raw = new Uint8Array(await new Response(message.raw).arrayBuffer())
-		const response = await fetch(`${env.KODY_URL.replace(/\/$/, '')}/email/inbound/cloudflare`, {
+		const response = await fetch(`${env.KODY_URL.replace(/\/$/, '')}/email/inbound/bridge`, {
 			method: 'POST',
 			headers: {
 				authorization: `Bearer ${env.KODY_EMAIL_INBOUND_TOKEN}`,

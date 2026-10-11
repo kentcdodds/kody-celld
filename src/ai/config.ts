@@ -2,12 +2,17 @@
  * Operator-level AI configuration. These are deployment settings (like the
  * master key), not user secrets: they come from `.dev.vars` / `.env` / fleet
  * vars and are read by the worker itself, never by sandboxed package code.
+ *
+ * Chat is OpenAI-compatible only (Ollama, LM Studio, OpenRouter, vLLM, OpenAI).
+ * The Anthropic adapter was removed — see https://github.com/kentcdodds/kody-celld/issues/63.
  */
 
-export type ChatProviderKind = 'openai' | 'anthropic'
+export type ChatProviderKind = 'openai'
 export type EmbedProviderKind = 'openai'
 export type VectorProviderKind = 'local' | 'qdrant'
 export type RerankMode = 'off' | 'llm'
+
+const noticeUrl = 'https://github.com/kentcdodds/kody-celld/issues/63'
 
 export type AiEnv = {
 	KODY_AI_PROVIDER?: string
@@ -56,12 +61,10 @@ export type AiConfig = {
 
 export const defaultBaseUrls: Record<ChatProviderKind, string> = {
 	openai: 'https://api.openai.com/v1',
-	anthropic: 'https://api.anthropic.com/v1',
 }
 
 export const defaultChatModels: Record<ChatProviderKind, string> = {
 	openai: 'gpt-4o-mini',
-	anthropic: 'claude-3-5-haiku-latest',
 }
 
 export const defaultEmbedModel = 'text-embedding-3-small'
@@ -108,7 +111,13 @@ function httpUrl(name: string, raw: string) {
 }
 
 export function aiConfigFromEnv(env: AiEnv): AiConfig {
-	const chatProvider = oneOf('KODY_AI_PROVIDER', env.KODY_AI_PROVIDER, ['none', 'openai', 'anthropic'] as const, 'none')
+	const providerRaw = trimmed(env.KODY_AI_PROVIDER)?.toLowerCase()
+	if (providerRaw === 'anthropic') {
+		throw new Error(
+			`KODY_AI_PROVIDER=anthropic was removed; use openai with an OpenAI-compatible endpoint (see ${noticeUrl}).`,
+		)
+	}
+	const chatProvider = oneOf('KODY_AI_PROVIDER', env.KODY_AI_PROVIDER, ['none', 'openai'] as const, 'none')
 	const chatApiKey = trimmed(env.KODY_AI_API_KEY) ?? null
 	const chat: ChatConfig | null =
 		chatProvider === 'none'
@@ -122,7 +131,6 @@ export function aiConfigFromEnv(env: AiEnv): AiConfig {
 
 	// Embeddings default to the chat provider's endpoint when that endpoint is
 	// OpenAI-compatible (Ollama, LM Studio, OpenRouter, vLLM, OpenAI itself).
-	// Anthropic has no embeddings API, so it needs an explicit embed provider.
 	const embedFallback = chatProvider === 'openai' ? 'openai' : 'none'
 	const embedProvider = oneOf(
 		'KODY_AI_EMBED_PROVIDER',
@@ -165,7 +173,7 @@ export function aiConfigFromEnv(env: AiEnv): AiConfig {
 
 	const rerank = oneOf('KODY_SEARCH_RERANK', env.KODY_SEARCH_RERANK, ['off', 'llm'] as const, 'off')
 	if (rerank === 'llm' && !chat) {
-		throw new Error('KODY_SEARCH_RERANK=llm requires KODY_AI_PROVIDER (openai or anthropic).')
+		throw new Error('KODY_SEARCH_RERANK=llm requires KODY_AI_PROVIDER=openai.')
 	}
 
 	return {

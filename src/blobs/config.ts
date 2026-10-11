@@ -1,13 +1,17 @@
 /**
- * Operator-level blob storage configuration. The default provider is the R2
- * binding (`BLOBS`), which celld serves from the fleet bucket under
- * `r2/<bucket_name>/` and `celld dev` from its local storage directory. The
- * `s3` provider talks SigV4 to any S3-compatible endpoint directly (a second
- * bucket, MinIO, Tigris, Backblaze B2, Cloudflare R2 over S3, …) for operators
- * who want blobs outside the celld fleet bucket. Keys never reach sandbox code.
+ * Operator-level blob storage configuration. The default provider is the celld
+ * `BLOBS` binding (fleet bucket / local volume). The `s3` provider talks SigV4
+ * to any S3-compatible endpoint (MinIO, Tigris, Backblaze B2, Cloudflare R2
+ * over S3, AWS S3, …). Keys never reach sandbox code.
+ *
+ * Explicit `KODY_BLOB_PROVIDER=r2` was removed as a separate adapter name —
+ * omit the setting to use the binding, or set `s3`. See
+ * https://github.com/kentcdodds/kody-celld/issues/63.
  */
 
-export type BlobProviderKind = 'r2' | 's3'
+export type BlobProviderKind = 'binding' | 's3'
+
+const noticeUrl = 'https://github.com/kentcdodds/kody-celld/issues/63'
 
 export type BlobEnv = {
 	KODY_BLOB_PROVIDER?: string
@@ -75,12 +79,18 @@ function boolean(name: string, raw: string | undefined, fallback: boolean) {
 }
 
 export function blobConfigFromEnv(env: BlobEnv): BlobConfig {
-	const providerRaw = trimmed(env.KODY_BLOB_PROVIDER)?.toLowerCase() ?? 'r2'
-	if (providerRaw !== 'r2' && providerRaw !== 's3') {
-		throw new Error(`KODY_BLOB_PROVIDER: expected r2 or s3, got "${env.KODY_BLOB_PROVIDER}".`)
+	const providerRaw = trimmed(env.KODY_BLOB_PROVIDER)?.toLowerCase()
+	if (providerRaw === 'r2') {
+		throw new Error(
+			`KODY_BLOB_PROVIDER=r2 was removed as a separate adapter name; omit the setting to use the BLOBS binding, or set s3 (see ${noticeUrl}).`,
+		)
+	}
+	const provider = providerRaw ?? 'binding'
+	if (provider !== 'binding' && provider !== 's3') {
+		throw new Error(`KODY_BLOB_PROVIDER: expected binding or s3, got "${env.KODY_BLOB_PROVIDER}".`)
 	}
 	let s3: S3Config | null = null
-	if (providerRaw === 's3') {
+	if (provider === 's3') {
 		const endpointRaw = required('KODY_BLOB_S3_ENDPOINT', env)
 		let endpoint: URL
 		try {
@@ -103,7 +113,7 @@ export function blobConfigFromEnv(env: BlobEnv): BlobConfig {
 		}
 	}
 	return {
-		provider: providerRaw,
+		provider,
 		s3,
 		maxBytes: integer('KODY_BLOB_MAX_BYTES', env.KODY_BLOB_MAX_BYTES, defaultBlobMaxBytes, 1024, 1024 * 1024 * 1024),
 		urlTtlSeconds: integer(

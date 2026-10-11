@@ -33,12 +33,12 @@ describe('email inbound/events without a token', () => {
 	})
 
 	it('refuses events with 501 when the domain is set but no inbound token is configured', async () => {
-		const url = new URL('http://kody.example.com/email/events/resend')
+		const url = new URL('http://kody.example.com/email/events/bridge')
 		const response = await handleEmailEvents(
 			new Request(url, {
 				method: 'POST',
 				headers: { authorization: 'Bearer anything', 'content-type': 'application/json' },
-				body: JSON.stringify({ type: 'email.delivered', data: { email_id: 'x' } }),
+				body: JSON.stringify({ messageId: 'x', event: 'delivered' }),
 			}),
 			emailEnv({ KODY_EMAIL_DOMAIN: 'mail.example.com' }),
 			noopCtx,
@@ -67,5 +67,19 @@ describe('email inbound/events without a token', () => {
 		assert.equal(response.status, 501)
 		const body = (await response.json()) as { error: string }
 		assert.equal(body.error, 'email_not_configured')
+	})
+
+	it('returns 410 for removed inbound adapters', async () => {
+		const url = new URL('http://kody.example.com/email/inbound/postmark')
+		const response = await handleEmailInbound(
+			new Request(url, { method: 'POST', body: '{}' }),
+			emailEnv({ KODY_EMAIL_DOMAIN: 'mail.example.com' }),
+			noopCtx,
+			url,
+		)
+		assert.equal(response.status, 410)
+		const body = (await response.json()) as { error: string; message: string }
+		assert.equal(body.error, 'adapter_removed')
+		assert.match(body.message, /was removed/)
 	})
 })

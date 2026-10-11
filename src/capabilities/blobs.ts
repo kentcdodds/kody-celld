@@ -6,7 +6,7 @@ import { defineCapability, defineDomain, type CapabilityContext } from './define
 export const blobsDomain = defineDomain({
 	name: 'blobs',
 	description:
-		'Per-user binary/file storage on the fleet bucket (celld R2 binding by default, or any S3-compatible bucket via KODY_BLOB_PROVIDER=s3). Keys are scoped to the calling user; packages see the same namespace as ad hoc code. Use blobUrl to hand a file to a browser or another service without exposing bucket credentials.',
+		'Per-user binary/file storage on the fleet bucket (celld BLOBS binding by default, or any S3-compatible bucket via KODY_BLOB_PROVIDER=s3). Keys are scoped to the calling user; packages see the same namespace as ad hoc code. Use blobUrl to hand a file to a browser or another service without exposing bucket credentials.',
 	guide:
 		'Write with blobPut (utf8 text or base64), read back with blobGet (base64 or utf8), list with blobList, delete with blobDelete. blobUrl mints a time-limited signed download link served by this Kody instance. Quotas: KODY_BLOB_MAX_BYTES per object, KODY_QUOTA_BLOBS / KODY_QUOTA_BLOB_BYTES per user (blobUsage shows them).',
 })

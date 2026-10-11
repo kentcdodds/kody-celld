@@ -9,19 +9,20 @@ const browserless = browserConfigFromEnv({
 })
 
 describe('browser config', () => {
-	it('is off by default and validates each provider', () => {
+	it('is off by default and validates browserless', () => {
 		assert.equal(browserConfigFromEnv({}), null)
 		assert.deepEqual(describeBrowserConfig(null), { provider: 'none', configured: false })
 		assert.equal(browserless?.baseUrl, 'http://browserless:3000')
 		assert.equal(browserless?.token, null)
-		assert.throws(
-			() => browserConfigFromEnv({ KODY_BROWSER_PROVIDER: 'puppeteer' }),
-			/expected none, browserless or cloudflare/,
-		)
+		assert.throws(() => browserConfigFromEnv({ KODY_BROWSER_PROVIDER: 'puppeteer' }), /expected none or browserless/)
 		assert.throws(() => browserConfigFromEnv({ KODY_BROWSER_PROVIDER: 'browserless' }), /KODY_BROWSER_URL is required/)
 		assert.throws(
-			() => browserConfigFromEnv({ KODY_BROWSER_PROVIDER: 'cloudflare', KODY_BROWSER_CF_ACCOUNT_ID: 'acc' }),
-			/KODY_BROWSER_TOKEN/,
+			() => browserConfigFromEnv({ KODY_BROWSER_PROVIDER: 'cloudflare', KODY_BROWSER_TOKEN: 't' }),
+			/cloudflare was removed/,
+		)
+		assert.throws(
+			() => browserConfigFromEnv({ KODY_BROWSER_CF_ACCOUNT_ID: 'acc' }),
+			/KODY_BROWSER_CF_ACCOUNT_ID was removed/,
 		)
 		assert.throws(
 			() =>
@@ -46,14 +47,14 @@ describe('browser config', () => {
 		)
 	})
 
-	it('describes the cloudflare provider without the token', () => {
+	it('describes the browserless provider without the token', () => {
 		const config = browserConfigFromEnv({
-			KODY_BROWSER_PROVIDER: 'cloudflare',
-			KODY_BROWSER_CF_ACCOUNT_ID: 'acc/1',
+			KODY_BROWSER_PROVIDER: 'browserless',
+			KODY_BROWSER_URL: 'http://browserless:3000',
 			KODY_BROWSER_TOKEN: 'unit-test-token-not-real',
 			KODY_PRIVATE_HOSTS: 'Dash.Home.LAN, *.lab.internal',
 		})
-		assert.equal(config?.baseUrl, 'https://api.cloudflare.com/client/v4/accounts/acc%2F1/browser-rendering')
+		assert.equal(config?.baseUrl, 'http://browserless:3000')
 		assert.deepEqual(config?.allowPrivateHosts, ['dash.home.lan', '*.lab.internal'])
 		const described = JSON.stringify(describeBrowserConfig(config))
 		assert.doesNotMatch(described, /unit-test-token-not-real/)

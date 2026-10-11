@@ -7,7 +7,7 @@ import { getMemoryCell } from './memory.ts'
 export const aiDomain = defineDomain({
 	name: 'ai',
 	description:
-		'Operator-configured language model access: chat completions and embeddings through any OpenAI-compatible endpoint (Ollama, LM Studio, vLLM, OpenRouter, OpenAI) or Anthropic. The API key lives in the deployment, never in packages or MCP output.',
+		'Operator-configured language model access: chat completions and embeddings through any OpenAI-compatible endpoint (Ollama, LM Studio, vLLM, OpenRouter, OpenAI). The API key lives in the deployment, never in packages or MCP output.',
 })
 
 export const aiStatus = defineCapability<Record<string, never>>({
@@ -16,7 +16,7 @@ export const aiStatus = defineCapability<Record<string, never>>({
 	description:
 		'Describe the configured AI providers (chat/embeddings/vector store/re-ranking): provider, model, endpoint, dimensions and whether an API key is set. Never returns key material.',
 	tags: ['ai', 'read', 'system'],
-	keywords: ['ai', 'llm', 'model', 'embeddings', 'ollama', 'openai', 'anthropic', 'qdrant', 'is ai configured'],
+	keywords: ['ai', 'llm', 'model', 'embeddings', 'ollama', 'openai', 'qdrant', 'is ai configured'],
 	inputSchema: { type: 'object', properties: {} },
 	readOnly: true,
 	async handler(_args, ctx) {
@@ -64,7 +64,7 @@ export default async function main({ text }) {
 		if (!ai.chat) {
 			throw new KodyError(
 				'ai_not_configured',
-				'No chat provider configured. Set KODY_AI_PROVIDER (openai | anthropic) on the server.',
+				'No chat provider configured. Set KODY_AI_PROVIDER=openai on the server.',
 				{
 					status: 503,
 				},

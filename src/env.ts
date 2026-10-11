@@ -26,7 +26,7 @@ export type Env = LimitEnv &
 		MEMORY: DurableObjectNamespace<MemoryCell>
 		PACKAGE_STORAGE: DurableObjectNamespace<PackageStorageCell>
 		NPM_CACHE: DurableObjectNamespace<NpmCacheCell>
-		/** R2-compatible bucket binding: `r2/<bucket_name>/` in the fleet bucket. Optional when KODY_BLOB_PROVIDER=s3. */
+		/** celld BLOBS binding (`r2/<bucket_name>/` in the fleet bucket). Optional when KODY_BLOB_PROVIDER=s3. */
 		BLOBS?: R2Bucket
 		KODY_ADMIN_TOKEN: string
 		KODY_MASTER_KEY: string

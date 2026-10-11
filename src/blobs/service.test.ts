@@ -4,12 +4,13 @@ import { blobConfigFromEnv, describeBlobConfig } from './config.ts'
 import { decodeContent, encodeBase64, normalizeMetadata } from './service.ts'
 
 describe('blob config', () => {
-	it('defaults to the R2 binding and validates s3 settings', () => {
-		const r2 = blobConfigFromEnv({})
-		assert.equal(r2.provider, 'r2')
-		assert.equal(r2.s3, null)
-		assert.equal(r2.maxBytes, 25 * 1024 * 1024)
-		assert.throws(() => blobConfigFromEnv({ KODY_BLOB_PROVIDER: 'gcs' }), /expected r2 or s3/)
+	it('defaults to the BLOBS binding and validates s3 settings', () => {
+		const binding = blobConfigFromEnv({})
+		assert.equal(binding.provider, 'binding')
+		assert.equal(binding.s3, null)
+		assert.equal(binding.maxBytes, 25 * 1024 * 1024)
+		assert.throws(() => blobConfigFromEnv({ KODY_BLOB_PROVIDER: 'gcs' }), /expected binding or s3/)
+		assert.throws(() => blobConfigFromEnv({ KODY_BLOB_PROVIDER: 'r2' }), /r2 was removed/)
 		assert.throws(() => blobConfigFromEnv({ KODY_BLOB_PROVIDER: 's3' }), /KODY_BLOB_S3_ENDPOINT is required/)
 		assert.throws(() => blobConfigFromEnv({ KODY_BLOB_MAX_BYTES: '1' }), /between 1024 and/)
 		assert.throws(() => blobConfigFromEnv({ KODY_BLOB_URL_TTL_SECONDS: 'x' }), /expected an integer/)
