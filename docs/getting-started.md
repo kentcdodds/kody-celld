@@ -26,7 +26,8 @@ users, and durable state you can back up.
 - **Memories + AI** — durable per-user memories with full-text search out of
   the box; point it at any OpenAI-compatible server (Ollama, LM Studio,
   OpenAI, OpenRouter, vLLM, …) or add the bundled Ollama + Qdrant overlay for
-  embeddings, semantic recall and `kody.aiChat()`. See [ai.md](./ai.md).
+  embeddings and semantic recall. Set `KODY_AI_PROVIDER=openai` and pull a
+  chat model to enable `kody.aiChat()`. See [ai.md](./ai.md).
 
 Everything runs on [celld](https://celld.dev), Deno's self-hosted Cloudflare
 Workers + Durable Objects runtime. No Cloudflare account is involved.
