@@ -385,7 +385,7 @@ src/execute/              module graph → Worker Loader isolate; RuntimeHost RP
 src/packages/             remote package sources (GitHub / tarball / JSON) with host allowlist + SSRF guard, tar reader, community catalog store
 src/secrets/              placeholders, host policy, FetchGateway (network-boundary injection)
 src/blobs/                blob store abstraction: R2 binding + S3 SigV4 adapter, keys, signed links
-src/browser/              browser rendering adapters (browserless, Cloudflare) + SSRF guard
+src/browser/              browserless rendering adapter + SSRF guard
 src/cells/                Durable Objects: RegistryCell (users/tokens/sessions/OAuth/community), UserCell (per-user state + blob index), PackageStorageCell, MemoryCell, NpmCacheCell
 src/jobs/                 schedule parsing + dispatcher
 smoke/                    real workloads against a running node (npm run smoke; smoke/rekey.mjs for key rotation)

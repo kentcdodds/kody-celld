@@ -105,6 +105,12 @@ API provider, point the bridge at its SMTP endpoint — for Resend,
 | -------- | ------------------------------------ | --------------------------- | --------------------------- |
 | `bridge` | `http://mail-bridge:8025` (required) | `MAIL_BRIDGE_TOKEN`         | posted by the bridge itself |
 
+The compose overlay keeps port `8025` on the private compose network (only SMTP
+port 25 is published). That is fine for `http://mail-bridge:8025` on a single
+node. When a fleet node reaches a bridge on another host, put that hop on a
+private network or terminate TLS in front of the bridge so the bearer token is
+not sent over the open internet.
+
 The bridge posts `sent` / `failed` to `POST /email/events/bridge` with the same
 `KODY_EMAIL_INBOUND_TOKEN`. Events are matched to sent messages by message id,
 update `deliveryStatus`, land in `emailDeliveryEventList` and dispatch `email.message.delivery.updated`; unmatched ids are reported back
