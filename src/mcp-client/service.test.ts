@@ -48,7 +48,7 @@ async function setup(serverOptions: Parameters<typeof startTestMcpServer>[0] = {
 	const ring = await buildMasterKeyring('service-test-key')
 	const oauth = new McpOAuthStore({ sql, userId: () => 'user_1', keyring: async () => ring })
 	const store = new McpServerStore({ sql, userId: () => 'user_1', keyring: async () => ring, oauth })
-	const config = mcpConfigFromEnv({ KODY_MCP_ALLOW_PRIVATE_HOSTS: '172.30.0.0/16' })
+	const config = mcpConfigFromEnv({ KODY_PRIVATE_HOSTS: '172.30.0.0/16' })
 	// Mirrors the UserCell RPCs (src/cells/user-cell.ts); keep both in sync.
 	const cell: McpServerCell = {
 		mcpServerGet: async (name: string) => store.get(name),
@@ -136,7 +136,7 @@ describe('addMcpServer', () => {
 		const { deps, store } = await setup()
 		await assert.rejects(
 			addMcpServer(deps, { name: 'lan', url: 'http://192.168.1.1/mcp' }),
-			/mcp_host_not_allowed|KODY_MCP_ALLOW_PRIVATE_HOSTS/,
+			/mcp_host_not_allowed|KODY_PRIVATE_HOSTS/,
 		)
 		assert.equal(store.get('lan'), null)
 	})
@@ -517,7 +517,7 @@ describe('OAuth servers', () => {
 			u.pathname === '/.well-known/oauth-authorization-server'
 				? Response.json({
 						issuer: 'http://172.30.1.5',
-						// a valid URL the SDK accepts, but http to a host outside KODY_MCP_ALLOW_PRIVATE_HOSTS
+						// a valid URL the SDK accepts, but http to a host outside KODY_PRIVATE_HOSTS
 						authorization_endpoint: 'http://203.0.113.9/authorize',
 						token_endpoint: 'http://172.30.1.5/token',
 						registration_endpoint: 'http://172.30.1.5/register',

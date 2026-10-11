@@ -6,17 +6,16 @@
  * are deployment settings and never reach sandbox code.
  */
 
-import { parseHostAllowlist } from '../lib/host-allowlist.ts'
+import { privateHostsFromEnv, type PrivateHostsEnv } from '../lib/private-hosts-env.ts'
 
 export type BrowserProviderKind = 'browserless' | 'cloudflare'
 
-export type BrowserEnv = {
+export type BrowserEnv = PrivateHostsEnv & {
 	KODY_BROWSER_PROVIDER?: string
 	KODY_BROWSER_URL?: string
 	KODY_BROWSER_TOKEN?: string
 	KODY_BROWSER_CF_ACCOUNT_ID?: string
 	KODY_BROWSER_TIMEOUT_MS?: string
-	KODY_BROWSER_ALLOW_PRIVATE_HOSTS?: string
 }
 
 export type BrowserConfig = {
@@ -67,7 +66,7 @@ export function browserConfigFromEnv(env: BrowserEnv): BrowserConfig {
 			throw new Error('KODY_BROWSER_TIMEOUT_MS: must be between 1000 and 300000.')
 	}
 	const token = trimmed(env.KODY_BROWSER_TOKEN) ?? null
-	const allowPrivateHosts = parseHostAllowlist(env.KODY_BROWSER_ALLOW_PRIVATE_HOSTS, 'KODY_BROWSER_ALLOW_PRIVATE_HOSTS')
+	const allowPrivateHosts = privateHostsFromEnv(env)
 	if (provider === 'browserless') {
 		const url = trimmed(env.KODY_BROWSER_URL)
 		if (!url) throw new Error('KODY_BROWSER_URL is required when KODY_BROWSER_PROVIDER=browserless.')

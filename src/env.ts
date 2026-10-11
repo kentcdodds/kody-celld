@@ -33,7 +33,6 @@ export type Env = LimitEnv &
 		/** Comma-separated retired master keys still allowed to decrypt until `POST /admin/secrets/rekey` re-seals everything. */
 		KODY_MASTER_KEY_PREVIOUS?: string
 		KODY_PUBLIC_URL: string
-		KODY_ALLOW_INSECURE_SECRET_HOSTS?: string
 		/** How long a resolved {{secret/provider:ref}} value stays in the gateway's in-memory cache (default 300). */
 		KODY_SECRET_PROVIDER_CACHE_SECONDS?: string
 		/** Wall-clock budget for one sealed provider run (default 20000). */

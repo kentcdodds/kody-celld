@@ -12,7 +12,7 @@ export async function smokeMcpServers(ctx) {
 		const added = await mcp.call('mcpServerAdd', { name: 'smoke', url: mock.url, bearerToken: bearer })
 		assert(
 			added.status === 'ready' && added.toolCount === 3,
-			'mcpServerAdd discovers 3 tools (is KODY_MCP_ALLOW_PRIVATE_HOSTS set in .dev.vars?)',
+			'mcpServerAdd discovers 3 tools (is KODY_PRIVATE_HOSTS set in .dev.vars?)',
 			added,
 		)
 		const listed = await mcp.call('mcpServerList')
@@ -110,7 +110,7 @@ export async function smokeMcpServers(ctx) {
 			`import { kody } from 'kody:runtime'\nexport default async () => kody.mcpServerAdd({ name: 'lan', url: 'http://192.0.2.1/mcp' })`,
 		)
 		assert(
-			!refused.ok && /mcp_host_not_allowed|KODY_MCP_ALLOW_PRIVATE_HOSTS|https/.test(refused.error?.message ?? ''),
+			!refused.ok && /mcp_host_not_allowed|KODY_PRIVATE_HOSTS|https/.test(refused.error?.message ?? ''),
 			'non-allowlisted http host refused',
 			refused.error,
 		)

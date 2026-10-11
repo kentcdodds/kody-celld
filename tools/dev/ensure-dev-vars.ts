@@ -1,19 +1,15 @@
 // Ensures `.dev.vars` exists for local `celld dev` / smoke. Copies the committed
 // `.dev.vars.example` when missing so loopback smoke defaults never need to live
 // in wrangler.jsonc (which single-node Docker would inherit). When the file
-// already exists (copy-on-missing), still merge the loopback package-source
-// hosts smoke needs — older checkouts otherwise refuse `127.0.0.1` fixtures —
-// and the loopback MCP hosts the mcp-servers smoke's mock server needs.
+// already exists (copy-on-missing), still merge the loopback private hosts smoke
+// needs — older checkouts otherwise refuse `127.0.0.1` fixtures and the MCP mock.
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-const packageSourceHostsKey = 'KODY_PACKAGE_SOURCE_HOSTS'
-/** Exact private hosts the local package-fixture smoke must be able to fetch. */
-export const localPackageSourceHosts = ['127.0.0.1', 'localhost'] as const
-const mcpHostsKey = 'KODY_MCP_ALLOW_PRIVATE_HOSTS'
-/** Exact private hosts the local mcp-servers smoke mock must be reachable on. */
-export const localMcpHosts = ['127.0.0.1', 'localhost'] as const
+const privateHostsKey = 'KODY_PRIVATE_HOSTS'
+/** Exact private hosts local smoke (packages, MCP, browser, insecure secrets) needs. */
+export const localPrivateHosts = ['127.0.0.1', 'localhost', 'host.docker.internal'] as const
 
 function newlineOf(contents: string): '\r\n' | '\n' {
 	return contents.includes('\r\n') ? '\r\n' : '\n'
@@ -58,14 +54,9 @@ function mergeLocalHosts(
 	return lines.join(nl)
 }
 
-/** Merge loopback package-source hosts into a `.dev.vars` body; null if unchanged. */
-export function mergeLocalPackageSourceHosts(contents: string, exampleContents: string): string | null {
-	return mergeLocalHosts(contents, exampleContents, packageSourceHostsKey, localPackageSourceHosts)
-}
-
-/** Merge loopback MCP allowlist hosts into a `.dev.vars` body; null if unchanged. */
-export function mergeLocalMcpHosts(contents: string, exampleContents: string): string | null {
-	return mergeLocalHosts(contents, exampleContents, mcpHostsKey, localMcpHosts)
+/** Merge loopback private hosts into a `.dev.vars` body; null if unchanged. */
+export function mergeLocalPrivateHosts(contents: string, exampleContents: string): string | null {
+	return mergeLocalHosts(contents, exampleContents, privateHostsKey, localPrivateHosts)
 }
 
 export function ensureDevVars(options: { targetPath: string; examplePath: string }): {
@@ -83,8 +74,7 @@ export function ensureDevVars(options: { targetPath: string; examplePath: string
 	}
 	const exampleContents = readFileSync(options.examplePath, 'utf8')
 	const before = readFileSync(options.targetPath, 'utf8')
-	const withPackageHosts = mergeLocalPackageSourceHosts(before, exampleContents) ?? before
-	const after = mergeLocalMcpHosts(withPackageHosts, exampleContents) ?? withPackageHosts
+	const after = mergeLocalPrivateHosts(before, exampleContents) ?? before
 	if (after !== before) {
 		writeFileSync(options.targetPath, after)
 		mergedHosts = true
@@ -106,9 +96,7 @@ if (invokedAsMain) {
 		if (result.wrote) {
 			console.error('[kody-celld] wrote .dev.vars from .dev.vars.example (loopback smoke defaults)')
 		} else if (result.mergedHosts) {
-			console.error(
-				`[kody-celld] added loopback hosts to ${packageSourceHostsKey} / ${mcpHostsKey} in .dev.vars (local smoke)`,
-			)
+			console.error(`[kody-celld] added loopback hosts to ${privateHostsKey} in .dev.vars (local smoke)`)
 		}
 	} catch (error) {
 		console.error(`[kody-celld] ${error instanceof Error ? error.message : String(error)}`)

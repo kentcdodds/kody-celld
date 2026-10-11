@@ -30,12 +30,12 @@ jobs:
     env:
       KODY_PORT: 8080
       KODY_PUBLIC_URL: http://localhost:8080
+      KODY_PRIVATE_HOSTS: 127.0.0.1,localhost,host.docker.internal
       # CI-only values for a throwaway container on the runner's loopback.
       KODY_ADMIN_TOKEN: ci-admin-token-${{ github.run_id }}
       KODY_MASTER_KEY: ci-master-key-${{ github.run_id }}-${{ github.run_attempt }}
       # The secrets scenario's echo server runs on the runner; the container
       # reaches it over http as host.docker.internal.
-      KODY_ALLOW_INSECURE_SECRET_HOSTS: host.docker.internal
       # Email / browser smoke defaults (not in wrangler.jsonc — single-node would
       # inherit them). The fake mail bridge runs on the runner.
       KODY_EMAIL_DOMAIN: kody.local.test
@@ -43,12 +43,9 @@ jobs:
       KODY_EMAIL_OUTBOUND_PROVIDER: bridge
       KODY_EMAIL_OUTBOUND_TOKEN: ci-email-bridge-token-${{ github.run_id }}
       KODY_EMAIL_OUTBOUND_URL: http://host.docker.internal:9796
-      KODY_BROWSER_ALLOW_PRIVATE_HOSTS: 127.0.0.1,localhost,host.docker.internal
       # The mcp-servers scenario's mock MCP server runs on the runner (SMOKE_ECHO_HOST).
-      KODY_MCP_ALLOW_PRIVATE_HOSTS: 127.0.0.1,localhost,host.docker.internal
       # Defaults plus host.docker.internal so web smoke can preview a local JSON
       # file-map (private by name; must be listed exactly — see packages.md).
-      KODY_PACKAGE_SOURCE_HOSTS: github.com,api.github.com,codeload.github.com,raw.githubusercontent.com,gist.githubusercontent.com,objects.githubusercontent.com,kody.codes,host.docker.internal
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

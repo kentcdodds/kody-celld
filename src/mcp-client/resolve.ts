@@ -44,7 +44,7 @@ export async function assertResolvedHostAllowed(url: URL, config: McpConfig, fet
 		const literal = address.includes(':') ? `[${address}]` : address
 		if (isPrivateHostname(literal) && !hostMatchesAllowlist(address, config.allowPrivateHosts)) {
 			throw refuse(
-				`"${host}" resolves to private address ${address}. Add the address or its range to KODY_MCP_ALLOW_PRIVATE_HOSTS to allow it.`,
+				`"${host}" resolves to private address ${address}. Add the address or its range to KODY_PRIVATE_HOSTS to allow it.`,
 			)
 		}
 	}

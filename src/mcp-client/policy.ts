@@ -1,8 +1,8 @@
-import { hostMatchesAllowlist, isPrivateHostname, parseHostAllowlist } from '../lib/host-allowlist.ts'
+import { hostMatchesAllowlist, isPrivateHostname } from '../lib/host-allowlist.ts'
 import { KodyError } from '../lib/errors.ts'
+import { privateHostsEnvKey, privateHostsFromEnv, type PrivateHostsEnv } from '../lib/private-hosts-env.ts'
 
-export type McpEnv = {
-	KODY_MCP_ALLOW_PRIVATE_HOSTS?: string
+export type McpEnv = PrivateHostsEnv & {
 	KODY_MCP_CALL_TIMEOUT_MS?: string
 	KODY_DNS_RESOLVER_URL?: string
 }
@@ -15,7 +15,7 @@ export const mcpServerNamePattern = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/
 
 export function mcpConfigFromEnv(env: McpEnv): McpConfig {
 	try {
-		const allowPrivateHosts = parseHostAllowlist(env.KODY_MCP_ALLOW_PRIVATE_HOSTS, 'KODY_MCP_ALLOW_PRIVATE_HOSTS')
+		const allowPrivateHosts = privateHostsFromEnv(env)
 		const raw = env.KODY_MCP_CALL_TIMEOUT_MS?.trim()
 		let callTimeoutMs = defaultMcpCallTimeoutMs
 		if (raw) {
@@ -59,14 +59,14 @@ export function assertMcpUrl(raw: string, config: McpConfig): URL {
 	if (isPrivateHostname(host)) {
 		throw new KodyError(
 			'mcp_host_not_allowed',
-			`"${host}" is a loopback/private host. Add it (or its CIDR range) to KODY_MCP_ALLOW_PRIVATE_HOSTS on the server to use it.`,
+			`"${host}" is a loopback/private host. Add it (or its CIDR range) to ${privateHostsEnvKey} on the server to use it.`,
 			{ status: 403 },
 		)
 	}
 	if (url.protocol === 'http:') {
 		throw new KodyError(
 			'mcp_host_not_allowed',
-			`Plain http is only allowed for hosts in KODY_MCP_ALLOW_PRIVATE_HOSTS; use https for "${host}".`,
+			`Plain http is only allowed for hosts in ${privateHostsEnvKey}; use https for "${host}".`,
 			{ status: 403 },
 		)
 	}

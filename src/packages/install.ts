@@ -1,5 +1,6 @@
 import { KodyError } from '../lib/errors.ts'
-import { isPrivateHostname } from '../lib/host-allowlist.ts'
+import { hostMatchesAllowlist, isPrivateHostname } from '../lib/host-allowlist.ts'
+import { privateHostsEnvKey, privateHostsFromEnv, type PrivateHostsEnv } from '../lib/private-hosts-env.ts'
 import { hostMatchesApproval } from '../secrets/host-policy.ts'
 import { cloneGitSmartHttp, normalizeGitUrl } from './git-smart-http.ts'
 import { parsePackageManifest, type PackageFiles, type PackageManifest } from './manifest.ts'
@@ -9,16 +10,14 @@ import { gunzip, isGzip, readTar, type TarEntry } from './tar.ts'
  * Installing a package from somewhere else: a GitHub repository (tarball via
  * codeload), a public kody.codes package (read-only smart-HTTP `.git` clone), a
  * `.tar.gz` / `.tgz` URL, or a JSON file map. The server fetches the source
- * itself, so every hop is checked against KODY_PACKAGE_SOURCE_HOSTS and refused
- * for loopback/private hosts (SSRF guard). The result is a plain file map handed
- * to `UserCell.packageSave`, so provenance, quotas and manifest validation are
- * exactly the same as for a hand-written package. Secrets are never transferred.
+ * itself, so every hop is checked against the built-in public defaults and
+ * `KODY_PRIVATE_HOSTS` for private/LAN (SSRF guard). The result is a plain file
+ * map handed to `UserCell.packageSave`, so provenance, quotas and manifest
+ * validation are exactly the same as for a hand-written package. Secrets are
+ * never transferred.
  */
 
-export type PackageSourceEnv = {
-	/** Comma-separated hostnames (or `*.suffix`, or `*` for any public host) packages may be fetched from. */
-	KODY_PACKAGE_SOURCE_HOSTS?: string
-}
+export type PackageSourceEnv = PrivateHostsEnv
 
 export const defaultPackageSourceHosts = [
 	'github.com',
@@ -40,19 +39,19 @@ export const packageSourceLimits = {
 	timeoutMs: 20_000,
 }
 
+/** Public package-source defaults; refuses removed `KODY_PACKAGE_SOURCE_HOSTS`. */
 export function packageSourceHostsFromEnv(env: PackageSourceEnv): Array<string> {
-	const raw = env.KODY_PACKAGE_SOURCE_HOSTS?.trim()
-	if (!raw) return defaultPackageSourceHosts
-	const hosts = raw
-		.split(',')
-		.map((h) => h.trim().toLowerCase())
-		.filter(Boolean)
-	for (const host of hosts) {
-		if (host !== '*' && !/^(\*\.)?[a-z0-9.-]+$/.test(host)) {
-			throw new Error(`KODY_PACKAGE_SOURCE_HOSTS: "${host}" is not a hostname or *.suffix pattern.`)
-		}
-	}
-	return hosts
+	privateHostsFromEnv(env)
+	return defaultPackageSourceHosts
+}
+
+export type PackageSourceHostPolicy = {
+	allowedHosts: Array<string>
+	privateHosts: Array<string>
+}
+
+export function packageSourceHostPolicyFromEnv(env: PackageSourceEnv): PackageSourceHostPolicy {
+	return { allowedHosts: defaultPackageSourceHosts, privateHosts: privateHostsFromEnv(env) }
 }
 
 export type GithubSource = {
@@ -252,13 +251,13 @@ export function commitShaFromCodeloadUrl(url: string): string | undefined {
  */
 export async function resolveGithubCommitSha(
 	source: GithubSource,
-	options: { allowedHosts: Array<string>; fetch?: FetchLike | undefined },
+	options: { allowedHosts: Array<string>; privateHosts?: Array<string>; fetch?: FetchLike | undefined },
 ): Promise<string | undefined> {
 	const ref = source.ref ?? 'HEAD'
 	if (fullCommitSha.test(ref)) return ref.toLowerCase()
 	const apiUrl = `https://api.github.com/repos/${source.owner}/${source.repo}/commits/${encodeURIComponent(ref)}`
 	try {
-		assertAllowedSourceUrl(apiUrl, options.allowedHosts)
+		assertAllowedSourceUrl(apiUrl, options.allowedHosts, options.privateHosts)
 	} catch {
 		return undefined
 	}
@@ -307,7 +306,7 @@ export function githubTarballUrl(source: GithubSource) {
 	return `https://codeload.github.com/${source.owner}/${source.repo}/tar.gz/${encodeURIComponent(source.ref ?? 'HEAD')}`
 }
 
-export function assertAllowedSourceUrl(raw: string, allowedHosts: Array<string>) {
+export function assertAllowedSourceUrl(raw: string, allowedHosts: Array<string>, privateHosts: Array<string> = []) {
 	const url = new URL(raw)
 	if (url.protocol !== 'http:' && url.protocol !== 'https:') {
 		throw new KodyError('package_source_refused', `Refusing non-http(s) source ${url.protocol}`, { status: 403 })
@@ -316,12 +315,12 @@ export function assertAllowedSourceUrl(raw: string, allowedHosts: Array<string>)
 		throw new KodyError('package_source_refused', 'Sources may not embed credentials.', { status: 403 })
 	}
 	const host = url.hostname.toLowerCase()
-	// Private/LAN hosts (a Gitea on the NAS, say) need an exact allowlist entry
-	// from the operator; `*` and `*.suffix` patterns never reach them.
-	if (isPrivateHostname(host) && !allowedHosts.includes(host)) {
+	// KODY_PRIVATE_HOSTS wins for any matching host (LAN names, CIDRs, …). Unlisted private/loopback hosts refuse.
+	if (hostMatchesAllowlist(host, privateHosts)) return url
+	if (isPrivateHostname(host)) {
 		throw new KodyError(
 			'package_source_refused',
-			`"${host}" is a loopback/private host; list it exactly in KODY_PACKAGE_SOURCE_HOSTS to allow it.`,
+			`"${host}" is a loopback/private host; list it in ${privateHostsEnvKey} to allow it.`,
 			{ status: 403 },
 		)
 	}
@@ -329,7 +328,7 @@ export function assertAllowedSourceUrl(raw: string, allowedHosts: Array<string>)
 	if (!allowed) {
 		throw new KodyError(
 			'package_source_refused',
-			`"${host}" is not in KODY_PACKAGE_SOURCE_HOSTS (${allowedHosts.join(', ')}).`,
+			`"${host}" is not an allowed package source host (${allowedHosts.join(', ')}).`,
 			{ status: 403 },
 		)
 	}
@@ -367,8 +366,9 @@ export async function fetchAllowed(
 	raw: string,
 	allowedHosts: Array<string>,
 	fetchImpl: FetchLike = (input, init) => fetch(input, init),
+	privateHosts: Array<string> = [],
 ) {
-	let current = assertAllowedSourceUrl(raw, allowedHosts).toString()
+	let current = assertAllowedSourceUrl(raw, allowedHosts, privateHosts).toString()
 	for (let hop = 0; hop <= packageSourceLimits.maxRedirects; hop += 1) {
 		const response = await fetchImpl(current, {
 			redirect: 'manual',
@@ -382,7 +382,7 @@ export async function fetchAllowed(
 			const location = response.headers.get('location')
 			if (!location)
 				throw new KodyError('package_source_failed', `${current} redirected without a location.`, { status: 502 })
-			current = assertAllowedSourceUrl(new URL(location, current).toString(), allowedHosts).toString()
+			current = assertAllowedSourceUrl(new URL(location, current).toString(), allowedHosts, privateHosts).toString()
 			continue
 		}
 		if (!response.ok) {
@@ -548,8 +548,9 @@ export function packagePreviewFromFetched(fetched: FetchedPackage): PackagePrevi
 
 export async function fetchPackageSource(
 	source: PackageSource,
-	options: { allowedHosts: Array<string>; fetch?: FetchLike | undefined },
+	options: { allowedHosts: Array<string>; privateHosts?: Array<string>; fetch?: FetchLike | undefined },
 ): Promise<FetchedPackage> {
+	const privateHosts = options.privateHosts ?? []
 	if (source.kind === 'kody') {
 		const cloned = await cloneGitSmartHttp(source.gitUrl, {
 			ref: source.ref,
@@ -562,7 +563,7 @@ export async function fetchPackageSource(
 				timeoutMs: packageSourceLimits.timeoutMs,
 				maxRedirects: packageSourceLimits.maxRedirects,
 			},
-			assertAllowed: (raw) => assertAllowedSourceUrl(raw, options.allowedHosts).toString(),
+			assertAllowed: (raw) => assertAllowedSourceUrl(raw, options.allowedHosts, privateHosts).toString(),
 		})
 		return {
 			files: cloned.files,
@@ -584,7 +585,7 @@ export async function fetchPackageSource(
 	}
 
 	const url = downloadSource.kind === 'github' ? githubTarballUrl(downloadSource) : downloadSource.url
-	const downloaded = await fetchAllowed(url, options.allowedHosts, options.fetch)
+	const downloaded = await fetchAllowed(url, options.allowedHosts, options.fetch, privateHosts)
 	let result: { files: PackageFiles; warnings: Array<string> }
 	if (isGzip(downloaded.bytes)) {
 		const archive = await gunzip(downloaded.bytes, packageSourceLimits.maxArchiveBytes)
@@ -622,7 +623,7 @@ export async function fetchPackageSource(
 
 export async function previewPackageSource(
 	source: PackageSource,
-	options: { allowedHosts: Array<string>; fetch?: FetchLike | undefined },
+	options: { allowedHosts: Array<string>; privateHosts?: Array<string>; fetch?: FetchLike | undefined },
 ): Promise<PackagePreview> {
 	const fetched = await fetchPackageSource(source, options)
 	return packagePreviewFromFetched(fetched)

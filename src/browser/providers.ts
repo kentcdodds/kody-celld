@@ -45,7 +45,7 @@ export const pdfFormats = ['A4', 'Letter', 'Legal'] as const
  * The rendering browser fetches the target from *its* network position, which
  * for a self-hosted sidecar is inside the compose network next to Kody, MinIO
  * and Qdrant. Refuse loopback / link-local / RFC1918 literals and `localhost`
- * names unless the operator listed the host in KODY_BROWSER_ALLOW_PRIVATE_HOSTS.
+ * names unless the operator listed the host in KODY_PRIVATE_HOSTS.
  * Names that merely *resolve* to private space cannot be checked here — see
  * docs/browser.md for the network-isolation recommendation.
  */
@@ -69,7 +69,7 @@ export function assertRenderableUrl(raw: unknown, config: NonNullable<BrowserCon
 	if (isPrivateHostname(host)) {
 		throw new KodyError(
 			'browser_private_host',
-			`"${host}" is a loopback/private host. Add it to KODY_BROWSER_ALLOW_PRIVATE_HOSTS on the server to render it.`,
+			`"${host}" is a loopback/private host. Add it to KODY_PRIVATE_HOSTS on the server to render it.`,
 			{ status: 403 },
 		)
 	}

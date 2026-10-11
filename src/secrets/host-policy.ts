@@ -1,3 +1,4 @@
+import { hostMatchesAllowlist } from '../lib/host-allowlist.ts'
 import { KodyError } from '../lib/errors.ts'
 
 const hostnameRegex = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/
@@ -63,20 +64,11 @@ export function isHostApproved(host: string, approvedHosts: Iterable<string>) {
 	return false
 }
 
-/** Parses `KODY_ALLOW_INSECURE_SECRET_HOSTS` (comma-separated hosts or the `loopback` keyword). */
-export function parseInsecureHostAllowance(value: string | undefined) {
-	return (value ?? '')
-		.split(',')
-		.map((h) => h.trim().toLowerCase())
-		.filter(Boolean)
-}
-
-/** Credentials only travel over https unless the operator allowed this host in plain http (dev/loopback). */
-export function isCredentialTransportAllowed(url: URL, insecureAllowance: ReadonlyArray<string>) {
+/** Credentials only travel over https unless the operator listed the host on `KODY_PRIVATE_HOSTS`. */
+export function isCredentialTransportAllowed(url: URL, privateHosts: ReadonlyArray<string>) {
 	if (url.protocol === 'https:') return true
 	if (url.protocol !== 'http:') return false
-	const host = requestHost(url)
-	return insecureAllowance.includes(host) || (insecureAllowance.includes('loopback') && isLoopbackHost(host))
+	return hostMatchesAllowlist(requestHost(url), privateHosts)
 }
 
 export function isLoopbackHost(host: string) {

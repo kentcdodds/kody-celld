@@ -16,7 +16,7 @@ import { defineCapability, defineDomain, type CapabilityContext } from './define
 export const mcpServersDomain = defineDomain({
 	name: 'mcpServers',
 	description:
-		'Remote MCP servers whose tools you call from execute and packages as kody.mcp["server-name"].tool_name(input). Kody is the MCP client: Streamable HTTP, optional static bearer token (stored encrypted, never returned). Private/LAN hosts need the operator allowlist KODY_MCP_ALLOW_PRIVATE_HOSTS (hosts, *.suffix, CIDR).',
+		'Remote MCP servers whose tools you call from execute and packages as kody.mcp["server-name"].tool_name(input). Kody is the MCP client: Streamable HTTP, optional static bearer token (stored encrypted, never returned). Private/LAN hosts need the operator allowlist KODY_PRIVATE_HOSTS (hosts, *.suffix, CIDR).',
 	guide: `1. mcpServerAdd({ name: 'home', url: 'https://…/mcp', bearerToken? }) connects and lists the server's tools.
 2. search({ domain: 'mcp:home' }) lists its tools with input schemas.
 3. Call one: const r = await kody.mcp['home'].tool_name({ ... }) → { content, structuredContent?, isError }.
@@ -86,7 +86,7 @@ export const mcpServerAdd = defineCapability<{
 			url: {
 				type: 'string',
 				description:
-					'https URL of the MCP endpoint (often ending in /mcp). http and private hosts need KODY_MCP_ALLOW_PRIVATE_HOSTS.',
+					'https URL of the MCP endpoint (often ending in /mcp). http and private hosts need KODY_PRIVATE_HOSTS.',
 			},
 			bearerToken: { type: 'string', description: 'Optional static token or full Authorization value.' },
 			enabled: { type: 'boolean' },

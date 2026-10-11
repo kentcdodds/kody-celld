@@ -11,7 +11,7 @@
 #
 # The browser fetches pages from *inside* the compose network, so Kody refuses
 # loopback/private hostnames unless you list them in
-# KODY_BROWSER_ALLOW_PRIVATE_HOSTS. Keep it that way unless you understand what
+# KODY_PRIVATE_HOSTS. Keep it that way unless you understand what
 # else the browser can reach. See docs/browser.md.
 services:
   browserless:

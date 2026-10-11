@@ -174,20 +174,15 @@ describe('parsePackageSource', () => {
 })
 
 describe('source host policy', () => {
-	it('defaults to GitHub hosts and validates the env list', () => {
+	it('defaults to GitHub hosts and refuses the removed package-source env var', () => {
 		assert.deepEqual(packageSourceHostsFromEnv({}), defaultPackageSourceHosts)
-		assert.deepEqual(packageSourceHostsFromEnv({ KODY_PACKAGE_SOURCE_HOSTS: ' Example.com, *.pkgs.test ,*' }), [
-			'example.com',
-			'*.pkgs.test',
-			'*',
-		])
 		assert.throws(
-			() => packageSourceHostsFromEnv({ KODY_PACKAGE_SOURCE_HOSTS: 'http://x' }),
-			/KODY_PACKAGE_SOURCE_HOSTS/,
+			() => packageSourceHostsFromEnv({ KODY_PACKAGE_SOURCE_HOSTS: 'example.com' }),
+			/KODY_PACKAGE_SOURCE_HOSTS.*KODY_PRIVATE_HOSTS.*issues\/62/,
 		)
 	})
 
-	it('refuses private hosts even when the allowlist is *', () => {
+	it('refuses private hosts even when the public allowlist is *', () => {
 		for (const url of [
 			'http://localhost/pkg.tgz',
 			'http://127.0.0.1/pkg.tgz',
@@ -201,21 +196,23 @@ describe('source host policy', () => {
 		}
 	})
 
-	it('lets the operator allowlist a LAN host by exact name only', () => {
-		assert.ok(assertAllowedSourceUrl('http://gitea.local/pkg.tgz', ['gitea.local']))
-		assert.ok(assertAllowedSourceUrl('http://192.168.1.20:3000/pkg.tgz', ['192.168.1.20']))
+	it('lets the operator allowlist a LAN host via KODY_PRIVATE_HOSTS (exact, suffix, CIDR)', () => {
+		assert.ok(assertAllowedSourceUrl('http://gitea.local/pkg.tgz', ['*'], ['gitea.local']))
+		assert.ok(assertAllowedSourceUrl('http://192.168.1.20:3000/pkg.tgz', ['*'], ['192.168.1.20']))
+		assert.ok(assertAllowedSourceUrl('http://nas.lab.home/pkg.tgz', ['*'], ['*.lab.home']))
+		assert.ok(assertAllowedSourceUrl('http://172.30.1.5/pkg.tgz', ['*'], ['172.30.0.0/16']))
 		assert.throws(() => assertAllowedSourceUrl('http://gitea.local/pkg.tgz', ['*.local']), /private host/)
 		assert.throws(() => assertAllowedSourceUrl('http://gitea.local/pkg.tgz', ['*']), /private host/)
 	})
 
-	it('enforces the allowlist with exact and wildcard entries', () => {
+	it('enforces the public allowlist with exact and wildcard entries', () => {
 		assert.throws(
 			() => assertAllowedSourceUrl('https://evil.example/x.tgz', defaultPackageSourceHosts),
-			/not in KODY_PACKAGE_SOURCE_HOSTS/,
+			/not an allowed package source host/,
 		)
 		assert.ok(assertAllowedSourceUrl('https://codeload.github.com/a/b/tar.gz/HEAD', defaultPackageSourceHosts))
 		assert.ok(assertAllowedSourceUrl('https://cdn.pkgs.test/x.tgz', ['*.pkgs.test']))
-		assert.throws(() => assertAllowedSourceUrl('https://pkgs.test/x.tgz', ['*.pkgs.test']), /not in/)
+		assert.throws(() => assertAllowedSourceUrl('https://pkgs.test/x.tgz', ['*.pkgs.test']), /not an allowed/)
 		assert.throws(() => assertAllowedSourceUrl('https://u:p@github.com/x', ['*']), /credentials/)
 	})
 

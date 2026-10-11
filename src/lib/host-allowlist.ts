@@ -1,8 +1,8 @@
 /**
- * Operator allowlists for private/LAN hosts (KODY_BROWSER_ALLOW_PRIVATE_HOSTS,
- * KODY_MCP_ALLOW_PRIVATE_HOSTS). An entry is an exact hostname, `*.suffix`
- * (subdomains only), an IPv4/IPv6 literal, or a CIDR range. IP and CIDR entries
- * match IP-literal hosts only: names are never DNS-resolved here.
+ * Operator allowlists for private/LAN hosts (`KODY_PRIVATE_HOSTS`). An entry is
+ * an exact hostname, `*.suffix` (subdomains only), an IPv4/IPv6 literal, or a
+ * CIDR range. IP and CIDR entries match IP-literal hosts only: names are never
+ * DNS-resolved here.
  */
 
 // `_` is allowed in labels: compose service names (`my_service`) are valid Docker DNS names.

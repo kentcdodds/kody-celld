@@ -27,7 +27,7 @@ services:
       KODY_ADMIN_TOKEN: ${KODY_ADMIN_TOKEN:-}
       KODY_MASTER_KEY: ${KODY_MASTER_KEY:-}
       KODY_MASTER_KEY_PREVIOUS: ${KODY_MASTER_KEY_PREVIOUS:-}
-      KODY_ALLOW_INSECURE_SECRET_HOSTS: ${KODY_ALLOW_INSECURE_SECRET_HOSTS:-}
+      KODY_PRIVATE_HOSTS: ${KODY_PRIVATE_HOSTS:-}
       # Limits and quota defaults (docs/operations.md); empty = built-in default.
       KODY_EXECUTE_TIMEOUT_MS: ${KODY_EXECUTE_TIMEOUT_MS:-}
       KODY_RUN_RETENTION_COUNT: ${KODY_RUN_RETENTION_COUNT:-}
@@ -71,7 +71,6 @@ services:
       KODY_QUOTA_BLOB_BYTES: ${KODY_QUOTA_BLOB_BYTES:-}
       KODY_MCP_CONTENT_LIMIT_BYTES: ${KODY_MCP_CONTENT_LIMIT_BYTES:-}
       # External MCP servers (docs/mcp-servers.md); empty = public https only, Cloudflare DoH, 30 s calls, no count limit.
-      KODY_MCP_ALLOW_PRIVATE_HOSTS: ${KODY_MCP_ALLOW_PRIVATE_HOSTS:-}
       KODY_MCP_CALL_TIMEOUT_MS: ${KODY_MCP_CALL_TIMEOUT_MS:-}
       KODY_DNS_RESOLVER_URL: ${KODY_DNS_RESOLVER_URL:-}
       KODY_QUOTA_MCP_SERVERS: ${KODY_QUOTA_MCP_SERVERS:-}
@@ -81,13 +80,11 @@ services:
       KODY_BROWSER_TOKEN: ${KODY_BROWSER_TOKEN:-}
       KODY_BROWSER_CF_ACCOUNT_ID: ${KODY_BROWSER_CF_ACCOUNT_ID:-}
       KODY_BROWSER_TIMEOUT_MS: ${KODY_BROWSER_TIMEOUT_MS:-}
-      KODY_BROWSER_ALLOW_PRIVATE_HOSTS: ${KODY_BROWSER_ALLOW_PRIVATE_HOSTS:-}
       # npm imports + package installs (docs/packages.md); empty = esm.sh, durable cache on. compose.esm.yaml adds a self-hosted CDN.
       KODY_NPM_IMPORTS: ${KODY_NPM_IMPORTS:-}
       KODY_ESM_CDN_URL: ${KODY_ESM_CDN_URL:-}
       KODY_NPM_CACHE_MAX_MB: ${KODY_NPM_CACHE_MAX_MB:-}
       KODY_NPM_CACHE_TTL_DAYS: ${KODY_NPM_CACHE_TTL_DAYS:-}
-      KODY_PACKAGE_SOURCE_HOSTS: ${KODY_PACKAGE_SOURCE_HOSTS:-}
       # Webhooks + email (docs/webhooks.md, docs/email.md); empty = email off. compose.mail.yaml adds the SMTP bridge.
       KODY_WEBHOOK_MAX_BODY_BYTES: ${KODY_WEBHOOK_MAX_BODY_BYTES:-}
       KODY_EMAIL_DOMAIN: ${KODY_EMAIL_DOMAIN:-}
