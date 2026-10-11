@@ -17,14 +17,20 @@ away; open only the page the task needs.
 - [Shared-from-kody sync lock](./shared-from-kody.md)
 - [Web UI conventions](../web-ui.md)
 
+## Contributor bar
+
+- [CONTRIBUTING.md](../../CONTRIBUTING.md): need, hosted cite, size cap,
+  no second lanes, no test-only prod code
+- [Pull request template](../../.github/pull_request_template.md)
+- [Steward review checklist](./review-checklist.md)
+
+Follow the principles, especially
+[Match hosted first](../principles/match-hosted-first.md) and
+[Earn every dependency](../principles/earn-every-dependency.md).
+
 ## Inbound contributions
 
 - [Inbound contributions](./inbound-contributions.md)
 - [Individual CLA](../legal/individual-cla.md)
 - [Entity CLA](../legal/entity-cla.md)
 - [0018: Inbound CLA](./decisions/0018-inbound-cla.md)
-
-The contributor bar (PR template fields, size cap, steward checklist) lands in
-a follow-up. Until then, follow the principles, especially
-[Match hosted first](../principles/match-hosted-first.md) and
-[Earn every dependency](../principles/earn-every-dependency.md).
