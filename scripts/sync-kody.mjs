@@ -143,7 +143,7 @@ async function update(manifest) {
 				adaptedReports.push(`adapted SAME (unexpected) ${entry.path}`)
 			} else {
 				adaptedReports.push(
-					`adapted DIFF ${entry.path} (local ${local.length}b, upstream ${upstream.length}b) — ${entry.reason}`,
+					`adapted DIFF ${entry.path} (local ${local.length}b, upstream ${upstream.length}b): ${entry.reason}`,
 				)
 			}
 		} catch (error) {
@@ -157,7 +157,8 @@ async function update(manifest) {
 		updatedAt: new Date().toISOString(),
 		files: updatedFiles,
 	}
-	await writeFile(manifestPath, `${JSON.stringify(next, null, '\t')}\n`)
+	// Match Prettier's JSON override (2 spaces, trailing newline) so sync leaves format:check green.
+	await writeFile(manifestPath, `${JSON.stringify(next, null, 2)}\n`)
 
 	console.log(`\nCopied ${copied.length}, unchanged ${unchanged.length}:`)
 	for (const p of copied) console.log(`  copy ${p}`)
