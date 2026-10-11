@@ -64,7 +64,11 @@ kentcdodds/kody#3203).
    OAuth server in `status: 'error'` that has no grant yet.
 2. The user opens `authUrl` while signed in. The consent page names the server,
    where Continue opens (the authorization endpoint host) and how Kody will
-   identify itself; **Continue** sends the browser to the provider.
+   identify itself; **Continue** sends the browser to the provider. Kody uses
+   the server's `401` challenge (its `resource_metadata` and `scope`), saved at
+   add time, to find the authorization server and to request that scope, so
+   servers that advertise their resource metadata only in the challenge also
+   work.
 3. The provider redirects back to the callback
    (`{origin}/account/mcp-servers/oauth/callback`). Kody exchanges the code
    (PKCE S256), seals the tokens with your keyring, lists the tools, and lands
@@ -333,22 +337,22 @@ timeout. See [operations.md](./operations.md) for every variable.
 
 ## Errors
 
-| Code                        | HTTP | When                                                                                                                                                                                                          |
-| --------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mcp_server_not_found`      | 404  | No server with that name.                                                                                                                                                                                     |
-| `mcp_server_exists`         | 409  | `mcpServerAdd` on a taken name without `replace: true`.                                                                                                                                                       |
-| `mcp_server_disabled`       | 409  | The server is turned off.                                                                                                                                                                                     |
-| `mcp_server_locked`         | 403  | The server is locked and the run's entry package is not granted, or `mcpServerAdd({ replace: true })` asked for a looser `usage`.                                                                             |
-| `mcp_tool_not_found`        | 404  | The server has no tool with that name (try `mcpServerRefresh`).                                                                                                                                               |
-| `mcp_host_not_allowed`      | 403  | A private host or plain `http:` URL not in `KODY_MCP_ALLOW_PRIVATE_HOSTS`, a host that resolves to a private address not allowed there, or a host that could not be resolved through `KODY_DNS_RESOLVER_URL`. |
-| `mcp_call_failed`           | 502  | Transport or protocol failure, timeout, or an HTTP error from the server.                                                                                                                                     |
-| `mcp_result_too_large`      | 413  | The result is over `KODY_MCP_CONTENT_LIMIT_BYTES`.                                                                                                                                                            |
-| `mcp_server_unauthorized`   | 401  | An OAuth server has no grant yet, or the provider rejected it; open the server's `authUrl`.                                                                                                                   |
-| `mcp_oauth_state_invalid`   | 400  | The OAuth callback's `state` is unknown, expired, another user's, or the server's origin changed.                                                                                                             |
-| `mcp_oauth_client_required` | 409  | No client mode applies: no pre-registered client, no client metadata document support, no `registration_endpoint`.                                                                                            |
-| `mcp_oauth_failed`          | 502  | The authorization server misbehaved: no authorization server advertised, a bad authorize URL, or a failed code exchange.                                                                                      |
-| `quota_exceeded`            | 429  | `mcpServerAdd` of a new name would exceed `KODY_QUOTA_MCP_SERVERS`.                                                                                                                                           |
-| `config_error`              | 500  | `KODY_MCP_ALLOW_PRIVATE_HOSTS`, `KODY_MCP_CALL_TIMEOUT_MS` or `KODY_DNS_RESOLVER_URL` is invalid.                                                                                                             |
+| Code                        | HTTP | When                                                                                                                                                                                                                                 |
+| --------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `mcp_server_not_found`      | 404  | No server with that name.                                                                                                                                                                                                            |
+| `mcp_server_exists`         | 409  | `mcpServerAdd` on a taken name without `replace: true`.                                                                                                                                                                              |
+| `mcp_server_disabled`       | 409  | The server is turned off.                                                                                                                                                                                                            |
+| `mcp_server_locked`         | 403  | The server is locked and the run's entry package is not granted, or `mcpServerAdd({ replace: true })` asked for a looser `usage`.                                                                                                    |
+| `mcp_tool_not_found`        | 404  | The server has no tool with that name (try `mcpServerRefresh`).                                                                                                                                                                      |
+| `mcp_host_not_allowed`      | 403  | A private host or plain `http:` URL not in `KODY_MCP_ALLOW_PRIVATE_HOSTS`, a host that resolves to a private address not allowed there, or a host that could not be resolved through `KODY_DNS_RESOLVER_URL`.                        |
+| `mcp_call_failed`           | 502  | Transport or protocol failure, timeout, or an HTTP error from the server.                                                                                                                                                            |
+| `mcp_result_too_large`      | 413  | The result is over `KODY_MCP_CONTENT_LIMIT_BYTES`.                                                                                                                                                                                   |
+| `mcp_server_unauthorized`   | 401  | An OAuth server has no grant yet, or the provider rejected it; open the server's `authUrl`.                                                                                                                                          |
+| `mcp_oauth_state_invalid`   | 400  | The OAuth callback's `state` is unknown, expired, another user's, or the server's origin changed.                                                                                                                                    |
+| `mcp_oauth_client_required` | 409  | No client mode applies: no pre-registered client, no client metadata document support, no `registration_endpoint`.                                                                                                                   |
+| `mcp_oauth_failed`          | 502  | The authorization server misbehaved: no authorization server advertised, an `issuer` that doesn't match, an authorization or token endpoint on a different origin than the `issuer`, a bad authorize URL, or a failed code exchange. |
+| `quota_exceeded`            | 429  | `mcpServerAdd` of a new name would exceed `KODY_QUOTA_MCP_SERVERS`.                                                                                                                                                                  |
+| `config_error`              | 500  | `KODY_MCP_ALLOW_PRIVATE_HOSTS`, `KODY_MCP_CALL_TIMEOUT_MS` or `KODY_DNS_RESOLVER_URL` is invalid.                                                                                                                                    |
 
 Inside `execute` the code is the prefix of the thrown error's message
 (`mcp_server_locked: …`).

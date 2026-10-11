@@ -35,6 +35,11 @@ export type TestOAuthOptions = {
 	issueRefreshToken?: boolean
 	/** Override authorization_servers[0] in the resource metadata (to test the host policy). */
 	authorizationServer?: string
+	/**
+	 * Resource metadata only at the 401 challenge's `resource_metadata` URL (/custom/prm), every well-known path 404,
+	 * and an issuer with a path (`<origin>/tenant`), so discovery without the challenge finds nothing (#49).
+	 */
+	challengeOnly?: boolean
 }
 
 function b64url(buf: Buffer) {
@@ -77,6 +82,27 @@ function createTestAuthorizationServer(origin: string, options: TestOAuthOptions
 		return { id: form.get('client_id') ?? '', secret: form.get('client_secret') ?? undefined }
 	}
 	async function handle(request: Request, url: URL): Promise<Response | null> {
+		if (options.challengeOnly) {
+			const issuer = `${origin}/tenant`
+			if (url.pathname.startsWith('/.well-known/oauth-protected-resource')) return json({ error: 'not_found' }, 404)
+			if (url.pathname === '/.well-known/oauth-authorization-server') return json({ error: 'not_found' }, 404)
+			if (url.pathname.startsWith('/.well-known/openid-configuration')) return json({ error: 'not_found' }, 404)
+			if (url.pathname === '/custom/prm') {
+				return json({ resource: `${origin}/mcp`, authorization_servers: [issuer], scopes_supported: ['mcp'] })
+			}
+			if (url.pathname === '/.well-known/oauth-authorization-server/tenant') {
+				return json({
+					issuer,
+					authorization_endpoint: `${origin}/authorize`,
+					token_endpoint: `${origin}/token`,
+					registration_endpoint: `${origin}/register`,
+					response_types_supported: ['code'],
+					grant_types_supported: ['authorization_code', 'refresh_token'],
+					code_challenge_methods_supported: ['S256'],
+					token_endpoint_auth_methods_supported: ['none'],
+				})
+			}
+		}
 		if (url.pathname.startsWith('/.well-known/oauth-protected-resource')) {
 			return json({
 				resource: `${origin}/mcp`,
@@ -234,8 +260,9 @@ export function startTestMcpServer(
 				status: 401,
 				headers: {
 					'content-type': 'application/json',
-					'www-authenticate':
-						'Bearer resource_metadata="http://172.30.1.5/.well-known/oauth-protected-resource/mcp", scope="mcp"',
+					'www-authenticate': options.oauth?.challengeOnly
+						? 'Bearer resource_metadata="http://172.30.1.5/custom/prm", scope="mcp tools:read"'
+						: 'Bearer resource_metadata="http://172.30.1.5/.well-known/oauth-protected-resource/mcp", scope="mcp"',
 				},
 			})
 		}

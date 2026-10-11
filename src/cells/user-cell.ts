@@ -1254,7 +1254,11 @@ export class UserCell extends DurableObject<Env> {
 
 	// The OAuth RPCs below are mirrored by the fake cell in src/mcp-client/service.test.ts; keep both in sync.
 	async mcpServerOAuthLoad(name: string) {
-		return { client: await this.mcpOAuth.client(name), discovery: this.mcpOAuth.discovery(name) }
+		return {
+			client: await this.mcpOAuth.client(name),
+			discovery: this.mcpOAuth.discovery(name),
+			challenge: this.mcpOAuth.challenge(name),
+		}
 	}
 
 	async mcpServerOAuthBegin(input: {

@@ -44,7 +44,9 @@ export type McpServerCell = {
 		name: string,
 		options?: { forceRefresh?: boolean; staleAccessToken?: string },
 	): Promise<string | null>
-	mcpServerOAuthLoad(name: string): Promise<{ client: McpOAuthClient | null; discovery: OAuthDiscoveryState | null }>
+	mcpServerOAuthLoad(
+		name: string,
+	): Promise<{ client: McpOAuthClient | null; discovery: OAuthDiscoveryState | null; challenge: string | null }>
 	mcpServerOAuthBegin(input: {
 		name: string
 		state: string
@@ -135,9 +137,12 @@ async function oauthOutcome(
 		clientMetadataUrl: mcpOAuthUrls(deps.publicUrl).clientMetadataUrl,
 	})
 	if (!mode)
-		return { auth: { status: 'error', error: { phase: 'authorize', message: needsClientMessage, at: nowIso() } } }
+		return {
+			auth: { status: 'error', error: { phase: 'authorize', message: needsClientMessage, at: nowIso() }, challenge },
+		}
 	return {
 		auth: {
+			challenge,
 			status: 'authenticating',
 			error: {
 				phase: 'authorize',
@@ -396,7 +401,8 @@ export type McpOAuthDescription = {
 
 export async function describeMcpOAuth(deps: McpDeps, name: string): Promise<McpOAuthDescription> {
 	const record = await requireOAuthServer(deps, name, { oauthOnly: true })
-	const discovery = await probeMcpOAuth(record.url, oauthFetch(deps))
+	const stored = await deps.cell.mcpServerOAuthLoad(record.name)
+	const discovery = await probeMcpOAuth(record.url, oauthFetch(deps), stored.challenge)
 	if (!discovery) {
 		return {
 			name: record.name,
@@ -409,7 +415,6 @@ export async function describeMcpOAuth(deps: McpDeps, name: string): Promise<Mcp
 			formActionOrigin: null,
 		}
 	}
-	const stored = await deps.cell.mcpServerOAuthLoad(record.name)
 	const clientMode = pickClientMode(discovery, {
 		hasPreregistered: stored.client?.mode === 'preregistered',
 		clientMetadataUrl: mcpOAuthUrls(deps.publicUrl).clientMetadataUrl,
@@ -420,7 +425,7 @@ export async function describeMcpOAuth(deps: McpDeps, name: string): Promise<Mcp
 		// Hosted shows where Continue sends the browser (authorization_endpoint), not only the issuer host.
 		authorizationServerHost: mcpAuthorizationEndpointHost(discovery),
 		clientMode,
-		scopes: mcpOAuthScopes(discovery),
+		scopes: mcpOAuthScopes(discovery, stored.challenge),
 		canContinue: clientMode !== null,
 		message: clientMode ? null : needsClientMessage,
 		formActionOrigin: mcpBrowserFormActionOrigin(discovery, deps.config),
@@ -433,18 +438,20 @@ export async function startMcpOAuth(
 ): Promise<{ authorizationUrl: string; clientMode: McpOAuthClientMode }> {
 	const record = await requireOAuthServer(deps, name, { oauthOnly: true })
 	const fetchFn = oauthFetch(deps)
-	const discovery = await probeMcpOAuth(record.url, fetchFn)
+	const stored = await deps.cell.mcpServerOAuthLoad(record.name)
+	const discovery = await probeMcpOAuth(record.url, fetchFn, stored.challenge)
 	if (!discovery) {
 		throw new KodyError('mcp_oauth_failed', 'This server advertises no OAuth authorization server.', { status: 502 })
 	}
 	const urls = mcpOAuthUrls(deps.publicUrl)
-	const stored = await deps.cell.mcpServerOAuthLoad(record.name)
 	const clientMode = pickClientMode(discovery, {
 		hasPreregistered: stored.client?.mode === 'preregistered',
 		clientMetadataUrl: urls.clientMetadataUrl,
 	})
 	if (!clientMode) throw new KodyError('mcp_oauth_client_required', needsClientMessage, { status: 409 })
+	const challengeScope = stored.challenge ? mcpOAuthScopes(discovery, stored.challenge).join(' ') : ''
 	const begun = await beginMcpAuthorization({
+		...(challengeScope ? { scope: challengeScope } : {}),
 		serverUrl: record.url,
 		urls,
 		client: clientMode === 'metadata' ? null : (stored.client?.information ?? null),

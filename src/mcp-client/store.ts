@@ -48,7 +48,7 @@ export type McpDiscoveryOutcome =
 	| { serverInfo: McpServerInfo; tools: Array<McpTool> }
 	| { error: McpLastError }
 	/** `origin`: write only while the server still has this origin (a late write after a replace is dropped). */
-	| { auth: { status: 'authenticating' | 'error'; error: McpLastError; origin?: string } }
+	| { auth: { status: 'authenticating' | 'error'; error: McpLastError; origin?: string; challenge?: string | null } }
 export type PublicMcpServer = Omit<McpServerRecord, 'tools'> & {
 	toolCount: number
 	tools: Array<{ name: string; title?: string; description?: string }>
@@ -248,6 +248,8 @@ export class McpServerStore {
 				now,
 				name,
 			)
+			// The 401 challenge (resource_metadata, scope) for consent and start (#49).
+			if (outcome.auth.challenge !== undefined) this.host.oauth.saveChallenge(name, outcome.auth.challenge)
 		} else if ('error' in outcome) {
 			this.host.sql.exec(
 				`UPDATE mcp_servers SET status = 'error', last_error_json = ?, updated_at = ? WHERE name = ?`,

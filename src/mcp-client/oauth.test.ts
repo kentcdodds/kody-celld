@@ -214,3 +214,52 @@ describe('mcpBrowserFormActionOrigin', () => {
 		assert.equal(mcpBrowserFormActionOrigin(discovery('javascript:alert(1)'), config), null)
 	})
 })
+
+describe('endpoint origins (#53)', () => {
+	for (const [field, endpoint] of [
+		['authorization_endpoint', 'http://172.30.1.6/authorize'],
+		['token_endpoint', 'http://172.30.1.6/token'],
+	] as const) {
+		it(`refuses metadata whose ${field} is on a different origin than the issuer`, async () => {
+			const server = startTestMcpServer({ oauth: { mode: 'dynamic' } })
+			server.setRespond((u) =>
+				u.pathname === '/.well-known/oauth-authorization-server'
+					? Response.json({
+							issuer: 'http://172.30.1.5',
+							authorization_endpoint: 'http://172.30.1.5/authorize',
+							token_endpoint: 'http://172.30.1.5/token',
+							registration_endpoint: 'http://172.30.1.5/register',
+							response_types_supported: ['code'],
+							code_challenge_methods_supported: ['S256'],
+							[field]: endpoint,
+						})
+					: null,
+			)
+			await assert.rejects(
+				probeMcpOAuth(serverUrl, oauthPolicyFetch(config, server.fetch)),
+				new RegExp(`mcp_oauth_failed[\\s\\S]*${field} .*different origin`),
+			)
+		})
+	}
+
+	it('refresh refuses cached discovery whose token_endpoint is off the issuer origin', async () => {
+		await assert.rejects(
+			refreshMcpTokens({
+				client: { client_id: 'c' },
+				refreshToken: 'rt',
+				discovery: {
+					authorizationServerUrl: 'http://172.30.1.5',
+					authorizationServerMetadata: {
+						issuer: 'http://172.30.1.5',
+						authorization_endpoint: 'http://172.30.1.5/authorize',
+						token_endpoint: 'http://172.30.1.6/token',
+						response_types_supported: ['code'],
+						code_challenge_methods_supported: ['S256'],
+					},
+				} as never,
+				fetchFn: fetch,
+			}),
+			/mcp_oauth_failed[\s\S]*token_endpoint .*different origin/,
+		)
+	})
+})

@@ -69,6 +69,33 @@ export function assertAuthorizationServerIssuer(discovery: OAuthDiscoveryState) 
 	}
 }
 
+/**
+ * Mix-up defence (#53): the authorization and token endpoints must be on the issuer's origin. Every public MCP
+ * authorization server surveyed (Linear, Notion, Atlassian, Sentry, Asana, Canva, Zapier, PayPal, Supabase, GitHub)
+ * and Home Assistant keep both there.
+ */
+export function assertEndpointsOnIssuerOrigin(discovery: OAuthDiscoveryState) {
+	const metadata = discovery.authorizationServerMetadata as Record<string, unknown> | undefined
+	const issuerOrigin = new URL(String(metadata?.issuer)).origin
+	for (const field of ['authorization_endpoint', 'token_endpoint'] as const) {
+		const value = metadata?.[field]
+		if (typeof value !== 'string' || !value) continue
+		let origin: string | null = null
+		try {
+			origin = new URL(value).origin
+		} catch {
+			/* refused below */
+		}
+		if (origin !== issuerOrigin) {
+			throw new KodyError(
+				'mcp_oauth_failed',
+				`Authorization server ${field} (${origin ?? value.slice(0, 200)}) is on a different origin than its issuer (${issuerOrigin}).`,
+				{ status: 502 },
+			)
+		}
+	}
+}
+
 /** The authorization_endpoint URL from discovery metadata (same field Continue redirects to). */
 function mcpAuthorizationEndpointUrl(discovery: OAuthDiscoveryState): URL | null {
 	const endpoint = (discovery.authorizationServerMetadata as { authorization_endpoint?: unknown } | undefined)
@@ -107,6 +134,7 @@ export async function probeMcpOAuth(
 		...(params.resourceMetadataUrl ? { resourceMetadataUrl: params.resourceMetadataUrl.href } : {}),
 	}
 	assertAuthorizationServerIssuer(discovery)
+	assertEndpointsOnIssuerOrigin(discovery)
 	return discovery
 }
 
@@ -227,12 +255,18 @@ export async function beginMcpAuthorization(input: {
 	discovery: OAuthDiscoveryState | null
 	fetchFn: typeof fetch
 	state?: string
+	/** Scope from the 401 challenge (#49); omitted, the SDK picks from resource metadata. */
+	scope?: string
 }) {
 	const state = input.state ?? randomState()
 	const provider = new McpOAuthProvider({ urls: input.urls, client: input.client, discovery: input.discovery, state })
 	let result
 	try {
-		result = await auth(provider, { serverUrl: input.serverUrl, fetchFn: input.fetchFn })
+		result = await auth(provider, {
+			serverUrl: input.serverUrl,
+			fetchFn: input.fetchFn,
+			...(input.scope ? { scope: input.scope } : {}),
+		})
 	} catch (error) {
 		throw failed(error, 'authorization start')
 	}
@@ -286,6 +320,8 @@ export async function refreshMcpTokens(input: {
 	fetchFn: typeof fetch
 }): Promise<OAuthTokens> {
 	if (!input.discovery) throw new Error('No cached OAuth discovery for this server; authorize again.')
+	// Re-check #53 on the cached discovery so a pre-check row (or a tampered cache) cannot bypass it.
+	assertEndpointsOnIssuerOrigin(input.discovery)
 	const resource = (input.discovery.resourceMetadata as { resource?: string } | undefined)?.resource
 	return refreshAuthorization(input.discovery.authorizationServerUrl, {
 		metadata: input.discovery.authorizationServerMetadata,

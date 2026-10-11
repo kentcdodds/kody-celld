@@ -64,6 +64,7 @@ async function setup(serverOptions: Parameters<typeof startTestMcpServer>[0] = {
 		mcpServerOAuthLoad: async (name: string) => ({
 			client: await oauth.client(name),
 			discovery: oauth.discovery(name),
+			challenge: oauth.challenge(name),
 		}),
 		mcpServerOAuthBegin: async (input) => {
 			if (store.get(input.name)?.id !== input.serverId)
@@ -526,7 +527,7 @@ describe('OAuth servers', () => {
 					})
 				: null,
 		)
-		await assert.rejects(startMcpOAuth(deps, 'oa'), /mcp_oauth_failed[\s\S]*Refusing to send the browser/)
+		await assert.rejects(startMcpOAuth(deps, 'oa'), /mcp_oauth_failed[\s\S]*different origin than its issuer/)
 		assert.deepEqual(sql.exec('SELECT state FROM mcp_server_oauth_pending').toArray(), [])
 	})
 
@@ -638,6 +639,20 @@ describe('OAuth servers', () => {
 		assert.equal(finished.ok, false)
 		assert.match(finished.message ?? '', /changed while authorizing/)
 		assert.equal(store.get('oa')!.lastError?.message, before, 'the stale attempt wrote nothing to the server')
+	})
+
+	it('a server whose resource metadata is only in the 401 challenge can be authorized, with the challenge scope (#49)', async () => {
+		const { deps, server, store } = await setup({ oauth: { mode: 'dynamic', challengeOnly: true } })
+		const added = await addMcpServer(deps, { name: 'oa', url })
+		assert.equal(added.status, 'authenticating')
+		const described = await describeMcpOAuth(deps, 'oa')
+		assert.equal(described.canContinue, true, described.message ?? '')
+		assert.deepEqual(described.scopes, ['mcp', 'tools:read'])
+		const { authorizationUrl } = await startMcpOAuth(deps, 'oa')
+		assert.equal(new URL(authorizationUrl).searchParams.get('scope'), 'mcp tools:read')
+		const finished = await authorizeThroughBrowser(deps, server, 'oa')
+		assert.equal(finished.ok, true, finished.message ?? '')
+		assert.equal(store.get('oa')!.status, 'ready')
 	})
 
 	it('remove and re-add at the same URL while the code exchange runs saves nothing (#50)', async () => {

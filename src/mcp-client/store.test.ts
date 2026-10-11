@@ -229,6 +229,55 @@ describe('McpServerStore', () => {
 		assert.notEqual(moved.status, 'authenticating')
 	})
 
+	it('setDiscovery stores, clears, and refuses a challenge behind the bearer and moved-origin guards (#49)', async () => {
+		const { store, oauth } = await makeStore()
+		await store.save({ ...base, name: 'o', authorization: null })
+		const challenge = 'Bearer resource_metadata="http://172.30.1.5/custom/prm", scope="mcp"'
+		store.setDiscovery('o', {
+			auth: {
+				status: 'authenticating',
+				error: { phase: 'authorize', message: 'need auth', at: 'now' },
+				challenge,
+			},
+		})
+		assert.equal(oauth.challenge('o'), challenge)
+		store.setDiscovery('o', {
+			auth: {
+				status: 'authenticating',
+				error: { phase: 'authorize', message: 'need auth', at: 'now' },
+				challenge: null,
+			},
+		})
+		assert.equal(oauth.challenge('o'), null)
+		store.setDiscovery('o', {
+			auth: {
+				status: 'authenticating',
+				error: { phase: 'authorize', message: 'need auth', at: 'now' },
+				challenge,
+			},
+		})
+		await store.save({ ...base, name: 'o', authorization: 'Bearer static', replace: true })
+		assert.equal(oauth.challenge('o'), null, 'a bearer replace clears the oauth row')
+		store.setDiscovery('o', {
+			auth: {
+				status: 'authenticating',
+				error: { phase: 'authorize', message: 'late', at: 'now' },
+				challenge: 'Bearer scope="poison"',
+			},
+		})
+		assert.equal(oauth.challenge('o'), null, 'bearer guard refuses the challenge write')
+		await store.save({ ...base, name: 'm', url: 'https://elsewhere.example/mcp', authorization: null })
+		store.setDiscovery('m', {
+			auth: {
+				status: 'authenticating',
+				error: { phase: 'authorize', message: 'late', at: 'now' },
+				origin: 'http://172.30.1.5',
+				challenge: 'Bearer scope="poison"',
+			},
+		})
+		assert.equal(oauth.challenge('m'), null, 'moved-origin guard refuses the challenge write')
+	})
+
 	it('callAuthorization: a bearer replace during a refresh wins; the bearer is returned and the record stays bearer', async () => {
 		const { store, oauth } = await makeStore()
 		await store.save({ ...base, name: 'o', authorization: null })

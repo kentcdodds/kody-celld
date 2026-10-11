@@ -16,6 +16,7 @@ export const mcpOAuthSchema = `
 		client_issuer TEXT,
 		client_info_json TEXT,
 		discovery_json TEXT,
+		challenge TEXT,
 		access_iv TEXT,
 		access_ciphertext TEXT,
 		access_key_id TEXT,
@@ -56,7 +57,15 @@ export function ensureMcpOAuthColumns(sql: SqlStorage) {
 	for (const column of ['server_id', 'client_id']) {
 		if (!columns.includes(column)) sql.exec(`ALTER TABLE mcp_server_oauth_pending ADD COLUMN ${column} TEXT`)
 	}
+	const oauthColumns = sql
+		.exec<{ name: string }>(`SELECT name FROM pragma_table_info('mcp_server_oauth')`)
+		.toArray()
+		.map((row) => row.name)
+	if (!oauthColumns.includes('challenge')) sql.exec(`ALTER TABLE mcp_server_oauth ADD COLUMN challenge TEXT`)
 }
+
+/** A stored 401 WWW-Authenticate challenge is remote text: one line, capped. */
+export const mcpChallengeMaxLength = 2048
 
 export type McpOAuthClientMode = 'preregistered' | 'metadata' | 'dynamic'
 export type McpOAuthClient = { mode: McpOAuthClientMode; information: OAuthClientInformationMixed }
@@ -126,6 +135,7 @@ type Row = {
 	client_issuer: string | null
 	client_info_json: string | null
 	discovery_json: string | null
+	challenge: string | null
 	access_iv: string | null
 	access_ciphertext: string | null
 	access_key_id: string | null
@@ -406,6 +416,22 @@ export class McpOAuthStore {
 			`UPDATE mcp_server_oauth SET access_iv = NULL, access_ciphertext = NULL, access_key_id = NULL, refresh_iv = NULL,
 			   refresh_ciphertext = NULL, refresh_key_id = NULL, token_issuer = NULL, token_type = NULL, scope = NULL,
 			   expires_at = NULL, updated_at = ? WHERE server_name = ?`,
+			nowIso(),
+			name,
+		)
+	}
+
+	/** The last 401 WWW-Authenticate challenge seen for this server (#49), or null. */
+	challenge(name: string): string | null {
+		return this.row(name)?.challenge ?? null
+	}
+
+	saveChallenge(name: string, challenge: string | null) {
+		const value = challenge ? challenge.replace(/[\r\n]+/g, ' ').slice(0, mcpChallengeMaxLength) : null
+		this.ensureRow(name)
+		this.host.sql.exec(
+			'UPDATE mcp_server_oauth SET challenge = ?, updated_at = ? WHERE server_name = ?',
+			value,
 			nowIso(),
 			name,
 		)
