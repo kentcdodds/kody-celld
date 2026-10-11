@@ -14,6 +14,7 @@ away; open only the page the task needs.
 
 - [Security invariants](./security-invariants.md)
 - [celld compatibility](./celld-compat.md)
+- [Shared-from-kody sync lock](./shared-from-kody.md)
 - [Web UI conventions](../web-ui.md)
 
 ## Inbound contributions

@@ -4,7 +4,7 @@ package-lock.json
 public/build
 # CLA recorder serializes with tabs; keep that file stable for git diffs.
 .github/cla-signers.json
-# Synced verbatim from kentcdodds/kody docs/principles (see docs/principles/index.md).
+# Synced verbatim from kentcdodds/kody (see shared-from-kody.json).
 docs/principles/cleanup.md
 docs/principles/delete-off-the-common-path.md
 docs/principles/examples-over-prose.md
@@ -16,3 +16,27 @@ docs/principles/no-invasive-test-only-code.md
 docs/principles/normalized-source-of-truth.md
 docs/principles/test-the-workflow.md
 docs/principles/two-way-doors.md
+client/clipboard.ts
+client/copy-code-block.tsx
+client/doc-youtube-embed.tsx
+client/double-check.ts
+client/event-mixin.ts
+client/format-timestamp.ts
+client/markdown-first-party.ts
+client/markdown-heading-anchor.tsx
+client/markdown-view.tsx
+client/search-filter.ts
+client/syntax-highlight.tsx
+client/toast.ts
+client/youtube-light-player.tsx
+universal/doc-youtube.ts
+universal/highlight-cache-header.ts
+universal/highlight-cache-request.ts
+universal/highlighted-code.ts
+universal/icon-glyphs.tsx
+universal/icon.tsx
+universal/package-file-media.ts
+universal/styles/style-primitives.ts
+universal/styles/tokens.ts
+universal/user-avatar.tsx
+universal/youtube-watch.ts
