@@ -293,3 +293,23 @@ describe('DoH lookups per MCP call (#47)', () => {
 		assert.equal(dns.length, 4, 'no caching across calls')
 	})
 })
+
+describe('DoH lookups across a redirect (#47)', () => {
+	it('a redirect back to the same host reuses the first hop answer', async () => {
+		const dns: Array<string> = []
+		const base = (async (input: RequestInfo | URL) => {
+			const u = new URL(input instanceof Request ? input.url : String(input))
+			if (u.hostname === 'cloudflare-dns.com') {
+				dns.push(`${u.searchParams.get('name')}/${u.searchParams.get('type')}`)
+				const type = u.searchParams.get('type')
+				return Response.json({ Status: 0, Answer: type === 'A' ? [{ type: 1, data: '93.184.216.34' }] : [] })
+			}
+			if (u.pathname === '/old') return new Response(null, { status: 307, headers: { location: '/new' } })
+			return new Response('ok')
+		}) as typeof fetch
+		const f = createPolicyFetch(mcpConfigFromEnv({}), { authorization: null, base })
+		const res = await f('https://mcp.example.com/old', { method: 'POST', body: '{}' })
+		assert.equal(await res.text(), 'ok')
+		assert.deepEqual([...dns].sort(), ['mcp.example.com/A', 'mcp.example.com/AAAA'])
+	})
+})

@@ -31,7 +31,10 @@ export type DnsMemo = Map<string, Promise<Array<string>>>
 
 async function resolveAddresses(host: string, config: McpConfig, fetchImpl: typeof fetch) {
 	const [a, aaaa] = await Promise.all([lookup(host, 'A', config, fetchImpl), lookup(host, 'AAAA', config, fetchImpl)])
-	return [...a, ...aaaa]
+	const addresses = [...a, ...aaaa]
+	// An empty answer is a failed lookup too: refused, and (like any failure) not kept in the call's memo.
+	if (addresses.length === 0) throw new Error('no A/AAAA records')
+	return addresses
 }
 
 /** Best-effort resolved-IP check before a hop (see docs/mcp-servers.md for the rebinding limit; tracked in #45). */
@@ -62,9 +65,6 @@ export async function assertResolvedHostAllowed(
 		throw refuse(
 			`Could not resolve "${host}" through KODY_DNS_RESOLVER_URL (${error instanceof Error ? error.message : String(error)}).`,
 		)
-	}
-	if (addresses.length === 0) {
-		throw refuse(`Could not resolve "${host}" through KODY_DNS_RESOLVER_URL (no A/AAAA records).`)
 	}
 	for (const address of addresses) {
 		const literal = address.includes(':') ? `[${address}]` : address

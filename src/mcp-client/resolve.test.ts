@@ -133,4 +133,13 @@ describe('per-call DoH memo (#47)', () => {
 		await assert.rejects(assertResolvedHostAllowed(url, config, fetchImpl, memo), /10\.0\.0\.5/)
 		assert.equal(calls.length, 2)
 	})
+
+	it('an empty answer is not cached either', async () => {
+		const { calls, fetchImpl } = counting({})
+		const memo = new Map()
+		const url = new URL('https://empty.example.com/mcp')
+		await assert.rejects(assertResolvedHostAllowed(url, config, fetchImpl, memo), /no A\/AAAA records/)
+		await assert.rejects(assertResolvedHostAllowed(url, config, fetchImpl, memo), /no A\/AAAA records/)
+		assert.equal(calls.length, 4)
+	})
 })
