@@ -174,8 +174,11 @@ the `bridge` provider real. [email.md](./email.md).
 
 `src/ai/config.ts` parses `KODY_AI_*` / `KODY_VECTOR_*` once per cell;
 `src/ai/providers.ts` implements the OpenAI-compatible chat + embeddings
-adapter (plain `fetch`, host-side, keys only in request
-headers); `src/ai/vector-store.ts` implements the `VectorStore` interface for
+adapter (plain `fetch`, host-side, keys only in request headers). The
+Anthropic chat adapter was removed
+([#67](https://github.com/kentcdodds/kody-celld/pull/67); notice
+[#63](https://github.com/kentcdodds/kody-celld/issues/63)).
+`src/ai/vector-store.ts` implements the `VectorStore` interface for
 sqlite-vec (`vec0`, inside the cell) and Qdrant (REST). `MemoryCell` owns the
 per-user memories and embeds them on write; `memorySearch` fuses FTS5 and vector
 ranks with reciprocal-rank fusion. The MCP `search` tool reuses the same cell

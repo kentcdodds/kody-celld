@@ -20,7 +20,7 @@ built-in, a generic adapter for a service you already run, or both. See the
 | Docker: single node (NAS / home server) and fleet                 | Working, smoke-tested (`compose.yaml`, `compose.fleet.yaml` + MinIO + Caddy)                                                                                                                  |
 | Master-key rotation                                               | Working, smoke-tested (`KODY_MASTER_KEY_PREVIOUS` + `POST /admin/secrets/rekey`)                                                                                                              |
 | Limits, quotas, `usageGet`, admin audit log                       | Working, smoke-tested ([docs/operations.md](./docs/operations.md))                                                                                                                            |
-| AI chat/embeddings (Ollama, LM Studio, vLLM, OpenAI, OpenRouter…) | Working, smoke-tested adapters ([docs/ai.md](./docs/ai.md))                                                                                                                                   |
+| AI chat/embeddings (Ollama, LM Studio, vLLM, OpenAI, OpenRouter…) | Working, smoke-tested OpenAI-compatible adapters ([docs/ai.md](./docs/ai.md))                                                                                                                 |
 | Memories (`metaMemory*`) + semantic search                        | Working, smoke-tested: FTS5 + sqlite-vec built in, Qdrant adapter, optional LLM re-rank ([docs/ai.md](./docs/ai.md))                                                                          |
 | Blob storage (`blob*`, raw HTTP routes, signed links)             | Working, smoke-tested: celld R2 binding built in, direct S3 adapter ([docs/blobs.md](./docs/blobs.md))                                                                                        |
 | Browser rendering (content, screenshots, PDF)                     | Working, smoke-tested adapter: self-hosted browserless overlay ([docs/browser.md](./docs/browser.md))                                                                                         |
@@ -308,8 +308,10 @@ OpenAI-compatible server (Ollama, LM Studio, vLLM, OpenRouter, OpenAI) and you
 get `kody.aiChat()`, `kody.aiEmbed()`, embedding-based memory recall and hybrid
 ranking in `search` — vectors live in sqlite-vec inside the cell by default, or
 in Qdrant (`KODY_VECTOR_PROVIDER=qdrant`); `KODY_SEARCH_RERANK=llm` adds a
-chat-model re-rank. Provider keys stay operator-side and never reach sandboxed
-code.
+chat-model re-rank. (`KODY_AI_PROVIDER=anthropic` was removed; see
+[#67](https://github.com/kentcdodds/kody-celld/pull/67) /
+[#63](https://github.com/kentcdodds/kody-celld/issues/63).) Provider keys stay
+operator-side and never reach sandboxed code.
 
 ```sh
 # fully local: Ollama + Qdrant containers next to the single node

@@ -50,11 +50,14 @@ through a sync lock now and a `@kody/core` package later.
 4. **Generic vendor adapters only.** Keep SMTP (mail-bridge),
    OpenAI-compatible AI, S3-compatible blobs, and a CDP browser. Vendor-named
    adapters (Postmark, Mailgun, SendGrid, Resend, Anthropic, browserless as a
-   platform type, and similar) move to packages or are deleted. Implementation
-   may land in a parallel PR (for example #67); this doc records the decision.
+   platform type, and similar) move to packages or are deleted. Landed in
+   [#67](https://github.com/kentcdodds/kody-celld/pull/67) (advance notice
+   [#63](https://github.com/kentcdodds/kody-celld/issues/63)); this doc records
+   the decision.
 5. **One private-host allowlist.** Collapse the four private-host allowlist
-   settings into a single `KODY_PRIVATE_HOSTS` (or equivalent). Same note:
-   implementation may land separately; the product rule is one list.
+   settings into a single `KODY_PRIVATE_HOSTS` (or equivalent). Landed in
+   [#66](https://github.com/kentcdodds/kody-celld/pull/66); this doc records
+   the decision.
 
 ## What we share with hosted Kody
 
