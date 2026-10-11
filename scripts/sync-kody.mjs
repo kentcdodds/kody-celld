@@ -157,7 +157,8 @@ async function update(manifest) {
 		updatedAt: new Date().toISOString(),
 		files: updatedFiles,
 	}
-	await writeFile(manifestPath, `${JSON.stringify(next, null, '\t')}\n`)
+	// Prettier formats *.json with 2 spaces (see .prettierrc.json overrides).
+	await writeFile(manifestPath, `${JSON.stringify(next, null, 2)}\n`)
 
 	console.log(`\nCopied ${copied.length}, unchanged ${unchanged.length}:`)
 	for (const p of copied) console.log(`  copy ${p}`)
