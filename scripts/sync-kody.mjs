@@ -27,6 +27,15 @@ function sha256(bytes) {
 	return createHash('sha256').update(bytes).digest('hex')
 }
 
+/** Prettier JSON shape (2 spaces + trailing newline), keeping \uXXXX for non-ASCII. */
+function serializeManifest(manifest) {
+	const json = JSON.stringify(manifest, null, 2).replace(
+		/[\u007f-\uffff]/g,
+		(ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`,
+	)
+	return `${json}\n`
+}
+
 async function readManifest() {
 	const raw = await readFile(manifestPath, 'utf8')
 	return JSON.parse(raw)
@@ -157,8 +166,7 @@ async function update(manifest) {
 		updatedAt: new Date().toISOString(),
 		files: updatedFiles,
 	}
-	// Match Prettier's JSON override (2 spaces, trailing newline) so sync leaves format:check green.
-	await writeFile(manifestPath, `${JSON.stringify(next, null, 2)}\n`)
+	await writeFile(manifestPath, serializeManifest(next))
 
 	console.log(`\nCopied ${copied.length}, unchanged ${unchanged.length}:`)
 	for (const p of copied) console.log(`  copy ${p}`)
