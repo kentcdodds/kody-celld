@@ -24,9 +24,9 @@ users, and durable state you can back up.
 - **Jobs** — package-owned cron / interval / once schedules on celld's real
   cron trigger.
 - **Memories + AI** — durable per-user memories with full-text search out of
-  the box; point it at Ollama / LM Studio / OpenAI / Anthropic (or add the
-  bundled Ollama + Qdrant overlay) for embeddings, semantic recall and
-  `kody.aiChat()`. See [ai.md](./ai.md).
+  the box; point it at any OpenAI-compatible server (Ollama, LM Studio,
+  OpenAI, OpenRouter, vLLM, …) or add the bundled Ollama + Qdrant overlay for
+  embeddings, semantic recall and `kody.aiChat()`. See [ai.md](./ai.md).
 
 Everything runs on [celld](https://celld.dev), Deno's self-hosted Cloudflare
 Workers + Durable Objects runtime. No Cloudflare account is involved.

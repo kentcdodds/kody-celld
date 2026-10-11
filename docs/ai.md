@@ -8,7 +8,7 @@ every search is lexical (SQLite FTS5).
 
 | Piece           | Self-hosted built-in                                   | Adapter(s)                                                                                                   |
 | --------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
-| Chat (`aiChat`) | —                                                      | any OpenAI-compatible `/chat/completions` (Ollama, LM Studio, vLLM, OpenRouter, OpenAI…), Anthropic Messages |
+| Chat (`aiChat`) | —                                                      | any OpenAI-compatible `/chat/completions` (Ollama, LM Studio, vLLM, OpenRouter, OpenAI…)                     |
 | Embeddings      | —                                                      | any OpenAI-compatible `/embeddings` (Ollama `nomic-embed-text`, LM Studio, vLLM, OpenAI…)                    |
 | Memories        | per-user `MemoryCell` (SQLite + FTS5)                  | —                                                                                                            |
 | Vector store    | sqlite-vec `vec0` table inside the same cell (default) | Qdrant (`KODY_VECTOR_PROVIDER=qdrant`)                                                                       |
@@ -23,12 +23,12 @@ service. Invalid combinations fail at the first AI call with a clear message and
 
 | Variable                                                             | Default                                                      | Notes                                                                                                                                      |
 | -------------------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `KODY_AI_PROVIDER`                                                   | `none`                                                       | `none`, `openai` (any OpenAI-compatible server) or `anthropic`.                                                                            |
-| `KODY_AI_BASE_URL`                                                   | `https://api.openai.com/v1` / `https://api.anthropic.com/v1` | Ollama: `http://host:11434/v1`; LM Studio: `http://host:1234/v1`; vLLM: `http://host:8000/v1`; OpenRouter: `https://openrouter.ai/api/v1`. |
-| `KODY_AI_API_KEY`                                                    | —                                                            | Sent as `Authorization: Bearer` (OpenAI-compatible) or `x-api-key` (Anthropic). Optional for local servers; required for Anthropic.        |
-| `KODY_AI_CHAT_MODEL`                                                 | `gpt-4o-mini` / `claude-3-5-haiku-latest`                    | Any model id the endpoint accepts (`llama3.2`, `qwen2.5`, …).                                                                              |
-| `KODY_AI_EMBED_PROVIDER`                                             | `openai` if the chat provider is `openai`, else `none`       | Anthropic has no embeddings API, so pair it with an explicit embedding endpoint.                                                           |
-| `KODY_AI_EMBED_BASE_URL` / `KODY_AI_EMBED_API_KEY`                   | the chat endpoint / key when that is OpenAI-compatible       | Lets you mix e.g. Anthropic chat with Ollama embeddings.                                                                                   |
+| `KODY_AI_PROVIDER`                                                   | `none`                                                       | `none` or `openai` (any OpenAI-compatible server). `anthropic` was removed; see [#67](https://github.com/kentcdodds/kody-celld/pull/67) / [#63](https://github.com/kentcdodds/kody-celld/issues/63). |
+| `KODY_AI_BASE_URL`                                                   | `https://api.openai.com/v1`                                  | Ollama: `http://host:11434/v1`; LM Studio: `http://host:1234/v1`; vLLM: `http://host:8000/v1`; OpenRouter: `https://openrouter.ai/api/v1`. |
+| `KODY_AI_API_KEY`                                                    | —                                                            | Sent as `Authorization: Bearer`. Optional for local servers; required by hosted endpoints.                                                 |
+| `KODY_AI_CHAT_MODEL`                                                 | `gpt-4o-mini`                                                | Any model id the endpoint accepts (`llama3.2`, `qwen2.5`, …).                                                                              |
+| `KODY_AI_EMBED_PROVIDER`                                             | `openai` if the chat provider is `openai`, else `none`       | `none` or `openai`. Defaults to the chat provider when chat is OpenAI-compatible.                                                          |
+| `KODY_AI_EMBED_BASE_URL` / `KODY_AI_EMBED_API_KEY`                   | the chat endpoint / key when that is OpenAI-compatible       | Lets you mix e.g. OpenRouter chat with Ollama embeddings.                                                                                  |
 | `KODY_AI_EMBED_MODEL`                                                | `text-embedding-3-small`                                     | `nomic-embed-text` (768), `mxbai-embed-large` (1024), `all-minilm` (384), …                                                                |
 | `KODY_AI_EMBED_DIMENSIONS`                                           | `1536`                                                       | Must match the model's output (1–8192). A mismatch is rejected before anything is stored.                                                  |
 | `KODY_AI_TIMEOUT_MS`                                                 | `20000`                                                      | Per provider request (1 ms – 5 min).                                                                                                       |
@@ -72,11 +72,12 @@ SQLite instead of Qdrant.
 **Hosted models, local vectors**
 
 ```sh
-KODY_AI_PROVIDER=anthropic
-KODY_AI_API_KEY=<your Anthropic key, never committed>
-KODY_AI_EMBED_PROVIDER=openai
-KODY_AI_EMBED_BASE_URL=https://api.openai.com/v1
-KODY_AI_EMBED_API_KEY=<your OpenAI key>
+KODY_AI_PROVIDER=openai
+KODY_AI_API_KEY=<your OpenAI key, never committed>
+# embeddings default to the same endpoint; override to split chat and embed:
+# KODY_AI_EMBED_BASE_URL=http://host.docker.internal:11434/v1
+# KODY_AI_EMBED_MODEL=nomic-embed-text
+# KODY_AI_EMBED_DIMENSIONS=768
 ```
 
 **Fleet**: the same variables go in `.env` beside the fleet values; the `deploy`
