@@ -133,12 +133,12 @@ download links (HKDF from the master key + user id) served by the Worker at
 `/api/blobs/` share the service; sandbox code never receives a bucket client or
 credentials. [blobs.md](./blobs.md).
 
-`src/browser/providers.ts` wraps browserless and Cloudflare Browser Rendering
-behind one `BrowserRenderer` (content/screenshot/pdf) and hosts `assertRenderableUrl`,
-the SSRF guard. Screenshots become MCP `image` blocks through the
-`__mcpContent` convention in `src/mcp/content.ts`: `executeRun` extracts and
-validates the blocks, the MCP server emits them ahead of the JSON text block,
-and run history keeps only a size summary. [browser.md](./browser.md).
+`src/browser/providers.ts` wraps browserless behind one `BrowserRenderer`
+(content/screenshot/pdf) and hosts `assertRenderableUrl`, the SSRF guard.
+Screenshots become MCP `image` blocks through the `__mcpContent` convention in
+`src/mcp/content.ts`: `executeRun` extracts and validates the blocks, the MCP
+server emits them ahead of the JSON text block, and run history keeps only a
+size summary. [browser.md](./browser.md).
 
 ## Email and webhooks
 

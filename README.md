@@ -20,10 +20,10 @@ built-in, a generic adapter for a service you already run, or both. See the
 | Docker: single node (NAS / home server) and fleet                  | Working, smoke-tested (`compose.yaml`, `compose.fleet.yaml` + MinIO + Caddy)                                                                                                                  |
 | Master-key rotation                                                | Working, smoke-tested (`KODY_MASTER_KEY_PREVIOUS` + `POST /admin/secrets/rekey`)                                                                                                              |
 | Limits, quotas, `usageGet`, admin audit log                        | Working, smoke-tested ([docs/operations.md](./docs/operations.md))                                                                                                                            |
-| AI chat/embeddings (Ollama, LM Studio, vLLM, OpenAI, Anthropic, …) | Working, smoke-tested adapters ([docs/ai.md](./docs/ai.md))                                                                                                                                   |
+| AI chat/embeddings (Ollama, LM Studio, vLLM, OpenAI, OpenRouter…)  | Working, smoke-tested adapters ([docs/ai.md](./docs/ai.md))                                                                                                                                   |
 | Memories (`metaMemory*`) + semantic search                         | Working, smoke-tested: FTS5 + sqlite-vec built in, Qdrant adapter, optional LLM re-rank ([docs/ai.md](./docs/ai.md))                                                                          |
 | Blob storage (`blob*`, raw HTTP routes, signed links)              | Working, smoke-tested: celld R2 binding built in, direct S3 adapter ([docs/blobs.md](./docs/blobs.md))                                                                                        |
-| Browser rendering (content, screenshots, PDF)                      | Working, smoke-tested adapters: self-hosted browserless overlay or Cloudflare ([docs/browser.md](./docs/browser.md))                                                                          |
+| Browser rendering (content, screenshots, PDF)                      | Working, smoke-tested adapter: self-hosted browserless overlay ([docs/browser.md](./docs/browser.md))                                                                                          |
 | npm imports inside `execute`                                       | Working, smoke-tested: durable module cache, esm.sh or a self-hosted CDN overlay ([docs/npm.md](./docs/npm.md))                                                                               |
 | Email (inboxes, send/reply, subscriptions)                         | Working, smoke-tested: self-hosted SMTP `mail-bridge` overlay (relay through any SMTP provider), generic inbound, Cloudflare Email Routing forwarder ([docs/email.md](./docs/email.md))       |
 | Package inbound webhooks (mint/rotate, HMAC, replay, deliveries)   | Working, smoke-tested ([docs/webhooks.md](./docs/webhooks.md))                                                                                                                                |
@@ -304,12 +304,12 @@ and every admin or state-changing user action lands in `GET /admin/audit`
 Memories (`metaMemoryVerify` → `metaMemoryUpsert` / `metaMemoryDelete`,
 `metaMemorySearch`, `metaMemoryGet`) are built in: a per-user SQLite cell with
 FTS5, so they work with no AI configured. Point `KODY_AI_*` at any
-OpenAI-compatible server (Ollama, LM Studio, vLLM, OpenRouter, OpenAI) or
-Anthropic and you get `kody.aiChat()`, `kody.aiEmbed()`, embedding-based memory
-recall and hybrid ranking in `search` — vectors live in sqlite-vec inside the
-cell by default, or in Qdrant (`KODY_VECTOR_PROVIDER=qdrant`);
-`KODY_SEARCH_RERANK=llm` adds a chat-model re-rank. Provider keys stay
-operator-side and never reach sandboxed code.
+OpenAI-compatible server (Ollama, LM Studio, vLLM, OpenRouter, OpenAI) and you
+get `kody.aiChat()`, `kody.aiEmbed()`, embedding-based memory recall and hybrid
+ranking in `search` — vectors live in sqlite-vec inside the cell by default, or
+in Qdrant (`KODY_VECTOR_PROVIDER=qdrant`); `KODY_SEARCH_RERANK=llm` adds a
+chat-model re-rank. Provider keys stay operator-side and never reach sandboxed
+code.
 
 ```sh
 # fully local: Ollama + Qdrant containers next to the single node
@@ -330,11 +330,11 @@ through HMAC-signed `blobUrl` links served by Kody, so bucket credentials never
 leave the server. Per-user count/byte quotas, size caps and key rules:
 [docs/blobs.md](./docs/blobs.md).
 
-`kody.browserContent/Screenshot/Pdf` render pages in a real browser through an
-adapter — the bundled self-hosted browserless container or Cloudflare Browser
-Rendering. Screenshots come back as protocol-valid MCP `image` blocks from
-`execute` (`__mcpContent`) or land in blob storage. Private/loopback targets
-are refused unless allowlisted. [docs/browser.md](./docs/browser.md).
+`kody.browserContent/Screenshot/Pdf` render pages in a real browser through the
+bundled self-hosted browserless container (or any browserless you run).
+Screenshots come back as protocol-valid MCP `image` blocks from `execute`
+(`__mcpContent`) or land in blob storage. Private/loopback targets are refused
+unless allowlisted. [docs/browser.md](./docs/browser.md).
 
 ```sh
 echo 'COMPOSE_FILE=compose.yaml:compose.browser.yaml' >> .env && docker compose up -d
