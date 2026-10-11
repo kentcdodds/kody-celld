@@ -13,6 +13,8 @@ This file is a map, not the docs. Open the page that owns the task:
 - Engineering principles: [docs/principles/](./docs/principles/index.md)
 - Contributor documentation map:
   [docs/contributing/index.md](./docs/contributing/index.md)
+- Steward review checklist:
+  [docs/contributing/review-checklist.md](./docs/contributing/review-checklist.md)
 - Security invariants:
   [docs/contributing/security-invariants.md](./docs/contributing/security-invariants.md)
 - celld quirks:
