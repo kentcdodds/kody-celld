@@ -5,9 +5,9 @@ import { llmRerank, rerankWindow } from '../ai/rerank.ts'
 import type { CapabilityContext } from '../capabilities/define.ts'
 import { getMemoryCell } from '../capabilities/memory.ts'
 import { capabilities, domains } from '../capabilities/registry.ts'
-import { KODY_CELLD_VERSION } from '../env.ts'
 import { KodyError } from '../lib/errors.ts'
 import { mcpSearchItems } from '../mcp-client/search-items.ts'
+import { provisionGuide } from './provision-guide.ts'
 
 export type SearchEntity = 'capability' | 'domain' | 'package' | 'job' | 'guide' | 'mcp-server'
 
@@ -92,20 +92,7 @@ Recall: await kody.metaMemorySearch({ query, limit }). Each match has score, lex
 Embeddings/LLM are configured by the operator (KODY_AI_*). kody.aiStatus() shows what is configured; kody.aiChat / kody.aiEmbed expose the same model to packages.`,
 		},
 	},
-	{
-		id: 'guide:provision',
-		entity: 'guide',
-		title: 'How Cloudflare-only features are provided here',
-		summary:
-			'Semantic search, Workers AI and memories run through configurable adapters (OpenAI-compatible/Anthropic, sqlite-vec/Qdrant). Email routing, OAuth integrations, blob storage, browser rendering, workflows and the web UI are not in this build yet.',
-		domain: 'system',
-		exactNames: ['deferred', 'gaps', 'unsupported', 'ai', 'email', 'oauth', 'workflows', 'provision'],
-		detail: {
-			text: `kody-celld ${KODY_CELLD_VERSION} runs on celld (self-hosted Workers + Durable Objects).
-Provided: MCP search/execute, packages, secrets with gateway injection, jobs on cron, quotas/audit, memories (FTS5 + vectors), AI chat/embeddings via adapters (see aiStatus).
-Not yet in this build: email inboxes, OAuth integrations ({{integration-token:...}}), blob storage, browser rendering, Workflows, web UI. The kody:runtime exports for those (createAuthenticatedFetch, oauthClientCredentials, email, workflows) throw or are null. See docs/known-gaps.md for the provision matrix and milestone plan.`,
-		},
-	},
+	provisionGuide,
 ]
 
 function tokens(text: string) {
