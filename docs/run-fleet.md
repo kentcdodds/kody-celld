@@ -113,7 +113,7 @@ done
 The `secrets` scenario starts an HTTP echo server to prove injection and
 denial without touching a third party. The Worker must be able to reach it:
 set `SMOKE_ECHO_HOST` to the name the nodes can resolve (it binds `0.0.0.0`
-when that is not loopback) and render `KODY_ALLOW_INSECURE_SECRET_HOSTS=<that
+when that is not loopback) and render `KODY_PRIVATE_HOSTS=<that
 host>` into the config for the duration of the test. The compose fleet does
 this with `host.docker.internal`.
 

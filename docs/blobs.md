@@ -55,18 +55,18 @@ the source of truth for listing.
 
 ## Configuration
 
-| Variable                                                        | Default         | Notes                                                                                                                   |
-| --------------------------------------------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `KODY_BLOB_PROVIDER`                                            | `r2`            | `r2` = celld's bucket binding (no extra setup); `s3` = direct S3-compatible adapter.                                    |
-| `KODY_BLOB_S3_ENDPOINT`                                         | —               | `http://minio:9000`, `https://s3.eu-central-1.amazonaws.com`, `https://<account>.r2.cloudflarestorage.com`…             |
-| `KODY_BLOB_S3_BUCKET`                                           | —               | Must already exist (the fleet's `docker/ensure-bucket.mjs` can create it: see below).                                   |
-| `KODY_BLOB_S3_REGION`                                           | `auto`          | `us-east-1` for MinIO/most, `auto` for R2.                                                                              |
-| `KODY_BLOB_S3_ACCESS_KEY_ID` / `KODY_BLOB_S3_SECRET_ACCESS_KEY` | —               | Operator credentials; never returned by any capability, admin route, or log.                                            |
-| `KODY_BLOB_S3_PREFIX`                                           | —               | Optional key prefix so several Kody instances can share one bucket.                                                     |
-| `KODY_BLOB_S3_FORCE_PATH_STYLE`                                 | `1`             | Path-style URLs (`endpoint/bucket/key`). MinIO and Garage need it; AWS/R2 accept either.                                |
-| `KODY_BLOB_MAX_BYTES`                                           | `26214400`      | Per object (25 MiB). Larger uploads are rejected with `blob_too_large` (413).                                           |
-| `KODY_BLOB_URL_TTL_SECONDS`                                     | `3600`          | Default lifetime of `blobUrl` links; callers may pass a shorter/longer `expiresIn` up to 7 days.                        |
-| `KODY_QUOTA_BLOBS` / `KODY_QUOTA_BLOB_BYTES`                    | `0` (unlimited) | Per-user object count / total bytes; admins override per user with `PUT /admin/users/:id/quota` (`blobs`, `blobBytes`). |
+| Variable                                                        | Default           | Notes                                                                                                                                                                 |
+| --------------------------------------------------------------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `KODY_BLOB_PROVIDER`                                            | unset (`binding`) | unset or `binding` = celld's `BLOBS` bucket binding (no extra setup); `s3` = direct S3-compatible adapter. The old `r2` value was removed — omit the setting instead. |
+| `KODY_BLOB_S3_ENDPOINT`                                         | —                 | `http://minio:9000`, `https://s3.eu-central-1.amazonaws.com`, `https://<account>.r2.cloudflarestorage.com`…                                                           |
+| `KODY_BLOB_S3_BUCKET`                                           | —                 | Must already exist (the fleet's `docker/ensure-bucket.mjs` can create it: see below).                                                                                 |
+| `KODY_BLOB_S3_REGION`                                           | `auto`            | `us-east-1` for MinIO/most, `auto` for R2.                                                                                                                            |
+| `KODY_BLOB_S3_ACCESS_KEY_ID` / `KODY_BLOB_S3_SECRET_ACCESS_KEY` | —                 | Operator credentials; never returned by any capability, admin route, or log.                                                                                          |
+| `KODY_BLOB_S3_PREFIX`                                           | —                 | Optional key prefix so several Kody instances can share one bucket.                                                                                                   |
+| `KODY_BLOB_S3_FORCE_PATH_STYLE`                                 | `1`               | Path-style URLs (`endpoint/bucket/key`). MinIO and Garage need it; AWS/R2 accept either.                                                                              |
+| `KODY_BLOB_MAX_BYTES`                                           | `26214400`        | Per object (25 MiB). Larger uploads are rejected with `blob_too_large` (413).                                                                                         |
+| `KODY_BLOB_URL_TTL_SECONDS`                                     | `3600`            | Default lifetime of `blobUrl` links; callers may pass a shorter/longer `expiresIn` up to 7 days.                                                                      |
+| `KODY_QUOTA_BLOBS` / `KODY_QUOTA_BLOB_BYTES`                    | `0` (unlimited)   | Per-user object count / total bytes; admins override per user with `PUT /admin/users/:id/quota` (`blobs`, `blobBytes`).                                               |
 
 `GET /admin/blobs` shows the parsed provider (`bucketBound` tells you whether
 the `BLOBS` binding is present); `GET /admin/users/:id/blobs` lists a user's

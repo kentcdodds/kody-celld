@@ -24,7 +24,7 @@ users, and durable state you can back up.
 - **Jobs** — package-owned cron / interval / once schedules on celld's real
   cron trigger.
 - **Memories + AI** — durable per-user memories with full-text search out of
-  the box; point it at Ollama / LM Studio / OpenAI / Anthropic (or add the
+  the box; point it at any OpenAI-compatible endpoint (Ollama / LM Studio / OpenAI / OpenRouter) (or add the
   bundled Ollama + Qdrant overlay) for embeddings, semantic recall and
   `kody.aiChat()`. See [ai.md](./ai.md).
 
@@ -221,21 +221,21 @@ itself is reached.
 
 ### 7. Day-2 operations
 
-| Task                   | Command                                                                                                                                                                                                                           |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Upgrade                | `docker compose pull && docker compose up -d`; from a source checkout `git pull && docker compose up -d --build`. State and operator values persist across upgrades                                                               |
-| Back up                | `docker compose stop`, then `docker run --rm -v <project>_kody-data:/data -v "$PWD":/backup alpine tar czf /backup/kody-data.tgz -C / data`, then `docker compose start`                                                          |
-| Restore                | Same command with `tar xzf /backup/kody-data.tgz -C /` into a fresh (empty) `kody-data` volume, then `docker compose up -d`. `kody.env` travels with the data                                                                     |
-| Uninstall              | `docker compose down` keeps the data; `docker compose down -v` deletes the volume — and with it every user, package, secret and the master key                                                                                    |
-| Logs                   | `docker compose logs -f kody`                                                                                                                                                                                                     |
-| Approve a secret host  | `curl -X POST $BASE/admin/users/<id>/secret-hosts -H "authorization: Bearer $ADMIN" -d '{"host":"api.github.com"}'`                                                                                                               |
-| Force a job dispatch   | `curl -X POST $BASE/admin/jobs -H "authorization: Bearer $ADMIN"`                                                                                                                                                                 |
-| Turn on local AI       | `echo 'COMPOSE_FILE=compose.yaml:compose.ai.yaml' >> .env && docker compose up -d && docker compose exec ollama ollama pull nomic-embed-text` ([ai.md](./ai.md))                                                                  |
-| Add a headless browser | `echo 'COMPOSE_FILE=compose.yaml:compose.browser.yaml' >> .env && docker compose up -d` (combine overlays with `:`; [browser.md](./browser.md))                                                                                   |
-| Self-host the npm CDN  | `echo 'COMPOSE_FILE=compose.yaml:compose.esm.yaml' >> .env && docker compose up -d` — bare `import ms from 'ms@2.1.3'` stops depending on esm.sh ([npm.md](./npm.md))                                                             |
-| Install a package      | `packagePreview` / `packageInstall({ source: 'https://kody.codes/@owner/pkg.git' })` or `github:owner/repo/path` via MCP or the account Packages page; extra hosts via `KODY_PACKAGE_SOURCE_HOSTS` ([packages.md](./packages.md)) |
-| Share packages         | Users publish saved packages to the install's own catalog at `$BASE/community` ([community.md](./community.md))                                                                                                                   |
-| Verify end to end      | `KODY_URL=$BASE KODY_ADMIN_TOKEN=$ADMIN SMOKE_ECHO_HOST=host.docker.internal npm run smoke` from a checkout on the Docker host (needs Node 22)                                                                                    |
+| Task                   | Command                                                                                                                                                                                                                            |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Upgrade                | `docker compose pull && docker compose up -d`; from a source checkout `git pull && docker compose up -d --build`. State and operator values persist across upgrades                                                                |
+| Back up                | `docker compose stop`, then `docker run --rm -v <project>_kody-data:/data -v "$PWD":/backup alpine tar czf /backup/kody-data.tgz -C / data`, then `docker compose start`                                                           |
+| Restore                | Same command with `tar xzf /backup/kody-data.tgz -C /` into a fresh (empty) `kody-data` volume, then `docker compose up -d`. `kody.env` travels with the data                                                                      |
+| Uninstall              | `docker compose down` keeps the data; `docker compose down -v` deletes the volume — and with it every user, package, secret and the master key                                                                                     |
+| Logs                   | `docker compose logs -f kody`                                                                                                                                                                                                      |
+| Approve a secret host  | `curl -X POST $BASE/admin/users/<id>/secret-hosts -H "authorization: Bearer $ADMIN" -d '{"host":"api.github.com"}'`                                                                                                                |
+| Force a job dispatch   | `curl -X POST $BASE/admin/jobs -H "authorization: Bearer $ADMIN"`                                                                                                                                                                  |
+| Turn on local AI       | `echo 'COMPOSE_FILE=compose.yaml:compose.ai.yaml' >> .env && docker compose up -d && docker compose exec ollama ollama pull nomic-embed-text` ([ai.md](./ai.md))                                                                   |
+| Add a headless browser | `echo 'COMPOSE_FILE=compose.yaml:compose.browser.yaml' >> .env && docker compose up -d` (combine overlays with `:`; [browser.md](./browser.md))                                                                                    |
+| Self-host the npm CDN  | `echo 'COMPOSE_FILE=compose.yaml:compose.esm.yaml' >> .env && docker compose up -d` — bare `import ms from 'ms@2.1.3'` stops depending on esm.sh ([npm.md](./npm.md))                                                              |
+| Install a package      | `packagePreview` / `packageInstall({ source: 'https://kody.codes/@owner/pkg.git' })` or `github:owner/repo/path` via MCP or the account Packages page; private/LAN sources via `KODY_PRIVATE_HOSTS` ([packages.md](./packages.md)) |
+| Share packages         | Users publish saved packages to the install's own catalog at `$BASE/community` ([community.md](./community.md))                                                                                                                    |
+| Verify end to end      | `KODY_URL=$BASE KODY_ADMIN_TOKEN=$ADMIN SMOKE_ECHO_HOST=host.docker.internal npm run smoke` from a checkout on the Docker host (needs Node 22)                                                                                     |
 
 `<project>` in the volume name is the compose project — the folder name by
 default (`kody-celld_kody-data` for a git checkout, `kody_kody-data` for a
@@ -336,7 +336,7 @@ KODY_URL=$KODY_PUBLIC_URL KODY_ADMIN_TOKEN=$KODY_ADMIN_TOKEN \
 ```
 
 (`SMOKE_ECHO_HOST` lets the secrets scenario reach the smoke's echo server on
-the Docker host; set `KODY_ALLOW_INSECURE_SECRET_HOSTS=host.docker.internal`
+the Docker host; set `KODY_PRIVATE_HOSTS=host.docker.internal`
 in `.env` before deploying for that one scenario, and remove it afterwards.)
 
 ### 5. Spreading nodes over machines
@@ -361,7 +361,7 @@ npm run smoke                    # in another terminal
 The dev config in `wrangler.jsonc` uses placeholder operator values that only
 work over loopback. `npm run dev` also seeds `.dev.vars` from
 `.dev.vars.example` (email smoke, private-host allowances) and merges
-loopback hosts into `KODY_PACKAGE_SOURCE_HOSTS` when an older file lacks them.
+loopback hosts into `KODY_PRIVATE_HOSTS` when an older file lacks them.
 See the [README](../README.md) for the day-to-day workflow.
 
 ---
@@ -374,7 +374,7 @@ See the [README](../README.md) for the day-to-day workflow.
 | `deploy` exits with `KODY_PUBLIC_URL must be an https:// URL` | Set a real https URL, or `KODY_ALLOW_HTTP_PUBLIC_URL=1` for a trusted LAN.                                                                                                                           |
 | `/health` fails right after `up` on the fleet                 | Nodes only serve once the `deploy` job has published a version; `docker compose logs deploy`.                                                                                                        |
 | `secret_host_not_approved`                                    | Approve the destination host for that user with `POST /admin/users/:id/secret-hosts`.                                                                                                                |
-| `secret_requires_https`                                       | Secrets are only sent over https. For local testing add the host to `KODY_ALLOW_INSECURE_SECRET_HOSTS`.                                                                                              |
+| `secret_requires_https`                                       | Secrets are only sent over https, or plain `http:` to a host listed in `KODY_PRIVATE_HOSTS` (local testing).                                                                                         |
 | `/setup` redirects to `/signin`                               | A user already exists (created via the admin API or an earlier run). Sign in with that user's API token, or invite yourself from `/console`.                                                         |
 | Sign-in form rejected / OAuth "invalid redirect"              | `KODY_PUBLIC_URL` does not match the address in the browser (e.g. it says `localhost` but you opened the NAS's IP). Set it to exactly what you type (scheme, host, port) and `docker compose up -d`. |
 | `docker compose pull` says denied / not found                 | The package on ghcr.io is not public yet or the tag does not exist; build locally with `docker compose up -d --build` from a checkout instead.                                                       |

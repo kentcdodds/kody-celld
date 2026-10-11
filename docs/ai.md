@@ -6,13 +6,13 @@ point at any model server** plus a **built-in vector store**; nothing here
 requires a cloud account. With no configuration at all, memories still work and
 every search is lexical (SQLite FTS5).
 
-| Piece           | Self-hosted built-in                                   | Adapter(s)                                                                                                   |
-| --------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
-| Chat (`aiChat`) | —                                                      | any OpenAI-compatible `/chat/completions` (Ollama, LM Studio, vLLM, OpenRouter, OpenAI…), Anthropic Messages |
-| Embeddings      | —                                                      | any OpenAI-compatible `/embeddings` (Ollama `nomic-embed-text`, LM Studio, vLLM, OpenAI…)                    |
-| Memories        | per-user `MemoryCell` (SQLite + FTS5)                  | —                                                                                                            |
-| Vector store    | sqlite-vec `vec0` table inside the same cell (default) | Qdrant (`KODY_VECTOR_PROVIDER=qdrant`)                                                                       |
-| Search ranking  | FTS5/lexical, reciprocal-rank fusion with vectors      | optional LLM re-rank of the top hits (`KODY_SEARCH_RERANK=llm`)                                              |
+| Piece           | Self-hosted built-in                                   | Adapter(s)                                                                                |
+| --------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| Chat (`aiChat`) | —                                                      | any OpenAI-compatible `/chat/completions` (Ollama, LM Studio, vLLM, OpenRouter, OpenAI…)  |
+| Embeddings      | —                                                      | any OpenAI-compatible `/embeddings` (Ollama `nomic-embed-text`, LM Studio, vLLM, OpenAI…) |
+| Memories        | per-user `MemoryCell` (SQLite + FTS5)                  | —                                                                                         |
+| Vector store    | sqlite-vec `vec0` table inside the same cell (default) | Qdrant (`KODY_VECTOR_PROVIDER=qdrant`)                                                    |
+| Search ranking  | FTS5/lexical, reciprocal-rank fusion with vectors      | optional LLM re-rank of the top hits (`KODY_SEARCH_RERANK=llm`)                           |
 
 ## Configuration
 
@@ -21,20 +21,20 @@ All settings are Worker environment variables (`src/ai/config.ts`); set them in
 service. Invalid combinations fail at the first AI call with a clear message and
 `GET /admin/ai` shows the parsed result.
 
-| Variable                                                             | Default                                                      | Notes                                                                                                                                      |
-| -------------------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `KODY_AI_PROVIDER`                                                   | `none`                                                       | `none`, `openai` (any OpenAI-compatible server) or `anthropic`.                                                                            |
-| `KODY_AI_BASE_URL`                                                   | `https://api.openai.com/v1` / `https://api.anthropic.com/v1` | Ollama: `http://host:11434/v1`; LM Studio: `http://host:1234/v1`; vLLM: `http://host:8000/v1`; OpenRouter: `https://openrouter.ai/api/v1`. |
-| `KODY_AI_API_KEY`                                                    | —                                                            | Sent as `Authorization: Bearer` (OpenAI-compatible) or `x-api-key` (Anthropic). Optional for local servers; required for Anthropic.        |
-| `KODY_AI_CHAT_MODEL`                                                 | `gpt-4o-mini` / `claude-3-5-haiku-latest`                    | Any model id the endpoint accepts (`llama3.2`, `qwen2.5`, …).                                                                              |
-| `KODY_AI_EMBED_PROVIDER`                                             | `openai` if the chat provider is `openai`, else `none`       | Anthropic has no embeddings API, so pair it with an explicit embedding endpoint.                                                           |
-| `KODY_AI_EMBED_BASE_URL` / `KODY_AI_EMBED_API_KEY`                   | the chat endpoint / key when that is OpenAI-compatible       | Lets you mix e.g. Anthropic chat with Ollama embeddings.                                                                                   |
-| `KODY_AI_EMBED_MODEL`                                                | `text-embedding-3-small`                                     | `nomic-embed-text` (768), `mxbai-embed-large` (1024), `all-minilm` (384), …                                                                |
-| `KODY_AI_EMBED_DIMENSIONS`                                           | `1536`                                                       | Must match the model's output (1–8192). A mismatch is rejected before anything is stored.                                                  |
-| `KODY_AI_TIMEOUT_MS`                                                 | `20000`                                                      | Per provider request (1 ms – 5 min).                                                                                                       |
-| `KODY_SEARCH_RERANK`                                                 | `off`                                                        | `llm` asks the chat model to reorder the top 12 hits; requires a chat provider.                                                            |
-| `KODY_VECTOR_PROVIDER`                                               | `local`                                                      | `local` (sqlite-vec in the memory cell) or `qdrant`.                                                                                       |
-| `KODY_QDRANT_URL` / `KODY_QDRANT_API_KEY` / `KODY_QDRANT_COLLECTION` | — / — / `kody-memories`                                      | Qdrant REST endpoint. One collection holds every user's vectors, filtered by `userId` payload.                                             |
+| Variable                                                             | Default                                                | Notes                                                                                                                                      |
+| -------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `KODY_AI_PROVIDER`                                                   | `none`                                                 | `none` or `openai` (any OpenAI-compatible server).                                                                                         |
+| `KODY_AI_BASE_URL`                                                   | `https://api.openai.com/v1`                            | Ollama: `http://host:11434/v1`; LM Studio: `http://host:1234/v1`; vLLM: `http://host:8000/v1`; OpenRouter: `https://openrouter.ai/api/v1`. |
+| `KODY_AI_API_KEY`                                                    | —                                                      | Sent as `Authorization: Bearer`. Optional for local servers.                                                                               |
+| `KODY_AI_CHAT_MODEL`                                                 | `gpt-4o-mini` / `claude-3-5-haiku-latest`              | Any model id the endpoint accepts (`llama3.2`, `qwen2.5`, …).                                                                              |
+| `KODY_AI_EMBED_PROVIDER`                                             | `openai` if the chat provider is `openai`, else `none` | Set it (with the URL below) to embed through a different endpoint than chat.                                                               |
+| `KODY_AI_EMBED_BASE_URL` / `KODY_AI_EMBED_API_KEY`                   | the chat endpoint / key when that is OpenAI-compatible | Lets you mix e.g. OpenRouter chat with Ollama embeddings.                                                                                  |
+| `KODY_AI_EMBED_MODEL`                                                | `text-embedding-3-small`                               | `nomic-embed-text` (768), `mxbai-embed-large` (1024), `all-minilm` (384), …                                                                |
+| `KODY_AI_EMBED_DIMENSIONS`                                           | `1536`                                                 | Must match the model's output (1–8192). A mismatch is rejected before anything is stored.                                                  |
+| `KODY_AI_TIMEOUT_MS`                                                 | `20000`                                                | Per provider request (1 ms – 5 min).                                                                                                       |
+| `KODY_SEARCH_RERANK`                                                 | `off`                                                  | `llm` asks the chat model to reorder the top 12 hits; requires a chat provider.                                                            |
+| `KODY_VECTOR_PROVIDER`                                               | `local`                                                | `local` (sqlite-vec in the memory cell) or `qdrant`.                                                                                       |
+| `KODY_QDRANT_URL` / `KODY_QDRANT_API_KEY` / `KODY_QDRANT_COLLECTION` | — / — / `kody-memories`                                | Qdrant REST endpoint. One collection holds every user's vectors, filtered by `userId` payload.                                             |
 
 Provider keys are **operator** configuration, read host-side by the memory cell
 and the search tool; they are never visible to sandboxed code and never appear
@@ -72,8 +72,9 @@ SQLite instead of Qdrant.
 **Hosted models, local vectors**
 
 ```sh
-KODY_AI_PROVIDER=anthropic
-KODY_AI_API_KEY=<your Anthropic key, never committed>
+KODY_AI_PROVIDER=openai
+KODY_AI_BASE_URL=https://openrouter.ai/api/v1   # any OpenAI-compatible API
+KODY_AI_API_KEY=<your key, never committed>
 KODY_AI_EMBED_PROVIDER=openai
 KODY_AI_EMBED_BASE_URL=https://api.openai.com/v1
 KODY_AI_EMBED_API_KEY=<your OpenAI key>

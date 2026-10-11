@@ -4,15 +4,14 @@ Production Kody uses Cloudflare Browser Rendering for "load this page in a real
 browser" work. celld has no built-in headless browser, so kody-celld talks to a
 **browser service through an adapter**: a self-hosted
 [browserless](https://github.com/browserless/browserless) container (Chromium
-behind an HTTP API — bundled as `compose.browser.yaml`) or Cloudflare's
-Browser Rendering REST API if you have an account and prefer not to run
-Chromium yourself. Off by default; nothing else in Kody depends on it.
+behind an HTTP API — bundled as `compose.browser.yaml`), or any browserless
+you run elsewhere. Off by default; nothing else in Kody depends on it.
 
-| Piece                    | Self-hosted                                                                                     | Adapter(s)                                                        |
-| ------------------------ | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Headless browser         | `ghcr.io/browserless/chromium` beside Kody (`compose.browser.yaml`), or any browserless you run | Cloudflare Browser Rendering (`KODY_BROWSER_PROVIDER=cloudflare`) |
-| Screenshot / PDF storage | blob storage ([blobs.md](./blobs.md)) via `saveAs`                                              | —                                                                 |
-| Inline images in MCP     | `__mcpContent` image blocks returned by `execute`                                               | —                                                                 |
+| Piece                    | Self-hosted                                                                                     | Adapter(s) |
+| ------------------------ | ----------------------------------------------------------------------------------------------- | ---------- |
+| Headless browser         | `ghcr.io/browserless/chromium` beside Kody (`compose.browser.yaml`), or any browserless you run | —          |
+| Screenshot / PDF storage | blob storage ([blobs.md](./blobs.md)) via `saveAs`                                              | —          |
+| Inline images in MCP     | `__mcpContent` image blocks returned by `execute`                                               | —          |
 
 ## What users get
 
@@ -52,15 +51,14 @@ signed download `url`) for large captures.
 
 ## Configuration
 
-| Variable                           | Default  | Notes                                                                                                                                                                                                                                                            |
-| ---------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `KODY_BROWSER_PROVIDER`            | `none`   | `none` (capabilities answer `browser_not_configured`, 501), `browserless`, `cloudflare`.                                                                                                                                                                         |
-| `KODY_BROWSER_URL`                 | —        | browserless base URL, e.g. `http://browserless:3000` (compose) or `http://192.168.1.20:3000`. For cloudflare, optional API base override.                                                                                                                        |
-| `KODY_BROWSER_TOKEN`               | —        | browserless `TOKEN` (query-string auth) or a Cloudflare API token with Browser Rendering permission. Operator-only; surfaced as `hasToken`.                                                                                                                      |
-| `KODY_BROWSER_CF_ACCOUNT_ID`       | —        | Required for `cloudflare`.                                                                                                                                                                                                                                       |
-| `KODY_BROWSER_TIMEOUT_MS`          | `30000`  | Per render request (1 s – 5 min). Also the default in-page navigation timeout.                                                                                                                                                                                   |
-| `KODY_BROWSER_ALLOW_PRIVATE_HOSTS` | —        | Comma-separated hostnames/IPs the browser may render although they are loopback/private/link-local (a LAN dashboard, `host.docker.internal`, …). Entries may also be `*.suffix` wildcards or CIDR ranges (`172.30.0.0/16`); a CIDR matches IP-literal URLs only. |
-| `KODY_MCP_CONTENT_LIMIT_BYTES`     | `512000` | Cap for `__mcpContent` returned by `execute` (see above).                                                                                                                                                                                                        |
+| Variable                       | Default  | Notes                                                                                                                                                                                                                                                                               |
+| ------------------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `KODY_BROWSER_PROVIDER`        | `none`   | `none` (capabilities answer `browser_not_configured`, 501) or `browserless`.                                                                                                                                                                                                        |
+| `KODY_BROWSER_URL`             | —        | browserless base URL, e.g. `http://browserless:3000` (compose) or `http://192.168.1.20:3000`.                                                                                                                                                                                       |
+| `KODY_BROWSER_TOKEN`           | —        | browserless `TOKEN` (query-string auth). Operator-only; surfaced as `hasToken`.                                                                                                                                                                                                     |
+| `KODY_BROWSER_TIMEOUT_MS`      | `30000`  | Per render request (1 s – 5 min). Also the default in-page navigation timeout.                                                                                                                                                                                                      |
+| `KODY_PRIVATE_HOSTS`           | —        | The shared private-host allowlist: hostnames/IPs the browser may render although they are loopback/private/link-local (a LAN dashboard, `host.docker.internal`, …). Entries may also be `*.suffix` wildcards or CIDR ranges (`172.30.0.0/16`); a CIDR matches IP-literal URLs only. |
+| `KODY_MCP_CONTENT_LIMIT_BYTES` | `512000` | Cap for `__mcpContent` returned by `execute` (see above).                                                                                                                                                                                                                           |
 
 `GET /admin/browser` returns the parsed provider (no token).
 
@@ -91,24 +89,13 @@ ghcr.io/browserless/chromium:v2.35.0`) on a private network, then set
 and `KODY_BROWSER_TOKEN` before `npm run fleet:deploy` (or in `.env` before the
 compose `deploy` service). Every node uses the same service.
 
-**Cloudflare Browser Rendering (no Chromium to run)**
-
-```sh
-KODY_BROWSER_PROVIDER=cloudflare
-KODY_BROWSER_CF_ACCOUNT_ID=…
-KODY_BROWSER_TOKEN=…            # API token with "Browser Rendering: Edit"
-```
-
-Uses the REST endpoints (`/content`, `/screenshot`, `/pdf`) with the same
-request shapes, so packages behave identically.
-
 ## Safety
 
 - **SSRF guard.** `url` must be `http(s)`, without embedded credentials, and
   its host may not be loopback, RFC 1918 / CGNAT / link-local (including
   `169.254.169.254` cloud metadata and IPv4-mapped IPv6 like `::ffff:10.0.0.1`),
   `.local`/`.internal`/single-label names, or `file:`/`data:` schemes — unless
-  the host is in `KODY_BROWSER_ALLOW_PRIVATE_HOSTS` (an exact host, or an IP
+  the host is in `KODY_PRIVATE_HOSTS` (an exact host, or an IP
   literal inside a listed CIDR range such as `172.30.0.0/16`). The check is on the
   literal URL; DNS names that resolve to private addresses are not detected, so
   keep the browser on an isolated network (the compose overlay does this: the

@@ -148,12 +148,12 @@ The same preview → install / fork flow is on the account **Packages** page. Ru
   (or `/tree/<ref>/<subdir>` when a subdir was selected). Hosted Kody must
   expose the upload-pack route; until that ships, preview/install fails with a
   clear remote error — Celld does not scrape the HTML listing page.
-- Only `http(s)` URLs without embedded credentials, on a host in
-  `KODY_PACKAGE_SOURCE_HOSTS` (default: GitHub's hosts **and** `kody.codes`;
-  `*.suffix` patterns and `*` are accepted). Loopback/private/link-local
-  addresses and `.local` / `.internal` / single-label names are refused unless
-  the operator lists that exact host — do that for a Gitea/Forgejo/GitLab on
-  your LAN. Every redirect hop is re-checked (max 3).
+- Only `http(s)` URLs without embedded credentials, on a built-in public
+  source (GitHub's hosts **and** `kody.codes`) or a host listed in
+  `KODY_PRIVATE_HOSTS` (exact hosts, `*.suffix`, IPs and CIDR ranges).
+  Loopback/private/link-local addresses and `.local` / `.internal` /
+  single-label names are refused unless listed there — do that for a
+  Gitea/Forgejo/GitLab on your LAN. Every redirect hop is re-checked (max 3).
 - Limits: 8 MiB download, 24 MiB after gunzip / unpacked git tree, 400 files,
   20 s. `.git/` and `node_modules/` are skipped, non-UTF-8 files are skipped
   with a warning.

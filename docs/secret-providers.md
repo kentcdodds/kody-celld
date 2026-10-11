@@ -105,7 +105,7 @@ await kody.secretProviderUnbind({ providerId: '1password' })
 ## Gateway decision for `{{secret/<provider>:<ref>}}`
 
 ```
-not https (and host not in KODY_ALLOW_INSECURE_SECRET_HOSTS) → 403 insecure_scheme
+not https (and host not in KODY_PRIVATE_HOSTS) → 403 insecure_scheme
 caller is itself a bound provider package                    → 403 secret_provider_recursion
 provider id not bound                                        → 404 secret_provider_not_bound
 locked and caller has no grant                               → 403 secret_provider_not_granted

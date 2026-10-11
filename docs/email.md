@@ -1,17 +1,17 @@
 # Email
 
 Production Kody receives mail through Cloudflare Email Routing and sends through
-a mail API. Neither exists on a self-hosted box, so kody-celld treats email as
-**adapters at the HTTP boundary** plus a **self-hosted SMTP sidecar** for
-people who want no third party at all. Off by default: with `KODY_EMAIL_DOMAIN`
-unset every `email*` capability answers `email_not_configured`.
+a mail API. Neither exists on a self-hosted box, so kody-celld uses a
+**self-hosted SMTP sidecar** (`mail-bridge`) for both directions, relaying
+outbound mail through any SMTP provider, plus a **generic inbound route** for
+forwarders you run. Off by default: with `KODY_EMAIL_DOMAIN` unset every `email*` capability answers `email_not_configured`.
 
-| Piece                   | Self-hosted                                                                              | Adapter(s)                                                                                                    |
-| ----------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Inbound (receive)       | `mail-bridge` SMTP sidecar (`compose.mail.yaml`) → `POST /email/inbound/bridge`          | generic JSON / `message/rfc822`, Postmark, Mailgun, SendGrid Inbound Parse, Cloudflare Email Worker forwarder |
-| Outbound (send)         | `mail-bridge` `POST /send` → your SMTP relay (or direct MX delivery)                     | Resend, Postmark, Mailgun, SendGrid                                                                           |
-| Delivery status         | bridge posts `sent`/`failed` to `POST /email/events/bridge`                              | provider webhooks → `POST /email/events/<provider>`                                                           |
-| Storage, rules, threads | per-user cell tables (`email_messages`, `email_attachments`, sender rules, destinations) | —                                                                                                             |
+| Piece                   | Self-hosted                                                                              | Adapter(s)                                                                   |
+| ----------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Inbound (receive)       | `mail-bridge` SMTP sidecar (`compose.mail.yaml`) → `POST /email/inbound/bridge`          | generic JSON / `message/rfc822`, Cloudflare Email Worker forwarder           |
+| Outbound (send)         | `mail-bridge` `POST /send` → your SMTP relay (or direct MX delivery)                     | any SMTP relay via `MAIL_BRIDGE_SMTP_URL` (Resend, SES, Fastmail, your ISP…) |
+| Delivery status         | bridge posts `sent`/`failed` to `POST /email/events/bridge`                              | —                                                                            |
+| Storage, rules, threads | per-user cell tables (`email_messages`, `email_attachments`, sender rules, destinations) | —                                                                            |
 
 ## What users get
 
@@ -27,7 +27,7 @@ search, send and reply from `execute`; packages subscribe to inbound mail.
 | `emailSenderRuleSet` / `emailSenderRuleList` / `emailSenderRuleDelete`, `emailMessageRelease` | Route a sender or `@domain` to `inbox` or `quarantine`; release a quarantined message.                                                           |
 | `emailDestinationAdd` / `emailDestinationVerify` / `emailDestinationSetDefault` / … `Remove`  | Where you may send to: your account email (pre-verified), your own inboxes, and addresses confirmed with a 6-digit code (30 min).                |
 | `emailSend` / `emailReply`                                                                    | Send from one of your inboxes (text/HTML, attachments, allow-listed extra headers); reply threads `In-Reply-To`/`References` automatically.      |
-| `emailDeliveryEventList`                                                                      | Provider delivery events (`queued`, `sent`, `delivered`, `bounced`, …) for a sent message.                                                       |
+| `emailDeliveryEventList`                                                                      | Delivery events for a sent message (`queued`, then `sent` or `failed` from the bridge).                                                          |
 
 Inbox claiming, destination management and releasing are **direct-only**
 (`forbidden_from_runtime` from package code). Sends are bounded by
@@ -73,14 +73,16 @@ the URL, or `x-kody-email-token`. The route answers `200` with
 inbox (`no_inbox`), `200 duplicate` for a repeated `Message-ID`, `413` over
 `KODY_EMAIL_MAX_BYTES`, `429` over quota.
 
-| Provider     | Configure                                                                                                                                                   | Notes                                                                                                               |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `bridge`     | `compose.mail.yaml`; nothing else                                                                                                                           | `message/rfc822` bytes + `x-kody-envelope-from` / `x-kody-envelope-to`; the sidecar sets everything.                |
-| `generic`    | Any forwarder you write: JSON `{ from, to, subject, text, html, headers, attachments: [{ filename, contentType, contentBase64 }] }` or raw `message/rfc822` | Addresses may be strings or `{ address, name }`.                                                                    |
-| `postmark`   | Inbound webhook URL `https://<host>/email/inbound/postmark`, HTTP Basic auth (any user, password = token)                                                   | Uses Postmark's JSON (`FromFull`, `ToFull`, `Attachments`).                                                         |
-| `mailgun`    | Route → `https://<host>/email/inbound/mailgun?token=…`; set `KODY_EMAIL_MAILGUN_SIGNING_KEY` to also verify Mailgun's signature                             | Multipart form (`sender`, `recipient`, `body-plain`, `attachment-N`).                                               |
-| `sendgrid`   | Inbound Parse → `https://<host>/email/inbound/sendgrid?token=…`                                                                                             | Multipart form (`envelope`, `email` raw when "POST the raw, full MIME message" is on, otherwise the parsed fields). |
-| `cloudflare` | Deploy [`examples/cloudflare-email-forwarder`](../examples/cloudflare-email-forwarder) as an Email Worker on your zone                                      | Keeps Cloudflare Email Routing as the MX and forwards the raw message to your self-hosted node.                     |
+| Provider  | Configure                                                                                                                                                   | Notes                                                                                                |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `bridge`  | `compose.mail.yaml`; nothing else                                                                                                                           | `message/rfc822` bytes + `x-kody-envelope-from` / `x-kody-envelope-to`; the sidecar sets everything. |
+| `generic` | Any forwarder you write: JSON `{ from, to, subject, text, html, headers, attachments: [{ filename, contentType, contentBase64 }] }` or raw `message/rfc822` | Addresses may be strings or `{ address, name }`.                                                     |
+
+**Cloudflare Email Routing**: deploy
+[`examples/cloudflare-email-forwarder`](../examples/cloudflare-email-forwarder)
+as an Email Worker on your zone. It keeps Cloudflare as the MX and posts the raw
+message to `/email/inbound/bridge` with the SMTP envelope headers, so no SMTP
+port has to be open on your host.
 
 Every adapter produces the same normalized message: parsed address lists, a
 safe header allow-list (`from`, `to`, `subject`, `message-id`, `references`,
@@ -93,21 +95,19 @@ the domain to its owner via the registry, strips the `+tag` (stored as
 
 ## Outbound adapters
 
-`KODY_EMAIL_OUTBOUND_PROVIDER` selects one adapter per deployment; the token
-is operator-owned and only ever added to the provider request.
+`KODY_EMAIL_OUTBOUND_PROVIDER` is `none` or `bridge`: Kody sends through the
+mail-bridge, which relays via `MAIL_BRIDGE_SMTP_URL`. The token is
+operator-owned and only ever added to the bridge request. To keep using a mail
+API provider, point the bridge at its SMTP endpoint — for Resend,
+`MAIL_BRIDGE_SMTP_URL=smtps://resend:<API key>@smtp.resend.com:465`.
 
-| Provider   | `KODY_EMAIL_OUTBOUND_URL`             | `KODY_EMAIL_OUTBOUND_TOKEN`                    | Delivery events                                             |
-| ---------- | ------------------------------------- | ---------------------------------------------- | ----------------------------------------------------------- |
-| `bridge`   | `http://mail-bridge:8025` (required)  | `MAIL_BRIDGE_TOKEN`                            | posted by the bridge itself                                 |
-| `resend`   | default `https://api.resend.com`      | API key                                        | `POST /email/events/resend` (`email.sent`, `.delivered`, …) |
-| `postmark` | default `https://api.postmarkapp.com` | server token                                   | `POST /email/events/postmark` (`Delivery`, `Bounce`, …)     |
-| `mailgun`  | default `https://api.mailgun.net`     | API key (`KODY_EMAIL_MAILGUN_DOMAIN` optional) | `POST /email/events/mailgun`                                |
-| `sendgrid` | default `https://api.sendgrid.com`    | API key                                        | `POST /email/events/sendgrid` (Event Webhook)               |
+| Provider | `KODY_EMAIL_OUTBOUND_URL`            | `KODY_EMAIL_OUTBOUND_TOKEN` | Delivery events             |
+| -------- | ------------------------------------ | --------------------------- | --------------------------- |
+| `bridge` | `http://mail-bridge:8025` (required) | `MAIL_BRIDGE_TOKEN`         | posted by the bridge itself |
 
-Event routes use the same `KODY_EMAIL_INBOUND_TOKEN` (`?token=` works for
-providers that cannot send headers). Events are matched to sent messages by
-provider message id, update `deliveryStatus`, land in `emailDeliveryEventList`
-and dispatch `email.message.delivery.updated`; unmatched ids are reported back
+The bridge posts `sent` / `failed` to `POST /email/events/bridge` with the same
+`KODY_EMAIL_INBOUND_TOKEN`. Events are matched to sent messages by message id,
+update `deliveryStatus`, land in `emailDeliveryEventList` and dispatch `email.message.delivery.updated`; unmatched ids are reported back
 as `unmatched` and otherwise ignored.
 
 Recipients are restricted to verified destinations; `emailReply` is allowed to
@@ -154,29 +154,26 @@ recommendation. On a fleet, run the bridge on any host that can reach a node
 
 ## Configuration
 
-| Variable                                                                                           | Default      | Notes                                                                                                                              |
-| -------------------------------------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `KODY_EMAIL_DOMAIN`                                                                                | —            | Enables email. Every inbox is `<local>@<domain>`.                                                                                  |
-| `KODY_EMAIL_INBOUND_TOKEN`                                                                         | —            | Required for inbound/events. Without it those routes return `501 email_inbound_disabled` (no default).                             |
-| `KODY_EMAIL_MAILGUN_SIGNING_KEY`                                                                   | —            | Also verify Mailgun's `timestamp`/`token`/`signature` on inbound.                                                                  |
-| `KODY_EMAIL_OUTBOUND_PROVIDER`                                                                     | `none`       | `none`, `bridge`, `resend`, `postmark`, `mailgun`, `sendgrid`.                                                                     |
-| `KODY_EMAIL_OUTBOUND_URL`                                                                          | per provider | Bridge base URL (required for `bridge`); API base override otherwise.                                                              |
-| `KODY_EMAIL_OUTBOUND_TOKEN`                                                                        | —            | Provider API key or the bridge token. Operator-only.                                                                               |
-| `KODY_EMAIL_MAILGUN_DOMAIN`                                                                        | domain       | Mailgun sending domain.                                                                                                            |
-| `KODY_EMAIL_FROM_NAME`                                                                             | `Kody`       | Display name on outbound mail.                                                                                                     |
-| `KODY_EMAIL_TIMEOUT_MS`                                                                            | `15000`      | Provider request timeout (1 s – 120 s).                                                                                            |
-| `KODY_EMAIL_MAX_BYTES`                                                                             | `10485760`   | Stored size per message including attachments.                                                                                     |
-| `KODY_QUOTA_EMAIL_MESSAGES`, `KODY_QUOTA_EMAIL_SENDS_PER_DAY`, `KODY_QUOTA_EMAIL_RECEIVES_PER_DAY` | `0`          | Per-user quotas; `0` = unlimited.                                                                                                  |
-| `MAIL_BRIDGE_*`                                                                                    |              | `TOKEN`, `SMTP_URL`, `HOSTNAME`, `SMTP_PORT` (25), `HTTP_PORT` (8025), `BIND`, `MAX_BYTES`, `TLS_CERT`/`TLS_KEY`, `REPORT_EVENTS`. |
+| Variable                                                                                           | Default    | Notes                                                                                                                              |
+| -------------------------------------------------------------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `KODY_EMAIL_DOMAIN`                                                                                | —          | Enables email. Every inbox is `<local>@<domain>`.                                                                                  |
+| `KODY_EMAIL_INBOUND_TOKEN`                                                                         | —          | Required for inbound/events. Without it those routes return `501 email_inbound_disabled` (no default).                             |
+| `KODY_EMAIL_OUTBOUND_PROVIDER`                                                                     | `none`     | `none` or `bridge`.                                                                                                                |
+| `KODY_EMAIL_OUTBOUND_URL`                                                                          | —          | Bridge base URL (required for `bridge`), e.g. `http://mail-bridge:8025`.                                                           |
+| `KODY_EMAIL_OUTBOUND_TOKEN`                                                                        | —          | The bridge token (`MAIL_BRIDGE_TOKEN`). Operator-only.                                                                             |
+| `KODY_EMAIL_FROM_NAME`                                                                             | `Kody`     | Display name on outbound mail.                                                                                                     |
+| `KODY_EMAIL_TIMEOUT_MS`                                                                            | `15000`    | Bridge request timeout (1 s – 120 s).                                                                                              |
+| `KODY_EMAIL_MAX_BYTES`                                                                             | `10485760` | Stored size per message including attachments.                                                                                     |
+| `KODY_QUOTA_EMAIL_MESSAGES`, `KODY_QUOTA_EMAIL_SENDS_PER_DAY`, `KODY_QUOTA_EMAIL_RECEIVES_PER_DAY` | `0`        | Per-user quotas; `0` = unlimited.                                                                                                  |
+| `MAIL_BRIDGE_*`                                                                                    |            | `TOKEN`, `SMTP_URL`, `HOSTNAME`, `SMTP_PORT` (25), `HTTP_PORT` (8025), `BIND`, `MAX_BYTES`, `TLS_CERT`/`TLS_KEY`, `REPORT_EVENTS`. |
 
 Local `npm run dev` enables email for smoke via `.dev.vars` (seeded from
 `.dev.vars.example`: `kody.local.test`, bridge at `http://127.0.0.1:9796`).
 Those values are not in `wrangler.jsonc`, so a default single-node Docker
 install leaves email off until you set `KODY_EMAIL_*`. Without
 `KODY_EMAIL_INBOUND_TOKEN`, `/email/inbound/*` and `/email/events/*` answer
-`501 email_inbound_disabled` (no default token). Outbound `resend` /
-`postmark` / `mailgun` / `sendgrid` use each provider's public API base when
-`KODY_EMAIL_OUTBOUND_URL` is unset; `bridge` still requires the URL.
+`501 email_inbound_disabled` (no default token). `bridge` requires
+`KODY_EMAIL_OUTBOUND_URL`.
 
 ## Smoke coverage
 

@@ -128,12 +128,12 @@ provider may ask you to allow:
 
 Every OAuth request (discovery, registration, token exchange, refresh) goes
 through the same host policy as MCP calls. If the authorization server is on a
-private or `http:` host, list **its** host in `KODY_MCP_ALLOW_PRIVATE_HOSTS`
+private or `http:` host, list **its** host in `KODY_PRIVATE_HOSTS`
 too, not only the MCP server's host. Requests that carry codes, verifiers or
 secrets follow only same-origin `307`/`308` redirects.
 
 A LAN authorization server may use plain `http:` when its host is in
-`KODY_MCP_ALLOW_PRIVATE_HOSTS`. The consent page then allows that one origin in
+`KODY_PRIVATE_HOSTS`. The consent page then allows that one origin in
 its `form-action`, so **Continue** can send the browser there. Any other
 `http:` authorize URL is refused.
 
@@ -142,7 +142,7 @@ common case. Add it by its LAN address, list that address in the allowlist,
 and authorize:
 
 ```js
-// KODY_MCP_ALLOW_PRIVATE_HOSTS=192.168.1.20 (Home Assistant's LAN IP)
+// KODY_PRIVATE_HOSTS=192.168.1.20 (Home Assistant's LAN IP)
 await kody.mcpServerAdd({ name: 'home', url: 'http://192.168.1.20:8123/api/mcp' })
 // → status 'authenticating'; open authUrl, log in to Home Assistant, approve
 ```
@@ -193,7 +193,7 @@ capabilities, it is refused from package code.
   [Pre-registered client](#pre-registered-client-github)).
 - **A LAN authorization server is refused** (`mcp_host_not_allowed` on the
   consent page, or a `lastError` naming the authorization server's host): add the
-  authorization server's host to `KODY_MCP_ALLOW_PRIVATE_HOSTS`, not only the
+  authorization server's host to `KODY_PRIVATE_HOSTS`, not only the
   MCP server's host (see [LAN authorization servers](#lan-authorization-servers)).
 - **"CIMD fetch failed … HTTP 530"** (or 404/403) at the provider: the
   authorization server could not fetch `{origin}/oauth/client-metadata.json`,
@@ -203,7 +203,7 @@ capabilities, it is refused from package code.
 - **Continue on the consent page does nothing:** the browser refused to follow
   the redirect to the provider, and the console shows a CSP `form-action`
   violation. Kody allows `https:` authorize URLs and `http:` ones on hosts in
-  `KODY_MCP_ALLOW_PRIVATE_HOSTS`. Check that the authorization server's host is
+  `KODY_PRIVATE_HOSTS`. Check that the authorization server's host is
   in that list.
 - **The refresh token was rejected** (`status: 'authenticating'`, "The refresh
   token was rejected; authorize again"): open `authUrl` and authorize again.
@@ -277,10 +277,10 @@ agent already has.
 Public `https:` URLs work out of the box. Loopback, private (RFC 1918, CGNAT,
 link-local, ULA), `.local`/`.internal`/single-label hosts, and plain `http:`
 URLs are refused with `mcp_host_not_allowed` unless the operator lists the host
-in `KODY_MCP_ALLOW_PRIVATE_HOSTS`:
+in `KODY_PRIVATE_HOSTS`:
 
 ```sh
-KODY_MCP_ALLOW_PRIVATE_HOSTS=homeassistant.lan,*.home.arpa,172.30.0.0/16,10.0.0.5
+KODY_PRIVATE_HOSTS=homeassistant.lan,*.home.arpa,172.30.0.0/16,10.0.0.5
 ```
 
 - Entries are exact hosts, `*.suffix` wildcards, IPv4/IPv6 literals, or CIDR
@@ -320,8 +320,10 @@ KODY_MCP_ALLOW_PRIVATE_HOSTS=homeassistant.lan,*.home.arpa,172.30.0.0/16,10.0.0.
   the same policy. The `Authorization` header is dropped as soon as the origin
   changes.
 
-The browser's `KODY_BROWSER_ALLOW_PRIVATE_HOSTS` uses the same entry syntax
-([browser.md](./browser.md)). Restart the node after changing either variable.
+The same `KODY_PRIVATE_HOSTS` list also governs the browser
+([browser.md](./browser.md)), package sources ([packages.md](./packages.md))
+and plain-`http:` secret fetches ([secrets.md](./secrets.md)). Restart the
+node after changing it.
 
 ## Limits
 
@@ -347,7 +349,7 @@ timeout. See [operations.md](./operations.md) for every variable.
 | `mcp_server_disabled`       | 409  | The server is turned off.                                                                                                                                                                                                            |
 | `mcp_server_locked`         | 403  | The server is locked and the run's entry package is not granted, or `mcpServerAdd({ replace: true })` asked for a looser `usage`.                                                                                                    |
 | `mcp_tool_not_found`        | 404  | The server has no tool with that name (try `mcpServerRefresh`).                                                                                                                                                                      |
-| `mcp_host_not_allowed`      | 403  | A private host or plain `http:` URL not in `KODY_MCP_ALLOW_PRIVATE_HOSTS`, a host that resolves to a private address not allowed there, or a host that could not be resolved through `KODY_DNS_RESOLVER_URL`.                        |
+| `mcp_host_not_allowed`      | 403  | A private host or plain `http:` URL not in `KODY_PRIVATE_HOSTS`, a host that resolves to a private address not allowed there, or a host that could not be resolved through `KODY_DNS_RESOLVER_URL`.                                  |
 | `mcp_call_failed`           | 502  | Transport or protocol failure, timeout, or an HTTP error from the server.                                                                                                                                                            |
 | `mcp_result_too_large`      | 413  | The result is over `KODY_MCP_CONTENT_LIMIT_BYTES`.                                                                                                                                                                                   |
 | `mcp_server_unauthorized`   | 401  | An OAuth server has no grant yet, or the provider rejected it; open the server's `authUrl`.                                                                                                                                          |
@@ -355,7 +357,7 @@ timeout. See [operations.md](./operations.md) for every variable.
 | `mcp_oauth_client_required` | 409  | No client mode applies: no pre-registered client, no client metadata document support, no `registration_endpoint`.                                                                                                                   |
 | `mcp_oauth_failed`          | 502  | The authorization server misbehaved: no authorization server advertised, an `issuer` that doesn't match, an authorization or token endpoint on a different origin than the `issuer`, a bad authorize URL, or a failed code exchange. |
 | `quota_exceeded`            | 429  | `mcpServerAdd` of a new name would exceed `KODY_QUOTA_MCP_SERVERS`.                                                                                                                                                                  |
-| `config_error`              | 500  | `KODY_MCP_ALLOW_PRIVATE_HOSTS`, `KODY_MCP_CALL_TIMEOUT_MS` or `KODY_DNS_RESOLVER_URL` is invalid.                                                                                                                                    |
+| `config_error`              | 500  | `KODY_PRIVATE_HOSTS`, `KODY_MCP_CALL_TIMEOUT_MS` or `KODY_DNS_RESOLVER_URL` is invalid.                                                                                                                                              |
 
 Inside `execute` the code is the prefix of the thrown error's message
 (`mcp_server_locked: …`).

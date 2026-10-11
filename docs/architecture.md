@@ -158,23 +158,23 @@ pushes them to a provider through the secrets gateway as a `{{webhookUrl}}`
 placeholder so neither the client nor package code needs to read them.
 [webhooks.md](./webhooks.md).
 
-`src/email/inbound.ts` turns each provider's payload (JSON, multipart form or
+`src/email/inbound.ts` turns each inbound payload (generic JSON or
 raw `message/rfc822` via `postal-mime`) into one `InboundEmail`;
 `src/email/service.ts` authenticates the request with the deployment inbound
 token, routes recipients to inbox owners through the `RegistryCell`
 (`inbox_locals`, plus-addressing), classifies by sender rules, stores in the
 `UserCell` (`email_messages`, `email_attachments`) and dispatches
-`email.message.*` subscriptions. `src/email/outbound.ts` builds provider
-requests (bridge, Resend, Postmark, Mailgun, SendGrid) with the operator token
-attached host-side; `src/email/events.ts` normalizes delivery webhooks back
-onto stored messages. `mail-bridge/` is the self-hosted SMTP sidecar that makes
+`email.message.*` subscriptions. `src/email/outbound.ts` sends through the
+mail-bridge (`POST /send`) with the operator token attached host-side;
+`src/email/events.ts` maps the bridge's delivery events back onto stored
+messages. `mail-bridge/` is the self-hosted SMTP sidecar that makes
 the `bridge` provider real. [email.md](./email.md).
 
 ## AI, memories, semantic search
 
 `src/ai/config.ts` parses `KODY_AI_*` / `KODY_VECTOR_*` once per cell;
-`src/ai/providers.ts` implements the OpenAI-compatible chat + embeddings and
-Anthropic chat adapters (plain `fetch`, host-side, keys only in request
+`src/ai/providers.ts` implements the OpenAI-compatible chat + embeddings
+adapter (plain `fetch`, host-side, keys only in request
 headers); `src/ai/vector-store.ts` implements the `VectorStore` interface for
 sqlite-vec (`vec0`, inside the cell) and Qdrant (REST). `MemoryCell` owns the
 per-user memories and embeds them on write; `memorySearch` fuses FTS5 and vector

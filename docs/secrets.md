@@ -72,7 +72,7 @@ Every outbound `fetch` from an isolate is routed through `FetchGateway`
 
 ```
 admin surface?          → 403 admin_surface_blocked
-not https (and host not in KODY_ALLOW_INSECURE_SECRET_HOSTS)? → 403 insecure_scheme
+not https (and host not in KODY_PRIVATE_HOSTS)? → 403 insecure_scheme
 {{secret:…}} and host not approved? → 403 secret_host_not_approved  { approvalUrl }
 secret missing?         → 404 secret_not_found          { missing }
 {{integration-token:…}} → integration checks (allowedHosts, usage, refresh) — integrations.md
@@ -103,10 +103,12 @@ Hosts are normalised (lowercase, no port), IPv6 literals are bracketed, and
 
 ## Development
 
-`KODY_ALLOW_INSECURE_SECRET_HOSTS=127.0.0.1,localhost` (in `.dev.vars.example`
-for local `celld dev` / smoke) lets the smoke suite inject into a plain-HTTP
-loopback echo server. Do not set it on a single-node or fleet install unless
-you are port-forwarding a test harness.
+`KODY_PRIVATE_HOSTS=127.0.0.1,localhost,host.docker.internal` (in
+`.dev.vars.example` for local `celld dev` / smoke) lets the smoke suite inject
+into a plain-HTTP loopback echo server. The same list is the operator's
+private-host allowlist for MCP servers, the browser and package sources, and
+plain-`http:` secret fetches are allowed only to hosts on it, so list only
+hosts you trust to receive secrets without TLS.
 
 ## Current limitations
 

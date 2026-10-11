@@ -25,7 +25,7 @@ built-in, a generic adapter for a service you already run, or both. See the
 | Blob storage (`blob*`, raw HTTP routes, signed links)              | Working, smoke-tested: celld R2 binding built in, direct S3 adapter ([docs/blobs.md](./docs/blobs.md))                                                                                        |
 | Browser rendering (content, screenshots, PDF)                      | Working, smoke-tested adapters: self-hosted browserless overlay or Cloudflare ([docs/browser.md](./docs/browser.md))                                                                          |
 | npm imports inside `execute`                                       | Working, smoke-tested: durable module cache, esm.sh or a self-hosted CDN overlay ([docs/npm.md](./docs/npm.md))                                                                               |
-| Email (inboxes, send/reply, subscriptions)                         | Working, smoke-tested: self-hosted SMTP `mail-bridge` overlay + Postmark/Mailgun/SendGrid/Resend/Cloudflare adapters ([docs/email.md](./docs/email.md))                                       |
+| Email (inboxes, send/reply, subscriptions)                         | Working, smoke-tested: self-hosted SMTP `mail-bridge` overlay (relay through any SMTP provider), generic inbound, Cloudflare Email Routing forwarder ([docs/email.md](./docs/email.md))       |
 | Package inbound webhooks (mint/rotate, HMAC, replay, deliveries)   | Working, smoke-tested ([docs/webhooks.md](./docs/webhooks.md))                                                                                                                                |
 | OAuth integrations (`{{integration-token:…}}`)                     | Working, smoke-tested: bring-your-own OAuth app, PKCE connect, encrypted tokens, host-side refresh ([docs/integrations.md](./docs/integrations.md))                                           |
 | Provider-backed secrets (`{{secret/<provider>:…}}`)                | Working, smoke-tested: vault packages run sealed, values injected only at the gateway ([docs/secret-providers.md](./docs/secret-providers.md))                                                |
@@ -151,8 +151,8 @@ The dev config ships placeholder `KODY_ADMIN_TOKEN` / `KODY_MASTER_KEY` values
 in `wrangler.jsonc`. They only work against loopback: the Worker refuses to
 serve non-loopback requests while those placeholders are in effect. `npm run
 dev` seeds a git-ignored `.dev.vars` from `.dev.vars.example` (email smoke,
-private-host allowances) and merges `127.0.0.1`/`localhost` into
-`KODY_PACKAGE_SOURCE_HOSTS` when an older file lacks them; put real operator
+private-host allowances) and merges `127.0.0.1`/`localhost`/`host.docker.internal` into
+`KODY_PRIVATE_HOSTS` when an older file lacks them; put real operator
 values there if you want to expose a dev node.
 
 > `celld dev` rebuilds on any project file change, including edits under
@@ -228,7 +228,7 @@ Worker Entrypoint that every isolate's outbound `fetch` is routed through), and
 only when:
 
 1. the destination host is on the user's approved list (`POST /admin/users/:id/secret-hosts`),
-2. the request is HTTPS (loopback hosts listed in `KODY_ALLOW_INSECURE_SECRET_HOSTS` excepted), and
+2. the request is HTTPS (plain `http:` only for hosts listed in `KODY_PRIVATE_HOSTS`), and
 3. every referenced secret exists.
 
 Otherwise the request is denied _before_ leaving the box and the run sees a
