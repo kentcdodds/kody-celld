@@ -4,11 +4,11 @@ A self-hosted **Kody core** that runs on [Deno celld](https://celld.dev) — the
 Cloudflare Workers + Durable Objects programming model on your own machines,
 with an S3-compatible bucket for durability.
 
-It is a standalone reimplementation of
+It is a faithful self-host of
 [kentcdodds/kody](https://github.com/kentcdodds/kody) for your own hardware:
 the same MCP contract (`search` + `execute`, packages, secrets, jobs) plus every
 surface production Kody gets from Cloudflare, provided here as a self-hosted
-built-in, an adapter for a service you already run, or both — see the
+built-in, a generic adapter for a service you already run, or both. See the
 [provision matrix](./docs/known-gaps.md) for how each piece is provided.
 
 | Surface                                                            | Status                                                                                                                                                                                        |
@@ -39,7 +39,8 @@ fleet) and shows how to connect an MCP client.
 
 Read [docs/architecture.md](./docs/architecture.md) for how it fits together
 and [docs/decision-standalone-vs-adapters.md](./docs/decision-standalone-vs-adapters.md)
-for why this is a standalone project rather than a fork of production Kody.
+for the faithful-self-host decision (match hosted Kody; share via sync lock,
+then `@kody/core`).
 
 ## Self-host it (Docker, five minutes)
 
