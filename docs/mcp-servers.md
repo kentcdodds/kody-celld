@@ -297,7 +297,9 @@ KODY_MCP_ALLOW_PRIVATE_HOSTS=homeassistant.lan,*.home.arpa,172.30.0.0/16,10.0.0.
   DNS-over-HTTPS (`KODY_DNS_RESOLVER_URL`, default
   `https://cloudflare-dns.com/dns-query`) and refuses the hop if any answer is a
   private address that no IP/CIDR entry allows, or if the lookup fails or
-  returns nothing. IP-literal URLs and names that match a name or `*.suffix`
+  returns nothing. Answers are reused for the rest of the same call (one
+  connect, `tools/list` or `tools/call`, or one OAuth flow) and never across
+  calls; a failed lookup is not reused. IP-literal URLs and names that match a name or `*.suffix`
   entry skip the lookup. A public resolver cannot see your LAN, so for a LAN
   name either list the name itself (or a `*.suffix`), or point
   `KODY_DNS_RESOLVER_URL` at a resolver you run so `.home` names resolve and

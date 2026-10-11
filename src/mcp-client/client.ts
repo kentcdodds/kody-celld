@@ -4,7 +4,7 @@ import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/sdk/validatio
 import { KODY_CELLD_VERSION } from '../env.ts'
 import { KodyError } from '../lib/errors.ts'
 import { assertMcpUrl, type McpConfig } from './policy.ts'
-import { assertResolvedHostAllowed } from './resolve.ts'
+import { assertResolvedHostAllowed, type DnsMemo } from './resolve.ts'
 
 export type McpTool = {
 	name: string
@@ -103,6 +103,8 @@ export type PolicyFetchOptions = {
 /** Fetch that enforces the URL policy on every hop, follows redirects by hand and keeps Authorization on the first origin. */
 export function createPolicyFetch(config: McpConfig, options: PolicyFetchOptions): typeof fetch {
 	const base = options.base ?? fetch
+	// One fetch is built per call (or OAuth flow), so this memo lives exactly as long as that call (#47).
+	const dnsMemo: DnsMemo = new Map()
 	const fail = (kody: KodyError) => {
 		options.onPolicyError?.(kody)
 		return kody
@@ -115,7 +117,7 @@ export function createPolicyFetch(config: McpConfig, options: PolicyFetchOptions
 		for (let hop = 0; ; hop++) {
 			try {
 				url = assertMcpUrl(url.href, config)
-				await assertResolvedHostAllowed(url, config, base)
+				await assertResolvedHostAllowed(url, config, base, dnsMemo)
 			} catch (error) {
 				throw fail(KodyError.fromUnknown(error)!)
 			}

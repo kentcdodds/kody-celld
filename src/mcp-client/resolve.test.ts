@@ -82,3 +82,55 @@ describe('assertResolvedHostAllowed', () => {
 		)
 	})
 })
+
+describe('per-call DoH memo (#47)', () => {
+	const counting = (answers: Record<string, Array<{ type: number; data: string }>>, failFirst = 0) => {
+		const calls: Array<string> = []
+		let failures = failFirst
+		const fetchImpl = (async (input: RequestInfo | URL) => {
+			const u = new URL(String(input))
+			calls.push(`${u.searchParams.get('name')}/${u.searchParams.get('type')}`)
+			if (failures > 0) {
+				failures--
+				return new Response('down', { status: 503 })
+			}
+			return Response.json({
+				Status: 0,
+				Answer: answers[`${u.searchParams.get('name')}/${u.searchParams.get('type')}`] ?? [],
+			})
+		}) as typeof fetch
+		return { calls, fetchImpl }
+	}
+
+	it('one A and one AAAA lookup per host for every hop sharing a memo; none shared across memos', async () => {
+		const { calls, fetchImpl } = counting({ 'mcp.example.com/A': [{ type: 1, data: '93.184.216.34' }] })
+		const memo = new Map()
+		const url = new URL('https://mcp.example.com/mcp')
+		await Promise.all([
+			assertResolvedHostAllowed(url, config, fetchImpl, memo),
+			assertResolvedHostAllowed(url, config, fetchImpl, memo),
+		])
+		await assertResolvedHostAllowed(url, config, fetchImpl, memo)
+		assert.deepEqual(calls.sort(), ['mcp.example.com/A', 'mcp.example.com/AAAA'])
+		await assertResolvedHostAllowed(url, config, fetchImpl, new Map())
+		assert.equal(calls.length, 4, 'a new memo (a new call) resolves again')
+	})
+
+	it('a failed lookup is not cached', async () => {
+		const { calls, fetchImpl } = counting({ 'mcp.example.com/A': [{ type: 1, data: '93.184.216.34' }] }, 2)
+		const memo = new Map()
+		const url = new URL('https://mcp.example.com/mcp')
+		await assert.rejects(assertResolvedHostAllowed(url, config, fetchImpl, memo), /Could not resolve/)
+		await assertResolvedHostAllowed(url, config, fetchImpl, memo)
+		assert.equal(calls.length, 4)
+	})
+
+	it('a cached private answer is still refused on every hop', async () => {
+		const { calls, fetchImpl } = counting({ 'evil.example.com/A': [{ type: 1, data: '10.0.0.5' }] })
+		const memo = new Map()
+		const url = new URL('https://evil.example.com/mcp')
+		await assert.rejects(assertResolvedHostAllowed(url, config, fetchImpl, memo), /10\.0\.0\.5/)
+		await assert.rejects(assertResolvedHostAllowed(url, config, fetchImpl, memo), /10\.0\.0\.5/)
+		assert.equal(calls.length, 2)
+	})
+})

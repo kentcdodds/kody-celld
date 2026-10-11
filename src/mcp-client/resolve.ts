@@ -23,15 +23,41 @@ function refuse(message: string) {
 	return new KodyError('mcp_host_not_allowed', message, { status: 403 })
 }
 
+/**
+ * DoH answers for one MCP call (one connect / tools/list / tools/call, or one OAuth flow), keyed by host (#47).
+ * Never shared across calls: that would widen the rebinding gap until #45 replaces this pre-check.
+ */
+export type DnsMemo = Map<string, Promise<Array<string>>>
+
+async function resolveAddresses(host: string, config: McpConfig, fetchImpl: typeof fetch) {
+	const [a, aaaa] = await Promise.all([lookup(host, 'A', config, fetchImpl), lookup(host, 'AAAA', config, fetchImpl)])
+	return [...a, ...aaaa]
+}
+
 /** Best-effort resolved-IP check before a hop (see docs/mcp-servers.md for the rebinding limit; tracked in #45). */
-export async function assertResolvedHostAllowed(url: URL, config: McpConfig, fetchImpl: typeof fetch): Promise<void> {
+export async function assertResolvedHostAllowed(
+	url: URL,
+	config: McpConfig,
+	fetchImpl: typeof fetch,
+	memo?: DnsMemo,
+): Promise<void> {
 	const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '')
 	if (parseIpLiteral(host)) return
 	if (hostMatchesAllowlist(host, config.allowPrivateHosts)) return
 	let addresses: Array<string>
 	try {
-		const [a, aaaa] = await Promise.all([lookup(host, 'A', config, fetchImpl), lookup(host, 'AAAA', config, fetchImpl)])
-		addresses = [...a, ...aaaa]
+		let pending = memo?.get(host)
+		if (!pending) {
+			pending = resolveAddresses(host, config, fetchImpl)
+			// Concurrent hops share the lookup; a failure is not remembered, so the next hop asks again.
+			if (memo) {
+				memo.set(host, pending)
+				pending.catch(() => {
+					if (memo.get(host) === pending) memo.delete(host)
+				})
+			}
+		}
+		addresses = await pending
 	} catch (error) {
 		throw refuse(
 			`Could not resolve "${host}" through KODY_DNS_RESOLVER_URL (${error instanceof Error ? error.message : String(error)}).`,
