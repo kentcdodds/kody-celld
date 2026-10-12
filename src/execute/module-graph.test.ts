@@ -601,4 +601,23 @@ describe('buildModuleGraph', () => {
 			/Bare import "remix\/component\/jsx-runtime" is not available/,
 		)
 	})
+	it('uses the app wrapper as main module when wrapper is "app"', async () => {
+		const graph = await buildModuleGraph({
+			entry: { kind: 'package', packageName: '@t/counter', entryPath: 'status.js' },
+			userCell: fakeUserCell,
+			allowNpm: false,
+			wrapper: 'app',
+		})
+		assert.equal(graph.mainModule, 'wrapper.js')
+		const wrapper = graph.modules['wrapper.js'] ?? ''
+		assert.match(wrapper, /x-kody-app-context/)
+		assert.match(wrapper, /appRunReport/)
+		assert.match(wrapper, /\.\/packages\/@t\/counter\/status\.js/)
+		const runGraph = await buildModuleGraph({
+			entry: { kind: 'package', packageName: '@t/counter', entryPath: 'status.js' },
+			userCell: fakeUserCell,
+			allowNpm: false,
+		})
+		assert.doesNotMatch(runGraph.modules['wrapper.js'] ?? '', /x-kody-app-context/)
+	})
 })

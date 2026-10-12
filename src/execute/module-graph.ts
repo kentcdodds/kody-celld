@@ -17,7 +17,7 @@ import {
 	type JsxOptions,
 	type TranspileKind,
 } from './strip-types.ts'
-import { buildWrapperModule } from './wrapper-module.ts'
+import { buildAppWrapperModule, buildWrapperModule } from './wrapper-module.ts'
 
 export const RUNTIME_MODULE_PATH = 'kody-runtime.js'
 export const WRAPPER_MODULE_PATH = 'wrapper.js'
@@ -226,6 +226,8 @@ export async function buildModuleGraph(input: {
 	npm?: NpmResolverOptions | undefined
 	/** True only for the gateway's provider runs: the provider entry may then be the graph entry. */
 	sealed?: boolean | undefined
+	/** 'app' = package-app wrapper (Request in, Response out). */
+	wrapper?: 'run' | 'app' | undefined
 }): Promise<ModuleGraph> {
 	const modules: Record<string, string> = {}
 	const sourceOf = (path: string) => modules[path] ?? ''
@@ -406,7 +408,8 @@ export async function buildModuleGraph(input: {
 	}
 
 	modules[RUNTIME_MODULE_PATH] = RUNTIME_MODULE_SOURCE
-	modules[WRAPPER_MODULE_PATH] = buildWrapperModule(relativeSpecifier(WRAPPER_MODULE_PATH, entryPath))
+	const buildWrapper = input.wrapper === 'app' ? buildAppWrapperModule : buildWrapperModule
+	modules[WRAPPER_MODULE_PATH] = buildWrapper(relativeSpecifier(WRAPPER_MODULE_PATH, entryPath))
 
 	return {
 		modules,
