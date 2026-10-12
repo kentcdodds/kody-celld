@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { parseKodyPackageSpecifier, parsePackageManifest, resolvePackageExport } from './manifest.ts'
+import { manifestWarnings, parseKodyPackageSpecifier, parsePackageManifest, resolvePackageExport } from './manifest.ts'
 
 const baseFiles = {
 	'README.md': '# pkg',
@@ -450,5 +450,65 @@ describe('parseKodyPackageSpecifier', () => {
 		assert.equal(parseKodyPackageSpecifier('kody:runtime'), null)
 		assert.equal(parseKodyPackageSpecifier('node:fs'), null)
 		assert.equal(parseKodyPackageSpecifier('kody:@scope'), null)
+	})
+})
+
+describe('kody.app', () => {
+	const appFiles = (kodyApp: unknown, extra: Record<string, string> = {}) => ({
+		...manifest({ exports: { '.': './index.js' }, kody: { app: kodyApp } }),
+		'app/server.ts': 'export default { fetch: () => new Response("hi") }',
+		'public/styles.css': 'body{}',
+		...extra,
+	})
+
+	it('is null when not declared', () => {
+		assert.equal(parsePackageManifest(manifest({ exports: { '.': './index.js' } })).app, null)
+	})
+	it('normalizes entry and assets, and records a client', () => {
+		const parsed = parsePackageManifest(
+			appFiles({ entry: './app/server.ts', assets: './public/', client: './app/client.ts' }, { 'app/client.ts': '' }),
+		)
+		assert.deepEqual(parsed.app, { entry: 'app/server.ts', assets: 'public', client: true })
+		assert.deepEqual(manifestWarnings(parsed), [
+			'kody.app.client is not built on kody-celld yet; the app is served server-rendered only.',
+		])
+	})
+	it('accepts the object client form', () => {
+		const parsed = parsePackageManifest(
+			appFiles(
+				{ entry: 'app/server.ts', client: { entry: './app/client.ts', externals: ['x'] } },
+				{ 'app/client.ts': '' },
+			),
+		)
+		assert.equal(parsed.app?.client, true)
+	})
+	it('has no warnings without a client', () => {
+		assert.deepEqual(manifestWarnings(parsePackageManifest(appFiles({ entry: 'app/server.ts' }))), [])
+	})
+	it('rejects bad shapes', () => {
+		const cases: Array<[unknown, Record<string, string>, RegExp]> = [
+			['app/server.ts', {}, /kody\.app must be an object/],
+			[{}, {}, /kody\.app\.entry is required/],
+			[{ entry: 'missing.ts' }, {}, /kody\.app\.entry "missing\.ts" is not in the package files/],
+			[{ entry: 'app/server.ts', runtime: 'remix' }, {}, /kody\.app\.runtime is not supported/],
+			[{ entry: 'app/server.ts', assets: 'nope' }, {}, /kody\.app\.assets "nope" has no files/],
+			[{ entry: 'app/server.ts', assets: 'public' }, { 'public/__version.json': '{}' }, /reserved/],
+			[{ entry: 'app/server.ts', assets: 'public' }, { 'public/client.0123456789abcdef.js': '' }, /reserved/],
+			[
+				{ entry: 'app/server.ts', client: './missing.ts' },
+				{},
+				/kody\.app\.client "missing\.ts" is not in the package files/,
+			],
+			[{ entry: 'app/server.ts', client: 7 }, {}, /kody\.app\.client must be a path or \{ entry \}/],
+		]
+		for (const [raw, extra, pattern] of cases) {
+			assert.throws(() => parsePackageManifest(appFiles(raw, extra)), pattern, JSON.stringify(raw))
+		}
+	})
+	it('checks relative imports from the app entry', () => {
+		assert.throws(
+			() => parsePackageManifest(appFiles({ entry: 'app/server.ts' }, { 'app/server.ts': "import './gone.ts'" })),
+			/gone/,
+		)
 	})
 })

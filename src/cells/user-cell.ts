@@ -22,6 +22,7 @@ import {
 	type Quotas,
 } from '../lib/limits.ts'
 import {
+	manifestWarnings,
 	parsePackageManifest,
 	type PackageFiles,
 	type PackageManifest,
@@ -98,7 +99,7 @@ export type SavedPackage = {
 	updatedAt: string
 }
 
-export type PackageSummary = Omit<SavedPackage, 'files'> & { fileCount: number }
+export type PackageSummary = Omit<SavedPackage, 'files'> & { fileCount: number; warnings?: Array<string> }
 
 export type JobRecord = {
 	id: string
@@ -339,6 +340,7 @@ function storedManifest(json: string): PackageManifest {
 		webhooks: manifest.webhooks ?? [],
 		subscriptions: manifest.subscriptions ?? [],
 		secretProvider: manifest.secretProvider ?? null,
+		app: manifest.app ?? null,
 		dependencies: manifest.dependencies ?? {},
 		hidden: manifest.hidden === true,
 		keywords: manifest.keywords ?? [],
@@ -1001,6 +1003,7 @@ export class UserCell extends DurableObject<Env> {
 			createdAt: existing?.created_at ?? now,
 			updatedAt: now,
 			fileCount: Object.keys(files).length,
+			warnings: manifestWarnings(manifest),
 		}
 	}
 

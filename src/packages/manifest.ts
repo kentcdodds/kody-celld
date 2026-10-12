@@ -82,6 +82,9 @@ export const webhookNamePattern = /^[a-z0-9][a-z0-9-]*$/
 export const webhookDefaultRateLimit = 60
 export const webhookMaxRateLimit = 600
 
+/** `package.json#kody.app` (docs/package-apps.md). `client` is recorded, not built, on celld. */
+export type AppDefinition = { entry: string; assets: string | null; client: boolean }
+
 export type PackageManifest = {
 	name: string
 	version: string
@@ -92,6 +95,7 @@ export type PackageManifest = {
 	webhooks: Array<WebhookDefinition>
 	subscriptions: Array<SubscriptionDefinition>
 	secretProvider: SecretProviderDefinition | null
+	app: AppDefinition | null
 	dependencies: Record<string, string>
 	hidden: boolean
 	keywords: Array<string>
@@ -332,6 +336,61 @@ function parseSecretProvider(raw: unknown, exports: Record<string, string>): Sec
 	}
 }
 
+const reservedAssetRoot = /^(?:__version\.json|client\.[0-9a-f]{16}\.js)$/
+
+function parseApp(raw: unknown, files: PackageFiles): AppDefinition | null {
+	if (raw === undefined) return null
+	if (!isRecord(raw)) throw new KodyError('invalid_manifest', 'kody.app must be an object with an "entry".')
+	if (raw.runtime !== undefined) {
+		throw new KodyError(
+			'invalid_manifest',
+			'kody.app.runtime is not supported; kody.app.entry default-exports a fetch handler.',
+		)
+	}
+	if (typeof raw.entry !== 'string') throw new KodyError('invalid_manifest', 'kody.app.entry is required.')
+	const entry = normalizeModulePath(raw.entry)
+	if (!(entry in files)) {
+		throw new KodyError('invalid_manifest', `kody.app.entry "${entry}" is not in the package files.`)
+	}
+	let assets: string | null = null
+	if (raw.assets !== undefined) {
+		if (typeof raw.assets !== 'string')
+			throw new KodyError('invalid_manifest', 'kody.app.assets must be a directory path.')
+		assets = normalizeModulePath(raw.assets)
+		const prefix = `${assets}/`
+		const inside = Object.keys(files).filter((path) => path.startsWith(prefix))
+		if (inside.length === 0) throw new KodyError('invalid_manifest', `kody.app.assets "${assets}" has no files.`)
+		const reserved = inside.find((path) => reservedAssetRoot.test(path.slice(prefix.length)))
+		if (reserved) {
+			throw new KodyError(
+				'invalid_manifest',
+				`kody.app.assets: "${reserved}" uses a reserved root name (__version.json, client.<hash>.js); nest or rename it.`,
+			)
+		}
+	}
+	let client = false
+	if (raw.client !== undefined) {
+		const clientEntry =
+			typeof raw.client === 'string' ? raw.client : isRecord(raw.client) ? raw.client.entry : undefined
+		if (typeof clientEntry !== 'string') {
+			throw new KodyError('invalid_manifest', 'kody.app.client must be a path or { entry }.')
+		}
+		const normalized = normalizeModulePath(clientEntry)
+		if (!(normalized in files)) {
+			throw new KodyError('invalid_manifest', `kody.app.client "${normalized}" is not in the package files.`)
+		}
+		client = true
+	}
+	return { entry, assets, client }
+}
+
+/** Non-fatal notes returned by packageSave. */
+export function manifestWarnings(manifest: PackageManifest): Array<string> {
+	return manifest.app?.client
+		? ['kody.app.client is not built on kody-celld yet; the app is served server-rendered only.']
+		: []
+}
+
 export function parsePackageManifest(files: PackageFiles): PackageManifest {
 	const source = files['package.json']
 	if (!source) throw new KodyError('invalid_manifest', 'package.json is required.')
@@ -426,6 +485,7 @@ export function parsePackageManifest(files: PackageFiles): PackageManifest {
 		webhooks: parseWebhooks(kody.webhooks, exports),
 		subscriptions: parseSubscriptions(kody.subscriptions, files),
 		secretProvider: parseSecretProvider(kody.secretProvider, exports),
+		app: parseApp(kody.app, files),
 		dependencies,
 		hidden: kody.hidden === true,
 		keywords: Array.isArray(json.keywords) ? json.keywords.filter((k): k is string => typeof k === 'string') : [],
@@ -434,6 +494,7 @@ export function parsePackageManifest(files: PackageFiles): PackageManifest {
 		...Object.values(manifest.exports),
 		...Object.values(manifest.jobs).map((job) => job.entry),
 		...manifest.subscriptions.map((subscription) => subscription.handler),
+		...(manifest.app ? [manifest.app.entry] : []),
 	])
 	return manifest
 }
