@@ -389,9 +389,14 @@ function parseApp(raw: unknown, files: PackageFiles): AppDefinition | null {
 
 /** Non-fatal notes returned by packageSave. */
 export function manifestWarnings(manifest: PackageManifest): Array<string> {
-	return manifest.app?.client
-		? ['kody.app.client is not built on kody-celld yet; the app is served server-rendered only.']
-		: []
+	const warnings: Array<string> = []
+	if (manifest.app?.client) {
+		warnings.push('kody.app.client is not built on kody-celld yet; the app is served server-rendered only.')
+	}
+	if (manifest.app?.assets) {
+		warnings.push('kody.app.assets is not served on kody-celld yet; /_assets comes in a follow-up.')
+	}
+	return warnings
 }
 
 export function parsePackageManifest(files: PackageFiles): PackageManifest {
