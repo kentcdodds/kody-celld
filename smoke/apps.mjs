@@ -18,7 +18,7 @@ async function signedInBrowser(userId) {
 	return browser
 }
 
-function viaAppHost(appBase, location) {
+function viaAppHost(location) {
 	// Node cannot always resolve *.localhost; connect to the Kody listener and send the app Host header.
 	const target = new URL(location)
 	return { url: `${baseUrl}${target.pathname}${target.search}`, host: target.host }
@@ -63,7 +63,7 @@ export async function smokeApps(ctx) {
 		'/apps/open without state bounces to the app',
 		open,
 	)
-	const bounce = viaAppHost(health.apps, open.location)
+	const bounce = viaAppHost(open.location)
 	const dance = await browser.get(bounce.url, { headers: { host: bounce.host } })
 	assert(dance.status === 302 && browser.cookie('kody_app_state'), 'app origin sets kody_app_state', dance)
 	const stateMatch = /[?&]state=([0-9a-f]{32})/.exec(dance.location ?? '')
@@ -78,7 +78,7 @@ export async function smokeApps(ctx) {
 		'/apps/open with state redirects with a handoff',
 		mint,
 	)
-	const handoff = viaAppHost(health.apps, mint.location)
+	const handoff = viaAppHost(mint.location)
 
 	// 2. handoff → 302 + cookie, handoff removed
 	const swap = await browser.get(handoff.url, { headers: { host: handoff.host } })
@@ -86,12 +86,24 @@ export async function smokeApps(ctx) {
 	assert(!swap.location.includes('__kody_handoff'), 'redirect drops the handoff', swap.location)
 
 	// 3. app renders; no Kody credentials or headers reach it
-	const appPath = viaAppHost(health.apps, swap.location)
+	assert(
+		browser.cookie('kody_session') && browser.cookie('kody_app_session'),
+		'browser holds both Kody cookies when it requests the app',
+		null,
+	)
+	const appPath = viaAppHost(swap.location)
 	const page = await browser.get(appPath.url, { headers: { host: appPath.host } })
 	assert(page.status === 200, 'app page 200', page)
 	const echo = echoOf(page)
 	assert(echo.path === '/', 'handler sees the mount-stripped path', echo)
 	assert(!String(echo.cookie ?? '').includes('kody_'), 'no Kody cookie reaches the app', echo)
+	assert(
+		page.setCookies.some((c) => c.startsWith('hello=1')) &&
+			!page.setCookies.some((c) => c.includes('kody_session=evil')) &&
+			!page.headers.has('x-kody-leak'),
+		'response keeps the app cookie and drops kody_session / x-kody-* from the app',
+		{ setCookies: page.setCookies, leak: page.headers.get('x-kody-leak') },
+	)
 	assert(echo.kodyHeaders.length === 0, 'no x-kody-* header reaches the app', echo)
 	assert(echo.packageContext.appBasePath.endsWith('/packages/hello-app'), 'packageContext.appBasePath', echo)
 	assert(echo.packageContext.assetBasePath === `${echo.packageContext.appBasePath}/_assets`, 'assetBasePath', echo)
@@ -105,17 +117,58 @@ export async function smokeApps(ctx) {
 		headers: { host: appPath.host, origin: `http://${appPath.host}` },
 	})
 	assert(post.status === 303, 'POST handled by the app', post)
-	const after = echoOf(await browser.get(appPath.url, { headers: { host: appPath.host } }))
+	const afterPage = await browser.get(appPath.url, { headers: { host: appPath.host } })
+	assert(
+		echoOf(afterPage).cookie?.includes('hello=1'),
+		'the app own cookie is forwarded back to it',
+		afterPage.text.slice(0, 300),
+	)
+	const after = echoOf(afterPage)
 	assert(after.note === 'hello from smoke' && after.visits >= 2, 'packageStorage persisted the form value', after)
 
-	// 5. replayed handoff without a cookie → open-from-Kody page
+	// 5. handoffs are bound to the browser that started the dance
+	const mintFor = async (state) => {
+		const res = await browser.get(`/apps/open?package=hello-app&state=${state}`)
+		assert(res.status === 302 && res.location?.includes('__kody_handoff='), 'mint a handoff for a given state', res)
+		return viaAppHost(res.location)
+	}
+	const present = (jar, target, cookie) =>
+		jar.get(target.url, { headers: { host: target.host, ...(cookie ? { cookie } : {}) } })
+	const hex = () => randomBytes(16).toString('hex')
+
+	const noCookie = await mintFor(hex())
 	const stranger = new Browser()
-	const replay = await stranger.get(handoff.url, { headers: { host: handoff.host } })
+	const replay = await present(stranger, noCookie)
 	assert(
 		replay.status === 403 && replay.text.includes('/apps/open?package=hello-app'),
-		'replayed handoff in another browser → open-from-Kody page',
+		'handoff without a state cookie → open-from-Kody page',
 		replay,
 	)
+	assert(!stranger.cookie('kody_app_session'), 'no app session for a handoff without a state cookie', replay.setCookies)
+
+	const wrongState = await mintFor(hex())
+	const wrongJar = new Browser()
+	const wrong = await present(wrongJar, wrongState, `kody_app_state=${hex()}`)
+	assert(
+		wrong.status === 403 && wrong.text.includes('/apps/open?package=hello-app'),
+		'handoff with a different state cookie → open-from-Kody page',
+		wrong,
+	)
+	assert(!wrongJar.cookie('kody_app_session'), 'no app session for a mismatched state cookie', wrong.setCookies)
+
+	const goodState = hex()
+	const matching = await mintFor(goodState)
+	const goodJar = new Browser()
+	const good = await present(goodJar, matching, `kody_app_state=${goodState}`)
+	assert(
+		good.status === 302 && goodJar.cookie('kody_app_session'),
+		'positive control: matching state cookie swaps the handoff',
+		good,
+	)
+
+	// 5b. apps are never served on the Kody origin
+	const onKody = await browser.get(appPath.url)
+	assert(onKody.status === 404, 'the app path is not served on the Kody origin', onKody.status)
 
 	// 6. first-party routes do not exist on the app host
 	for (const route of ['/mcp', '/api/packages', '/account', '/admin/users']) {
@@ -132,7 +185,13 @@ export async function smokeApps(ctx) {
 		gone,
 	)
 	const retry = await browser.get(new URL(gone.location).pathname + new URL(gone.location).search)
-	assert(!retry.location?.includes('__kody_handoff='), 'signed-out /apps/open mints no handoff', retry)
+	assert(
+		(retry.status === 302 || retry.status === 303) &&
+			retry.location?.includes('/signin') &&
+			!retry.location.includes('__kody_handoff='),
+		'signed-out /apps/open redirects to sign-in and mints no handoff',
+		retry,
+	)
 	const goneForm = await browser.fetch(appPath.url.replace(/\/?$/, '/save'), {
 		method: 'POST',
 		form: { note: 'after sign-out' },

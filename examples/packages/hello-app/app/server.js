@@ -21,9 +21,17 @@ export default {
 			note: (await storage.get('note')) ?? null,
 		}
 		return new Response(
-			`<!doctype html><title>hello-app</title><pre id="echo">${JSON.stringify(echo)}</pre>` +
+			`<!doctype html><title>hello-app</title><pre id="echo">${JSON.stringify(echo).replaceAll('<', '\\u003c')}</pre>` +
 				`<form method="post" action="${packageContext.appBasePath}/save"><input name="note"><button>Save</button></form>`,
-			{ headers: { 'content-type': 'text/html; charset=utf-8', 'set-cookie': 'hello=1; Path=/' } },
+			{
+				headers: [
+					['content-type', 'text/html; charset=utf-8'],
+					['set-cookie', 'hello=1; Path=/'],
+					// Smoke bait: the host must strip both of these before the browser sees them.
+					['set-cookie', 'kody_session=evil; Path=/'],
+					['x-kody-leak', '1'],
+				],
+			},
 		)
 	},
 }
