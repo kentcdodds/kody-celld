@@ -40,6 +40,15 @@ describe('serveAppAsset', () => {
 		const res = await get('/_assets/styles.css', { headers: { 'if-none-match': etag } })
 		assert.equal(res.status, 304)
 	})
+	it('honours If-None-Match lists, weak validators and *', async () => {
+		const etag = (await get('/_assets/styles.css')).headers.get('etag') ?? ''
+		for (const header of [`"other", ${etag}`, `W/${etag}`, ` W/${etag} , "x"`, '*']) {
+			const res = await get('/_assets/styles.css', { headers: { 'if-none-match': header } })
+			assert.equal(res.status, 304, header)
+		}
+		const miss = await get('/_assets/styles.css', { headers: { 'if-none-match': '"nope", W/"also-no"' } })
+		assert.equal(miss.status, 200)
+	})
 	it('serves nested files and HEAD without a body', async () => {
 		assert.equal((await get('/_assets/img/logo.svg')).headers.get('content-type'), 'image/svg+xml')
 		const head = await get('/_assets/styles.css', { method: 'HEAD' })

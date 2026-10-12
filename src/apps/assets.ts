@@ -44,6 +44,14 @@ function relativeAssetPath(restPath: string): string | null {
 	return segments.join('/')
 }
 
+function matchesEtag(header: string | null, etag: string) {
+	if (!header) return false
+	return header.split(',').some((entry) => {
+		const value = entry.trim()
+		return value === '*' || value.replace(/^W\//, '') === etag
+	})
+}
+
 export async function serveAppAsset(input: {
 	request: Request
 	restPath: string
@@ -66,6 +74,6 @@ export async function serveAppAsset(input: {
 		etag,
 		'x-content-type-options': 'nosniff',
 	}
-	if (input.request.headers.get('if-none-match') === etag) return new Response(null, { status: 304, headers })
+	if (matchesEtag(input.request.headers.get('if-none-match'), etag)) return new Response(null, { status: 304, headers })
 	return new Response(input.request.method === 'HEAD' ? null : content, { status: 200, headers })
 }

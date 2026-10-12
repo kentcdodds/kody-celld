@@ -68,7 +68,9 @@ The same owner-only app session applies as for any other app request.
   `text/plain; charset=utf-8`. Every response carries `X-Content-Type-Options:
 nosniff`.
 - **Caching.** `Cache-Control: private, max-age=300` and a strong `ETag` (the
-  SHA-256 of the file). A matching `If-None-Match` gets `304`.
+  SHA-256 of the file). A matching `If-None-Match` (a list, a weak `W/`
+  form, or `*`) gets `304`. Browsers cache assets for up to 5 minutes, so a
+  re-saved stylesheet can take that long to show without a hard reload.
 - **404.** Missing files, `..` or empty segments (also percent-encoded), a bare
   `/_assets/`, and `__version.json` (this host builds no `kody.app.client`
   bundle) all answer 404. An app with no `assets` answers 404 for every
