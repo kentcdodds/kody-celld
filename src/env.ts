@@ -41,4 +41,4 @@ export type Env = LimitEnv &
 		KODY_SECRET_PROVIDER_TIMEOUT_MS?: string
 	}
 
-export const KODY_CELLD_VERSION = '0.1.1'
+export const KODY_CELLD_VERSION = '0.2.0'

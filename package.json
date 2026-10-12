@@ -1,6 +1,6 @@
 {
   "name": "kody-celld",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "license": "FSL-1.1-ALv2",
   "description": "Self-hosted Kody core (MCP search/execute, packages, secrets, jobs) running on Deno celld.",
