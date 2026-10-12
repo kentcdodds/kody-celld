@@ -97,7 +97,8 @@ export function appUrl(config: AppOriginConfig, userId: string, packageName: str
 export function matchAppRequest(config: AppOriginConfig, url: URL): AppRequestMatch | null {
 	if (!isAppOriginHost(config, url)) return null
 	const hostname = url.hostname.toLowerCase()
-	const origin = `${url.protocol}//${url.host}`
+	// Behind a TLS-terminating proxy request.url may say http while the browser is on https.
+	const origin = `${config.protocol}//${url.host}`
 	if (config.mode === 'path') {
 		if (url.pathname === '/') return { kind: 'root' }
 		const match = /^\/u\/([^/]+)(\/packages\/.*)$/.exec(url.pathname)

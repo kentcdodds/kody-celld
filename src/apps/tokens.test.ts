@@ -1,9 +1,16 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { consumeHandoff, mintHandoff, signAppSession, verifyAppSession } from './tokens.ts'
+import {
+	appStatePattern,
+	consumeHandoff,
+	mintHandoff,
+	newAppState,
+	signAppSession,
+	verifyAppSession,
+} from './tokens.ts'
 
 const key = 'test-master-key-0123456789abcdef0123456789'
-const expected = { uid: 'user_a', pkg: '@s/notes' }
+const expected = { uid: 'user_a', pkg: '@s/notes', st: 'a'.repeat(32) }
 const now = 1_760_000_000_000
 
 function burner() {
@@ -30,7 +37,7 @@ describe('handoff tokens', () => {
 		const result = await consumeHandoff({ masterKey: key, token, expected, burn: burner(), now: now + 60_000 })
 		assert.deepEqual(result, { ok: false, reason: 'expired' })
 	})
-	it('checks user and package before burning', async () => {
+	it('checks user, package and state before burning', async () => {
 		let burned = 0
 		const burn = async () => {
 			burned++
@@ -38,8 +45,10 @@ describe('handoff tokens', () => {
 		}
 		const token = await mintHandoff(key, { ...expected, sid: 's' }, now)
 		for (const other of [
-			{ uid: 'user_b', pkg: expected.pkg },
-			{ uid: expected.uid, pkg: 'other' },
+			{ ...expected, uid: 'user_b' },
+			{ ...expected, pkg: 'other' },
+			{ ...expected, st: 'b'.repeat(32) },
+			{ ...expected, st: '' },
 		]) {
 			assert.deepEqual(await consumeHandoff({ masterKey: key, token, expected: other, burn, now }), {
 				ok: false,
@@ -67,6 +76,14 @@ describe('handoff tokens', () => {
 		const value = await signAppSession(key, { uid: expected.uid, sid: 's', exp: now + 1000 })
 		const result = await consumeHandoff({ masterKey: key, token: value, expected, burn: burner(), now })
 		assert.deepEqual(result, { ok: false, reason: 'signature' })
+	})
+})
+
+describe('newAppState', () => {
+	it('returns 32 lowercase hex chars, fresh each time', () => {
+		const a = newAppState()
+		assert.match(a, appStatePattern)
+		assert.notEqual(a, newAppState())
 	})
 })
 

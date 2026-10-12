@@ -102,6 +102,10 @@ describe('matchAppRequest (path mode)', () => {
 		assert.deepEqual(at(`/u/${uid}/packages/notes`), expected)
 		assert.deepEqual(at(`/u/${uid}/packages/notes/`), expected)
 	})
+	it('builds the origin from the configured protocol, not the request protocol', () => {
+		const match = matchAppRequest(c, new URL(`http://apps.example.com/u/${uid}/packages/notes/`))
+		assert.equal(match?.kind === 'app' && match.origin, 'https://apps.example.com')
+	})
 	it('keeps the rest path and handles scoped names', () => {
 		const match = at(`/u/${uid}/packages/@scope/notes/a/b.css`)
 		assert.equal(match?.kind, 'app')

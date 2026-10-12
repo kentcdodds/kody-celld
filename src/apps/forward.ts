@@ -2,10 +2,11 @@
 // host-internal headers never reach the app; the app cannot set Kody cookies.
 
 export const appSessionCookieName = 'kody_app_session'
+export const appStateCookieName = 'kody_app_state'
 export const handoffParam = '__kody_handoff'
 export const appContextHeader = 'x-kody-app-context'
 
-const kodyCookieNames = new Set([appSessionCookieName, 'kody_session', 'kody_console'])
+const kodyCookieNames = new Set([appSessionCookieName, appStateCookieName, 'kody_session', 'kody_console'])
 
 export type AppPackageContext = {
 	packageName: string

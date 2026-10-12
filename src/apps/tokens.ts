@@ -11,7 +11,14 @@ const sessionPurpose = 'kody-celld:app-session:v1'
 export const handoffTtlMs = 60_000
 export const appSessionMaxMs = 12 * 60 * 60 * 1000
 
-export type HandoffClaims = { v: 1; uid: string; pkg: string; sid: string; exp: number; jti: string }
+export const appStatePattern = /^[0-9a-f]{32}$/
+
+/** Binds a handoff to the browser that asked for it (login-CSRF defence). */
+export function newAppState(): string {
+	return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+export type HandoffClaims = { v: 1; uid: string; pkg: string; sid: string; st: string; exp: number; jti: string }
 export type HandoffResult =
 	| { ok: true; claims: HandoffClaims }
 	| { ok: false; reason: 'malformed' | 'signature' | 'expired' | 'mismatch' | 'replay' }
@@ -80,7 +87,7 @@ const isTime = (value: unknown): value is number => typeof value === 'number' &&
 
 export async function mintHandoff(
 	masterKey: string,
-	input: { uid: string; pkg: string; sid: string },
+	input: { uid: string; pkg: string; sid: string; st: string },
 	now = Date.now(),
 ): Promise<string> {
 	const claims: HandoffClaims = { v: 1, ...input, exp: now + handoffTtlMs, jti: crypto.randomUUID() }
@@ -88,13 +95,13 @@ export async function mintHandoff(
 }
 
 /**
- * Signature → expiry → user/package binding → burn. The binding is checked
+ * Signature → shape → expiry → user/package/state binding → burn. The binding is checked
  * before the burn so a mistyped URL does not waste the owner's token.
  */
 export async function consumeHandoff(input: {
 	masterKey: string
 	token: string
-	expected: { uid: string; pkg: string }
+	expected: { uid: string; pkg: string; st: string }
 	burn: (jti: string, expiresAtMs: number) => Promise<boolean>
 	now?: number
 }): Promise<HandoffResult> {
@@ -102,13 +109,22 @@ export async function consumeHandoff(input: {
 	const opened = await unseal(input.masterKey, handoffPurpose, input.token)
 	if (!opened.ok) return opened
 	const c = opened.claims
-	if (c.v !== 1 || !isText(c.uid) || !isText(c.pkg) || !isText(c.sid) || !isText(c.jti) || !isTime(c.exp)) {
+	if (
+		c.v !== 1 ||
+		!isText(c.uid) ||
+		!isText(c.pkg) ||
+		!isText(c.sid) ||
+		!isText(c.st) ||
+		!isText(c.jti) ||
+		!isTime(c.exp)
+	) {
 		return { ok: false, reason: 'malformed' }
 	}
 	if (c.exp <= now) return { ok: false, reason: 'expired' }
-	if (c.uid !== input.expected.uid || c.pkg !== input.expected.pkg) return { ok: false, reason: 'mismatch' }
+	if (c.uid !== input.expected.uid || c.pkg !== input.expected.pkg || c.st !== input.expected.st)
+		return { ok: false, reason: 'mismatch' }
 	if (!(await input.burn(c.jti, c.exp))) return { ok: false, reason: 'replay' }
-	return { ok: true, claims: { v: 1, uid: c.uid, pkg: c.pkg, sid: c.sid, exp: c.exp, jti: c.jti } }
+	return { ok: true, claims: { v: 1, uid: c.uid, pkg: c.pkg, sid: c.sid, st: c.st, exp: c.exp, jti: c.jti } }
 }
 
 export async function signAppSession(masterKey: string, input: { uid: string; sid: string; exp: number }) {
