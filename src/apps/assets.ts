@@ -39,8 +39,9 @@ function relativeAssetPath(restPath: string): string | null {
 	} catch {
 		return null
 	}
+	if (decoded === '' || decoded.includes('\\') || decoded.includes('\0')) return null
 	const segments = decoded.split('/')
-	if (decoded === '' || segments.some((s) => s === '' || s === '.' || s === '..' || s.includes('\\'))) return null
+	if (segments.some((s) => s === '' || s === '.' || s === '..')) return null
 	return segments.join('/')
 }
 

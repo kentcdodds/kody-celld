@@ -62,6 +62,7 @@ describe('serveAppAsset', () => {
 		for (const path of [
 			'/_assets/../secret.ts',
 			'/_assets/%2e%2e/secret.ts',
+			'/_assets/%00secret.ts',
 			'/_assets/nope.css',
 			'/_assets/',
 			'/_assets/__version.json',

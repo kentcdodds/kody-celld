@@ -65,8 +65,8 @@ The same owner-only app session applies as for any other app request.
 - **Methods.** `GET` and `HEAD`; anything else is 405.
 - **Content types.** By extension: `css`, `js`/`mjs`, `json`/`map`,
   `webmanifest`, `svg`, `html`, `txt`, `xml`. Anything else is
-  `text/plain; charset=utf-8`. Every response carries `X-Content-Type-Options:
-nosniff`.
+  `text/plain; charset=utf-8`. Every response carries
+  `X-Content-Type-Options: nosniff`.
 - **Caching.** `Cache-Control: private, max-age=300` and a strong `ETag` (the
   SHA-256 of the file). A matching `If-None-Match` (a list, a weak `W/`
   form, or `*`) gets `304`. Browsers cache assets for up to 5 minutes, so a
