@@ -68,7 +68,8 @@ nothing is ever served from the public origin.
 Scoped names use two path segments (`/packages/@scope/name/`). The user slot is
 the opaque user id (`user_<hex>`; the subdomain label is `user-<hex>`). The
 value must be an origin: `http:` or `https:`, optional port, no path, query or
-fragment.
+fragment. When `KODY_PUBLIC_URL` is `https:`, the app origin must be `https:`
+too, so the app session cookie is never sent in clear text.
 
 What you need in front of it:
 

@@ -352,6 +352,9 @@ function parseApp(raw: unknown, files: PackageFiles): AppDefinition | null {
 	if (!(entry in files)) {
 		throw new KodyError('invalid_manifest', `kody.app.entry "${entry}" is not in the package files.`)
 	}
+	if (!isCodeModulePath(entry)) {
+		throw new KodyError('invalid_manifest', `kody.app.entry "${entry}" is not a JavaScript or TypeScript module.`)
+	}
 	let assets: string | null = null
 	if (raw.assets !== undefined) {
 		if (typeof raw.assets !== 'string')

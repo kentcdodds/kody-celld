@@ -485,6 +485,16 @@ describe('kody.app', () => {
 	it('has no warnings without a client', () => {
 		assert.deepEqual(manifestWarnings(parsePackageManifest(appFiles({ entry: 'app/server.ts' }))), [])
 	})
+	it('rejects an entry that is not a code module', () => {
+		assert.throws(
+			() => parsePackageManifest(appFiles({ entry: 'README.md' })),
+			/kody\.app\.entry "README\.md" is not a JavaScript or TypeScript module/,
+		)
+		assert.throws(
+			() => parsePackageManifest(appFiles({ entry: 'public/styles.css' })),
+			/not a JavaScript or TypeScript module/,
+		)
+	})
 	it('rejects bad shapes', () => {
 		const cases: Array<[unknown, Record<string, string>, RegExp]> = [
 			['app/server.ts', {}, /kody\.app must be an object/],

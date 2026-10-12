@@ -36,6 +36,12 @@ describe('readAppConfig', () => {
 			baseUrl: 'http://*.apps.localhost:8787',
 		})
 	})
+	it('refuses an http app origin when Kody itself is https', () => {
+		const result = readAppConfig({ KODY_APP_BASE_URL: 'http://apps.example.com', KODY_PUBLIC_URL: publicUrl })
+		assert.equal(result?.ok, false)
+		const plain = readAppConfig({ KODY_APP_BASE_URL: 'http://apps.lan', KODY_PUBLIC_URL: 'http://kody.lan:8080' })
+		assert.equal(plain?.ok, true)
+	})
 	it('rejects the Kody host, even on another port', () => {
 		const result = readAppConfig({ KODY_APP_BASE_URL: 'https://kody.example.com:8443', KODY_PUBLIC_URL: publicUrl })
 		assert.equal(result?.ok, false)

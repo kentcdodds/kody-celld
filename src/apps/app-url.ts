@@ -53,11 +53,16 @@ export function readAppConfig(env: {
 		hostname: parsed.hostname,
 		port: parsed.port ? `:${parsed.port}` : '',
 	}
-	let publicHostname: string
+	let publicUrl: URL
 	try {
-		publicHostname = new URL(env.KODY_PUBLIC_URL).hostname
+		publicUrl = new URL(env.KODY_PUBLIC_URL)
 	} catch {
 		return { ok: false, error: 'KODY_PUBLIC_URL is not a URL.' }
+	}
+	const publicHostname = publicUrl.hostname
+	// The app session cookie would travel in clear text while Kody's own stays Secure.
+	if (publicUrl.protocol === 'https:' && config.protocol !== 'https:') {
+		return { ok: false, error: 'KODY_APP_BASE_URL must use https when KODY_PUBLIC_URL does.' }
 	}
 	// Cookies ignore ports, so "another port on the Kody host" is still the Kody site.
 	if (publicHostname === config.hostname) {
