@@ -10,30 +10,54 @@ import { buildAppRequest, sanitizeAppResponse } from './forward.ts'
 import type { AppTarget } from './origin.ts'
 import { appErrorPage, appNotFoundPage } from './pages.ts'
 import { recordAppFailure } from './run-report.ts'
-import { appIsolateName } from './serve-name.ts'
+import { appIsolateName, appIsolateNameForGraph, stampsMatch } from './serve-name.ts'
 
 export { appIsolateName }
 
-// Warm requests skip the graph build; the loader keeps the isolate under the same name.
-const graphCache = new Map<string, Promise<ModuleGraph>>()
+// Warm requests skip the graph build. An entry is reused only while every saved
+// package it pulled in still has the `updated_at` it was built from.
+type GraphEntry = { graph: Promise<ModuleGraph>; stamps: Promise<Record<string, string>> }
+const graphCache = new Map<string, GraphEntry>()
 const graphCacheLimit = 32
 
-function cachedGraph(name: string, build: () => Promise<ModuleGraph>) {
-	let pending = graphCache.get(name)
-	if (!pending) {
-		pending = build()
-		graphCache.set(name, pending)
-		const settled = pending
-		settled.catch(() => {
-			if (graphCache.get(name) === settled) graphCache.delete(name)
-		})
-		while (graphCache.size > graphCacheLimit) {
-			const oldest = graphCache.keys().next().value
-			if (oldest === undefined) break
-			graphCache.delete(oldest)
+async function cachedGraph(
+	name: string,
+	userCell: ReturnType<typeof getUserCell>,
+	build: () => Promise<ModuleGraph>,
+): Promise<ModuleGraph> {
+	const hit = graphCache.get(name)
+	if (hit) {
+		try {
+			const built = await hit.stamps
+			const now = await userCell.packageStamps(Object.keys(built))
+			if (stampsMatch(built, now) && graphCache.get(name) === hit) {
+				// Re-insert so eviction drops the least recently used entry.
+				graphCache.delete(name)
+				graphCache.set(name, hit)
+				return await hit.graph
+			}
+		} catch {
+			// A failed build or stamp read falls through to a fresh build.
 		}
+		if (graphCache.get(name) === hit) graphCache.delete(name)
 	}
-	return pending
+	const graph = build()
+	const entry: GraphEntry = {
+		graph,
+		stamps: graph.then((built) => userCell.packageStamps(built.packages)),
+	}
+	graphCache.set(name, entry)
+	const drop = () => {
+		if (graphCache.get(name) === entry) graphCache.delete(name)
+	}
+	entry.graph.catch(drop)
+	entry.stamps.catch(drop)
+	while (graphCache.size > graphCacheLimit) {
+		const oldest = graphCache.keys().next().value
+		if (oldest === undefined) break
+		graphCache.delete(oldest)
+	}
+	return graph
 }
 
 function errorShape(error: unknown) {
@@ -57,7 +81,7 @@ export async function serveApp(input: {
 	const app = pkg?.manifest.app
 	if (!pkg || !app) return appNotFoundPage()
 	const hostedUrl = `${target.origin}${target.mountPath}`
-	const isolateName = await appIsolateName({
+	const graphKey = await appIsolateName({
 		userId: user.id,
 		packageName: pkg.name,
 		updatedAt: pkg.updatedAt,
@@ -66,7 +90,7 @@ export async function serveApp(input: {
 
 	let graph: ModuleGraph
 	try {
-		graph = await cachedGraph(isolateName, () => {
+		graph = await cachedGraph(graphKey, userCell, () => {
 			const npm = npmConfigFromEnv(env)
 			return buildModuleGraph({
 				entry: { kind: 'package', packageName: pkg.name, entryPath: app.entry },
@@ -82,6 +106,7 @@ export async function serveApp(input: {
 		return appErrorPage(500, `The app could not be built: ${shape.message}`, publicUrl)
 	}
 
+	const isolateName = await appIsolateNameForGraph({ userId: user.id, hostedUrl, modules: graph.modules })
 	const props = { userId: user.id, email: user.email, packageName: pkg.name }
 	const worker = env.LOADER.get(isolateName, () => ({
 		compatibilityDate: '2026-01-01',

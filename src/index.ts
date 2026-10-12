@@ -1,4 +1,5 @@
 import { isAppOriginHost, readAppConfig } from './apps/app-url.ts'
+import { appErrorPage } from './apps/pages.ts'
 import { handleAppOrigin } from './apps/handler.ts'
 import { handleAppsOpen, isAppsOpenRoute } from './apps/open.ts'
 import { aiConfigFromEnv, describeAiConfig } from './ai/config.ts'
@@ -481,7 +482,13 @@ export default {
 
 			const apps = readAppConfig(env)
 			if (apps?.ok && isAppOriginHost(apps.config, url)) {
-				return await handleAppOrigin(request, env, ctx, url, apps.config)
+				try {
+					return await handleAppOrigin(request, env, ctx, url, apps.config)
+				} catch (error) {
+					// Never render Kody's own error page on an app host.
+					console.error('[kody-celld] app origin failed', error)
+					return appErrorPage(500, 'Something went wrong serving this app.', env.KODY_PUBLIC_URL.replace(/\/$/, ''))
+				}
 			}
 
 			if (url.pathname === '/' && wantsHtml(request)) {

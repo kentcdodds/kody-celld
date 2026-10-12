@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { appIsolateName } from './serve-name.ts'
+import { appIsolateName, appIsolateNameForGraph, stampsMatch } from './serve-name.ts'
 import { decideAppsOpen } from './open-decision.ts'
 
 describe('appIsolateName', () => {
@@ -37,5 +37,43 @@ describe('decideAppsOpen', () => {
 		assert.equal(decideAppsOpen(''), 'bounce')
 		assert.equal(decideAppsOpen('nothex'), 'bounce')
 		assert.equal(decideAppsOpen('0123456789ABCDEF0123456789abcdef'), 'bounce')
+	})
+})
+
+describe('appIsolateNameForGraph', () => {
+	const base = {
+		userId: 'user_a',
+		hostedUrl: 'https://apps.example/u/user_a/packages/notes',
+		modules: { 'a.js': 'one', 'b.js': 'two' },
+	}
+	it('is content-addressed and order independent', async () => {
+		const name = await appIsolateNameForGraph(base)
+		assert.match(name, /^kody-app-[0-9a-f]{64}$/)
+		assert.equal(name, await appIsolateNameForGraph({ ...base, modules: { 'b.js': 'two', 'a.js': 'one' } }))
+	})
+	it('changes when one module changes', async () => {
+		assert.notEqual(
+			await appIsolateNameForGraph(base),
+			await appIsolateNameForGraph({ ...base, modules: { 'a.js': 'one', 'b.js': 'TWO' } }),
+		)
+	})
+	it('changes per mount and per user', async () => {
+		assert.notEqual(
+			await appIsolateNameForGraph(base),
+			await appIsolateNameForGraph({ ...base, hostedUrl: 'https://x/y' }),
+		)
+		assert.notEqual(await appIsolateNameForGraph(base), await appIsolateNameForGraph({ ...base, userId: 'user_b' }))
+	})
+})
+
+describe('stampsMatch', () => {
+	it('matches equal stamps', () => {
+		assert.equal(stampsMatch({ a: '1', b: '2' }, { b: '2', a: '1' }), true)
+		assert.equal(stampsMatch({}, {}), true)
+	})
+	it('rejects a changed value, a missing key and an extra key', () => {
+		assert.equal(stampsMatch({ a: '1' }, { a: '2' }), false)
+		assert.equal(stampsMatch({ a: '1', b: '2' }, { a: '1' }), false)
+		assert.equal(stampsMatch({ a: '1' }, { a: '1', b: '2' }), false)
 	})
 })

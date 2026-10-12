@@ -1097,6 +1097,19 @@ export class UserCell extends DurableObject<Env> {
 			}))
 	}
 
+	/** `updated_at` per saved package name; names that are not saved are omitted. */
+	async packageStamps(names: Array<string>): Promise<Record<string, string>> {
+		if (names.length === 0) return {}
+		const marks = names.map(() => '?').join(', ')
+		const rows = this.ctx.storage.sql
+			.exec<{ name: string; updated_at: string }>(
+				`SELECT name, updated_at FROM packages WHERE name IN (${marks})`,
+				...names,
+			)
+			.toArray()
+		return Object.fromEntries(rows.map((row) => [row.name, row.updated_at]))
+	}
+
 	async packageGet(name: string): Promise<SavedPackage | null> {
 		const row = this.ctx.storage.sql
 			.exec<{
