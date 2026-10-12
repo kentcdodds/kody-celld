@@ -42,6 +42,9 @@ Rules enforced by `src/packages/manifest.ts` on `packageSave`:
   dynamic `import()`, and imports that compiled TypeScript or JSX no longer has
   (`import type`, imports used only as types) are not checked. Install, fork
   and preview apply the same check;
+- `kody.app` (`entry`, optional `assets` and `client`) declares a browser app
+  served on its own origin; `entry` must be an uploaded module. See
+  [package-apps.md](./package-apps.md);
 - `kody.dependencies` is validated and kept on the manifest for tooling; at run
   time packages simply `import` each other via `kody:@scope/pkg/...` (there is
   no install step).

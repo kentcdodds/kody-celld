@@ -42,6 +42,24 @@ rendered into the git-ignored `wrangler.fleet.jsonc`.
 graph-build time; ad hoc code gets no scratch storage. Keep that invariant when
 touching `src/execute/module-graph.ts`.
 
+## The app origin never serves first-party routes
+
+Package apps are served only on the host(s) from `KODY_APP_BASE_URL`, and a
+request for those hosts is answered by the app branch at the top of the router
+in `src/index.ts`; `/mcp`, `/api`, `/admin`, `/oauth`, sign-in, console and the
+rest are unreachable there. If the setting is unset or invalid, apps stay off;
+they are never served on `KODY_PUBLIC_URL`. Keep that branch first and never
+add a same-origin fallback ([decision 0019](./decisions/0019-package-app-origin.md)).
+
+## Kody credentials never reach package-app code
+
+Kody cookies (`kody_session`, `kody_console`, `kody_app_session`,
+`kody_app_state`), the `__kody_handoff` parameter and every `x-kody-*` request
+header are stripped before a request reaches app code, and apps cannot set
+those cookies or `x-kody-*` headers on responses. Both directions live in
+`src/apps/forward.ts` (`buildAppRequest`, `sanitizeAppResponse`); change them
+only with tests that pin the stripping.
+
 ## Errors cross RPC by name
 
 `KodyError` encodes `code:status` into `error.name` so it survives Durable

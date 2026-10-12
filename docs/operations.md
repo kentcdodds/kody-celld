@@ -152,6 +152,12 @@ Per-webhook rate limits come from the package manifest
 | `KODY_PRIVATE_HOSTS`                 | —                                      | The one private-host allowlist: comma-separated hosts, `*.suffix` wildcards, IPs and CIDR ranges (`172.30.0.0/16`) that MCP servers and their OAuth servers, the browser and package sources may reach, and that may receive secrets over plain `http:`. MCP also checks resolved addresses against it ([mcp-servers.md](./mcp-servers.md)).                                                     |
 | `KODY_DNS_RESOLVER_URL`              | `https://cloudflare-dns.com/dns-query` | DNS-over-HTTPS endpoint (JSON API, `https:` only) used to resolve MCP server hostnames before each hop and refuse private answers that are not allowlisted. Point it at a LAN resolver to resolve `.home` names; it must speak the DoH JSON API (`?name=&type=` with `accept: application/dns-json`, as Cloudflare and Google do), not wireformat-only DoH ([mcp-servers.md](./mcp-servers.md)). |
 
+## Package apps
+
+| Variable            | Default | Notes                                                                                                                                                                                                                                                                                                         |
+| ------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `KODY_APP_BASE_URL` | unset   | Origin that serves package apps; unset = apps off. `https://apps.example.com` = path mode, `https://*.apps.example.com` = subdomain mode (wildcard DNS and cert). Must differ from the `KODY_PUBLIC_URL` host; an invalid value keeps apps off and shows in `/health` ([package-apps.md](./package-apps.md)). |
+
 ## npm imports, package sources, community catalog
 
 | Variable                  | Default          | Notes                                                                               |

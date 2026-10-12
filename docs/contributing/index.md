@@ -34,3 +34,4 @@ Follow the principles, especially
 - [Individual CLA](../legal/individual-cla.md)
 - [Entity CLA](../legal/entity-cla.md)
 - [0018: Inbound CLA](./decisions/0018-inbound-cla.md)
+- [0019: Package apps run on a separate origin](./decisions/0019-package-app-origin.md)

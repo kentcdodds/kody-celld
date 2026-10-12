@@ -139,6 +139,20 @@ roadmap is now shipped; the roadmap below is kept as the change log.
   see [run-fleet.md](./run-fleet.md#verified-and-not-verified) for what was and was
   not exercised.
 
+## Package apps
+
+[Package apps](./package-apps.md) are served, with these gaps:
+
+- **Client bundles.** `kody.app.client` is recorded but not built; apps are
+  server-rendered only.
+- **Assets.** `kody.app.assets` is validated and stored, but `/_assets/*` is
+  served in a follow-up PR, and text files only. Binary assets are not planned
+  yet (packages are UTF-8 only).
+- **Realtime.** No WebSockets or other realtime facets for apps.
+- **`packageAppFetch`** (calling an app from package code) does not exist.
+- **Public or shared apps.** Apps are owner-only. In path mode all users share
+  one app origin, so multi-user installs should use subdomain mode.
+
 ## celld-specific caveats
 
 - Import resolution in Worker Loader isolates follows the importing module's
