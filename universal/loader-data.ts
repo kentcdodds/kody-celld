@@ -133,6 +133,7 @@ export type PackageDetailView = {
 	updatedAt: string
 	hidden: boolean
 	published: { version: string } | null
+	appOpenHref: string | null
 	exports: Array<{ specifier: string; path: string }>
 	jobs: Array<{
 		id: string

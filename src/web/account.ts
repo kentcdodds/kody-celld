@@ -1,4 +1,5 @@
 import { contentSecurityPolicyWithFormAction } from '../app/security-headers.ts'
+import { packageAppLinks } from '../apps/links.ts'
 import type { Env } from '../env.ts'
 import { getUserCell } from '../execute/engine.ts'
 import { recordAudit } from '../lib/audit.ts'
@@ -238,6 +239,10 @@ export async function handleAccount(request: Request, env: Env, url: URL): Promi
 					updatedAt: pkg.updatedAt,
 					hidden: pkg.manifest.hidden,
 					published: listing ? { version: listing.version } : null,
+					appOpenHref:
+						pkg.manifest.app && !('error' in packageAppLinks(env, session.user.id, pkg.name))
+							? `/apps/open?package=${encodeURIComponent(pkg.name)}`
+							: null,
 					exports: Object.entries(pkg.manifest.exports).map(([specifier, path]) => ({
 						specifier,
 						path,

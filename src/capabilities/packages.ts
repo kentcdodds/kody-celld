@@ -1,3 +1,4 @@
+import { packageAppLinks } from '../apps/links.ts'
 import { executeRun } from '../execute/engine.ts'
 import { recordAudit } from '../lib/audit.ts'
 import { KodyError } from '../lib/errors.ts'
@@ -414,6 +415,27 @@ export const packageUpdate = defineCapability<{ name: string }>({
 	},
 })
 
+export const packageAppUrl = defineCapability<{ name: string }>({
+	domain: 'packages',
+	name: 'packageAppUrl',
+	description:
+		'Links for a saved package that declares kody.app: `url` is the app address on the package-app origin, `openUrl` is the Kody link that signs the browser in to it (open that one). Requires KODY_APP_BASE_URL; see docs/package-apps.md.',
+	tags: ['packages', 'read', 'apps'],
+	keywords: ['open app', 'package app', 'app url', 'kody.app', 'web ui'],
+	inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+	readOnly: true,
+	async handler(args, ctx) {
+		const pkg = await ctx.userCell.packageGet(args.name)
+		if (!pkg) throw new KodyError('package_not_found', `Package "${args.name}" is not saved.`, { status: 404 })
+		if (!pkg.manifest.app)
+			throw new KodyError('not_an_app', `"${args.name}" does not declare kody.app.`, { status: 400 })
+		const links = packageAppLinks(ctx.env, ctx.user.id, pkg.name)
+		if ('error' in links)
+			throw new KodyError(links.error, links.message, { status: links.error === 'apps_disabled' ? 404 : 500 })
+		return links
+	},
+})
+
 export const packageCapabilities = [
 	packageSave,
 	packagePreview,
@@ -423,4 +445,5 @@ export const packageCapabilities = [
 	packageGet,
 	packageDelete,
 	packageRun,
+	packageAppUrl,
 ]

@@ -45,6 +45,15 @@ export function AccountPackageDetail(
 					description={pkg.description ?? 'Saved package details.'}
 					actions={
 						<Actions>
+							{pkg.appOpenHref ? (
+								<a
+									href={pkg.appOpenHref}
+									target="_blank"
+									rel="noopener noreferrer"
+								>
+									Open app
+								</a>
+							) : null}
 							<ActionForm
 								action={detailHref}
 								csrf={data.csrf}
