@@ -96,14 +96,16 @@ Apps are opened from Kody; there is no separate login.
 - Agents call `packageAppUrl({ name })`, which returns `{ url, openUrl }`: `url`
   is the bare app address, `openUrl` the `/apps/open` link to give the person.
   Errors: `apps_disabled` (404), `package_not_found` (404), `not_an_app` (400),
-  `app_origin_misconfigured` (500).
+  `app_origin_misconfigured` (500), `app_origin_unmappable` (500, an account id that
+  cannot become a subdomain label).
 - `GET /apps/open?package=<name>` on the main origin needs a Kody web session
   (otherwise it redirects to sign-in and back).
 
 The flow, which the browser follows by itself:
 
-1. `/apps/open?package=<name>` has no `state` yet, so it redirects to the app
-   URL.
+1. `/apps/open?package=<name>` without a valid `state` redirects to the bare
+   app URL, which starts the state round trip. The **Open app** link and
+   `packageAppUrl().openUrl` both go this way.
 2. The app origin has no session, so it sets a short-lived `kody_app_state`
    cookie (5 minutes) and redirects to `/apps/open?package=<name>&state=<state>`.
 3. `/apps/open` mints a **handoff token** bound to the user, the package, the
@@ -123,11 +125,15 @@ what stops someone else's link from signing your browser in to their app.
 mode and `/` in subdomain mode, and covers all of that user's apps. **Every
 request** re-checks the parent Kody session, so signing out or revoking it ends
 app access immediately. Access is **owner-only**: the session's user must be
-the user in the URL. Anyone else (or nobody) gets an "Open from Kody" page that
-points back at `/apps/open`. Rotating `KODY_MASTER_KEY` invalidates every
+the user in the URL. A GET or HEAD without a valid session, or with another
+user's session, is not refused: it starts the state round trip above, which
+ends at Kody (and sign-in if needed). The 403 "Open this app from Kody" page,
+linking to `/apps/open`, is shown only for non-GET/HEAD requests, a failed
+handoff (this stops redirect loops), or an account that no longer exists. Rotating `KODY_MASTER_KEY` invalidates every
 handoff and app session.
 
-Anything else on the app origin is 404: `/mcp`, `/api`, `/admin`, `/oauth`,
+On the app host, `/` redirects to `KODY_PUBLIC_URL`. Anything else outside an
+app mount is 404: `/mcp`, `/api`, `/admin`, `/oauth`,
 sign-in, console and the rest are never reachable there.
 
 ## Security model
