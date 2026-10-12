@@ -21,7 +21,7 @@ export default {
 			note: (await storage.get('note')) ?? null,
 		}
 		return new Response(
-			`<!doctype html><title>hello-app</title><pre id="echo">${JSON.stringify(echo).replaceAll('<', '\\u003c')}</pre>` +
+			`<!doctype html><title>hello-app</title><link rel="stylesheet" href="${packageContext.assetBasePath}/styles.css"><pre id="echo">${JSON.stringify(echo).replaceAll('<', '\\u003c')}</pre>` +
 				`<form method="post" action="${packageContext.appBasePath}/save"><input name="note"><button>Save</button></form>`,
 			{
 				headers: [

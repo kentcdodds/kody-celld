@@ -110,6 +110,25 @@ export async function smokeApps(ctx) {
 	assert(!('clientModuleUrl' in echo.packageContext), 'clientModuleUrl is absent', echo)
 	assert(page.headers.get('x-content-type-options') === 'nosniff', 'nosniff added', page.headers)
 
+	// 3b. assets: served by the host, typed, cached, revalidated
+	const assetUrl = appPath.url.replace(/\/?$/, '/_assets/styles.css')
+	const asset = await browser.get(assetUrl, { headers: { host: appPath.host } })
+	assert(
+		asset.status === 200 && asset.headers.get('content-type')?.startsWith('text/css'),
+		'/_assets/styles.css served as text/css',
+		asset,
+	)
+	assert(asset.text.includes('system-ui'), 'asset body is the packaged file', asset.text)
+	assert(asset.headers.get('x-content-type-options') === 'nosniff', 'asset response is nosniff', asset.headers)
+	const etag = asset.headers.get('etag')
+	assert(etag, 'asset carries an etag', asset.headers)
+	const revalidated = await browser.get(assetUrl, { headers: { host: appPath.host, 'if-none-match': etag } })
+	assert(revalidated.status === 304, 'matching If-None-Match → 304', revalidated.status)
+	const versionJson = await browser.get(appPath.url.replace(/\/?$/, '/_assets/__version.json'), {
+		headers: { host: appPath.host },
+	})
+	assert(versionJson.status === 404, '/_assets/__version.json is 404', versionJson.status)
+
 	// 4. POST body arrives; storage persists
 	const post = await browser.fetch(appPath.url.replace(/\/?$/, '/save'), {
 		method: 'POST',

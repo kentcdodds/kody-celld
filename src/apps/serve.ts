@@ -6,6 +6,7 @@ import { npmConfigFromEnv } from '../execute/npm-config.ts'
 import { randomId } from '../lib/crypto.ts'
 import { KodyError } from '../lib/errors.ts'
 import { limitsFromEnv } from '../lib/limits.ts'
+import { isAssetPath, serveAppAsset } from './assets.ts'
 import { buildAppRequest, sanitizeAppResponse } from './forward.ts'
 import type { AppTarget } from './origin.ts'
 import { appErrorPage, appNotFoundPage } from './pages.ts'
@@ -80,6 +81,9 @@ export async function serveApp(input: {
 	const pkg = await userCell.packageGet(target.packageName)
 	const app = pkg?.manifest.app
 	if (!pkg || !app) return appNotFoundPage()
+	if (isAssetPath(target.restPath)) {
+		return serveAppAsset({ request: input.request, restPath: target.restPath, files: pkg.files, assetsDir: app.assets })
+	}
 	const hostedUrl = `${target.origin}${target.mountPath}`
 	const graphKey = await appIsolateName({
 		userId: user.id,

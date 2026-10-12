@@ -55,6 +55,30 @@ Manifest rules (checked on `packageSave`): `entry` must be an uploaded module;
 refused. A saved package that is re-saved, or whose `kody.dependencies` are
 re-saved, serves the new code on its next request.
 
+## Assets
+
+`kody.app.assets` names a directory of the package (for example `./public`).
+Its files are served by the host, not by your handler, at
+`<appBasePath>/_assets/<path inside the directory>` (that is `assetBasePath`).
+The same owner-only app session applies as for any other app request.
+
+- **Methods.** `GET` and `HEAD`; anything else is 405.
+- **Content types.** By extension: `css`, `js`/`mjs`, `json`/`map`,
+  `webmanifest`, `svg`, `html`, `txt`, `xml`. Anything else is
+  `text/plain; charset=utf-8`. Every response carries `X-Content-Type-Options:
+nosniff`.
+- **Caching.** `Cache-Control: private, max-age=300` and a strong `ETag` (the
+  SHA-256 of the file). A matching `If-None-Match` gets `304`.
+- **404.** Missing files, `..` or empty segments (also percent-encoded), a bare
+  `/_assets/`, and `__version.json` (this host builds no `kody.app.client`
+  bundle) all answer 404. An app with no `assets` answers 404 for every
+  `/_assets/*` request.
+- **Reserved names.** Root files named `__version.json` or `client.<16 hex>.js`
+  are refused at save time; nest or rename them.
+- **Text only.** Packages hold UTF-8 text, so binary assets (images, fonts)
+  cannot be packaged yet. Inline SVG or data URIs work; see
+  [known-gaps.md](./known-gaps.md).
+
 ## Turning it on
 
 Set `KODY_APP_BASE_URL` on the node. Unset means package apps are off and
@@ -184,10 +208,8 @@ nosniff`. Other cookies and headers pass through; the app owns its own CSP.
 - **Server-rendered only.** `kody.app.client` is recorded on the manifest but
   not built; `packageSave` returns a warning and the app is served
   server-rendered.
-- **Text-only assets, served in a follow-up PR.** `kody.app.assets` is
-  validated and stored now, but `/_assets/*` is not served yet. When it lands it
-  will serve text files only (packages are UTF-8 only). Until then
-  `assetBasePath` points at a path that returns nothing useful.
+- **Text-only assets.** `/_assets/*` serves text files only (packages are
+  UTF-8 only); see [Assets](#assets).
 - No realtime or WebSockets, no `packageAppFetch`, no public or shared apps (see
   [known-gaps.md](./known-gaps.md)).
 - **Failures-only run records.** A request that succeeds writes nothing. A graph
