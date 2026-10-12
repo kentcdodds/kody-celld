@@ -51,6 +51,16 @@ rest are unreachable there. If the setting is unset or invalid, apps stay off;
 they are never served on `KODY_PUBLIC_URL`. Keep that branch first and never
 add a same-origin fallback ([decision 0019](./decisions/0019-package-app-origin.md)).
 
+## Keep the app registrable domain apart from Kody's
+
+`KODY_APP_BASE_URL` SHOULD use a different registrable domain from
+`KODY_PUBLIC_URL` (e.g. `kody.example.com` and `example-apps.net`). With a
+shared parent domain, untrusted app JS can set `Domain=<parent>` cookies that
+the Kody origin receives and that shadow the host-only `kody_session`
+(lock-out; on multi-user installs, login-CSRF). Server-side `Set-Cookie`
+filtering cannot stop client JS. Planned hardening: `__Host-`-prefixed Kody
+cookies (follow-up).
+
 ## Kody credentials never reach package-app code
 
 Kody cookies (`kody_session`, `kody_console`, `kody_app_session`,

@@ -87,6 +87,18 @@ to apps, `/health` reports `apps: { error: "…" }` (a healthy node reports the
 base URL string, or `null` when unset), and `/apps/open` answers 500
 `app_origin_misconfigured`. There is no fallback to the public origin.
 
+**Use a different registrable domain for apps.** `KODY_APP_BASE_URL` SHOULD
+sit on a different registrable domain from `KODY_PUBLIC_URL` (for example
+`kody.example.com` for Kody and `example-apps.net` for apps). If they share
+one, untrusted app JavaScript can set a cookie such as
+`kody_session=x; Domain=example.com; Path=/account` that the Kody origin then
+receives alongside (and ahead of) the real host-only cookie. The consequence is
+a lock-out of account pages until the browser's cookies are cleared, and on
+multi-user installs, signing a browser into another account. Server-side
+`Set-Cookie` filtering cannot stop script running in the browser. Hardening with
+`__Host-`-prefixed Kody cookies is planned as a follow-up, not part of this
+release.
+
 ## Opening an app
 
 Apps are opened from Kody; there is no separate login.
@@ -152,6 +164,12 @@ nosniff`. Other cookies and headers pass through; the app owns its own CSP.
   is not the app's own origin, or a `Sec-Fetch-Site` other than `same-origin`,
   is refused with 403. Sibling apps in subdomain mode are same-site, and CORS
   would only block their reads.
+- **Same-site cookie tossing.** When the app host and the Kody host share a
+  registrable domain, app JavaScript can plant cookies that the Kody origin
+  receives (lock-out until cookies are cleared; on multi-user installs, signing
+  a browser into another account). Use a different registrable domain for
+  `KODY_APP_BASE_URL`; `__Host-` cookie prefixes are planned as follow-up
+  hardening.
 - **Path-mode caveat.** In path mode every user's apps share one origin, and the
   cookie path does not stop one user's script from reading another's pages. Use
   subdomain mode on any install with more than one user.
@@ -174,6 +192,12 @@ nosniff`. Other cookies and headers pass through; the app owns its own CSP.
 - **Failures-only run records.** A request that succeeds writes nothing. A graph
   build error, a handler that throws or returns 5xx, or a timeout writes a
   `kind: app` run with its logs; find it in run history.
+- **Gateway events.** Outbound fetches made while serving an app request are
+  not recorded as gateway events on a run; only failures write `app` runs.
+- **`packageContext.runId`** can be stale under concurrent requests in one
+  isolate. Use it for log correlation only.
+- **Re-auth lands on the app root.** After signing in again the browser returns
+  to the app root, not the deep link it asked for (follow-up).
 - **Timeout** is `KODY_EXECUTE_TIMEOUT_MS` (default 60 s); exceeding it answers 504.
 
 ## Example and smoke test
@@ -192,6 +216,10 @@ KODY_APP_BASE_URL=http://apps.localhost:8787
 ```
 
 then run `node smoke/run.mjs --only apps`. It signs in, follows the open flow,
-checks the echo and storage, a handoff replay, no-session and other-user access,
-that `/mcp` and `/api` are 404 on the app host, and that signing out ends
-access. Without `KODY_APP_BASE_URL` the scenario skips itself.
+checks the echo and storage, a handoff without a state cookie, with a wrong one
+and with the matching one, that Kody credentials are stripped in both
+directions, that first-party routes such as `/mcp` and `/api` are 404 on the
+app host, that the app path is 404 on the Kody host, a POST body and storage,
+and that signing out ends access. Handoff replay and foreign-session refusal
+are covered by unit tests (`src/apps/tokens.test.ts`, `src/apps/origin.test.ts`),
+not by the smoke. Without `KODY_APP_BASE_URL` the scenario skips itself.

@@ -49,5 +49,8 @@ Alternatives considered:
   needs wildcard DNS and a wildcard cert.
 - Apps cannot be shared or made public yet, and have no client bundles, binary
   assets, realtime or `packageAppFetch`. See [known-gaps.md](../../known-gaps.md).
+- Apps and Kody should sit on different registrable domains; on a shared parent
+  domain, app JS can plant cookies the Kody origin receives (see
+  [package-apps.md](../../package-apps.md)).
 - Rotating `KODY_MASTER_KEY` signs everyone out of their apps.
 - Only failures write run records, so a busy app does not fill run history.
