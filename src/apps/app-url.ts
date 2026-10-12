@@ -1,4 +1,3 @@
-// src/apps/app-url.ts
 import { packageNamePattern } from '../packages/manifest.ts'
 
 /**

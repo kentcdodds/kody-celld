@@ -14,6 +14,7 @@ import type { PackageFiles } from '../packages/manifest.ts'
 import { parsePackageManifest } from '../packages/manifest.ts'
 import type { SavedPackage } from '../cells/user-cell.ts'
 import { communitySourcePrefix, renamePackageFiles } from './community.ts'
+import { mergeSaveWarnings } from './save-warnings.ts'
 import { defineCapability, defineDomain, type CapabilityContext } from './define.ts'
 
 export const packagesDomain = defineDomain({
@@ -258,7 +259,7 @@ export default async function main() {
 			fetchedFrom: fetched.fetchedFrom,
 			commit: fetched.commit ?? null,
 			files: Object.keys(files).length,
-			warnings: fetched.warnings,
+			warnings: mergeSaveWarnings(saved, fetched.warnings),
 			fork: savedSource.endsWith('(fork)'),
 		}
 	},
@@ -358,7 +359,12 @@ async function updateFromCommunity(pkg: SavedPackage, ctx: CapabilityContext) {
 		target: saved.name,
 		details: { version: saved.version, previousVersion: pkg.version, source: saved.source },
 	})
-	return { ...saved, previousVersion: pkg.version, fetchedFrom: `community:${listing.name}`, warnings: [] }
+	return {
+		...saved,
+		previousVersion: pkg.version,
+		fetchedFrom: `community:${listing.name}`,
+		warnings: mergeSaveWarnings(saved, []),
+	}
 }
 
 export const packageUpdate = defineCapability<{ name: string }>({
@@ -410,7 +416,7 @@ export const packageUpdate = defineCapability<{ name: string }>({
 			previousVersion: pkg.version,
 			fetchedFrom: fetched.fetchedFrom,
 			commit: fetched.commit ?? null,
-			warnings: fetched.warnings,
+			warnings: mergeSaveWarnings(saved, fetched.warnings),
 		}
 	},
 })

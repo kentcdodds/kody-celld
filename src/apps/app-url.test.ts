@@ -1,4 +1,3 @@
-// src/apps/app-url.test.ts
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { appMountPath, appOrigin, appUrl, isAppOriginHost, matchAppRequest, readAppConfig } from './app-url.ts'
