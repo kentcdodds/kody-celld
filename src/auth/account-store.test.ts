@@ -185,3 +185,40 @@ describe('AccountStore API tokens', () => {
 		assert.equal(s.tokenList(user).length, 0)
 	})
 })
+
+describe('AccountStore package-app handoffs and session liveness', () => {
+	it('burns a handoff id once', () => {
+		const { store: s } = store()
+		const exp = Date.now() + 60_000
+		assert.equal(s.appHandoffBurn('jti-1', exp), true)
+		assert.equal(s.appHandoffBurn('jti-1', exp), false)
+		assert.equal(s.appHandoffBurn('jti-2', exp), true)
+	})
+	it('prunes expired handoff ids', () => {
+		const { db, store: s } = store()
+		assert.equal(s.appHandoffBurn('old', Date.now() - 1), true)
+		s.appHandoffBurn('new', Date.now() + 60_000)
+		const rows = db.prepare('SELECT jti FROM app_handoffs ORDER BY jti').all() as Array<{ jti: string }>
+		assert.deepEqual(
+			rows.map((r) => r.jti),
+			['new'],
+		)
+	})
+	it('reports a session alive until it is deleted, revoked, or expired', async () => {
+		const { db, store: s } = store()
+		const created = await s.sessionCreate({ userId: user, ttlMs: 60_000, userAgent: null })
+		const resolved = await s.sessionResolve(created.id, 60_000)
+		assert.ok(resolved)
+		assert.equal(s.sessionAlive(user, resolved.id), true)
+		assert.equal(s.sessionAlive('user_other', resolved.id), false)
+		db.prepare('UPDATE sessions SET expires_at = ? WHERE id = ?').run(
+			new Date(Date.now() - 1).toISOString(),
+			resolved.id,
+		)
+		assert.equal(s.sessionAlive(user, resolved.id), false)
+		const second = await s.sessionCreate({ userId: user, ttlMs: 60_000, userAgent: null })
+		const secondId = (await s.sessionResolve(second.id, 60_000))?.id ?? ''
+		s.sessionRevoke(user, secondId)
+		assert.equal(s.sessionAlive(user, secondId), false)
+	})
+})

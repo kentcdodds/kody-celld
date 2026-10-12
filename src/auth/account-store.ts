@@ -53,6 +53,10 @@ export const accountSchema = `
 		failures INTEGER NOT NULL,
 		locked_until TEXT
 	);
+	CREATE TABLE IF NOT EXISTS app_handoffs (
+		jti TEXT PRIMARY KEY,
+		expires_at INTEGER NOT NULL
+	);
 `
 
 /** Public, non-secret handle for an API token row (the row key is the token's full SHA-256). */
@@ -273,6 +277,21 @@ export class AccountStore {
 			? this.sql.exec('DELETE FROM sessions WHERE user_id = ? AND id = ?', userId, sessionId)
 			: this.sql.exec('DELETE FROM sessions WHERE user_id = ?', userId)
 		return cursor.rowsWritten
+	}
+
+	/** Burns a package-app handoff id (docs/package-apps.md); false means it was already used. */
+	appHandoffBurn(jti: string, expiresAtMs: number): boolean {
+		this.sql.exec('DELETE FROM app_handoffs WHERE expires_at <= ?', Date.now())
+		const cursor = this.sql.exec('INSERT OR IGNORE INTO app_handoffs (jti, expires_at) VALUES (?, ?)', jti, expiresAtMs)
+		return cursor.rowsWritten > 0
+	}
+
+	/** True while the public session id (`sess_…`) exists for this user and has not expired. */
+	sessionAlive(userId: string, sessionId: string): boolean {
+		const row = this.sql
+			.exec<{ expires_at: string }>('SELECT expires_at FROM sessions WHERE id = ? AND user_id = ?', sessionId, userId)
+			.toArray()[0]
+		return row !== undefined && Date.parse(row.expires_at) > Date.now()
 	}
 
 	// --------------------------------------------------------------- api tokens

@@ -490,6 +490,14 @@ export class RegistryCell extends DurableObject<Env> {
 		return this.accounts.sessionRevoke(userId, sessionId)
 	}
 
+	async appHandoffBurn(jti: string, expiresAtMs: number) {
+		return this.accounts.appHandoffBurn(jti, expiresAtMs)
+	}
+
+	async sessionAlive(userId: string, sessionId: string) {
+		return this.accounts.sessionAlive(userId, sessionId)
+	}
+
 	async tokenList(userId: string) {
 		return this.accounts.tokenList(userId)
 	}
