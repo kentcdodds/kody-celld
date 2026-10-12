@@ -15,3 +15,6 @@ KODY_EMAIL_INBOUND_TOKEN=dev-email-inbound-token-only-for-celld-dev
 KODY_EMAIL_OUTBOUND_PROVIDER=bridge
 KODY_EMAIL_OUTBOUND_URL=http://127.0.0.1:9796
 KODY_EMAIL_OUTBOUND_TOKEN=dev-email-bridge-token-only-for-celld-dev
+
+# Package apps smoke (smoke/apps.mjs): path-mode app origin on the dev listener.
+KODY_APP_BASE_URL=http://apps.localhost:8787

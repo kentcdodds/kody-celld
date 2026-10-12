@@ -143,7 +143,7 @@ npm run dev          # celld dev . --port 8787  (state persists in .celld/dev)
 In another terminal:
 
 ```sh
-npm run smoke        # mcp, packages, secrets, jobs, limits, memory, blobs, browser, webhooks, email, integrations, secret-providers, oauth-server, web, npm, install, community against http://127.0.0.1:8787
+npm run smoke        # mcp, packages, secrets, jobs, limits, memory, blobs, browser, webhooks, email, integrations, secret-providers, oauth-server, web, npm, install, community, apps against http://127.0.0.1:8787
 npm run smoke:cron   # same, plus waits (~60s) for celld's real cron trigger to run a job
 ```
 
@@ -153,7 +153,7 @@ serve non-loopback requests while those placeholders are in effect. `npm run
 dev` seeds a git-ignored `.dev.vars` from `.dev.vars.example` (email smoke,
 private-host allowances) and merges `127.0.0.1`/`localhost`/`host.docker.internal` into
 `KODY_PRIVATE_HOSTS` when an older file lacks them; put real operator
-values there if you want to expose a dev node.
+values there if you want to expose a dev node. Add `KODY_APP_BASE_URL=http://apps.localhost:8787` to `.dev.vars` to enable (and smoke-test) package apps.
 
 > `celld dev` rebuilds on any project file change, including edits under
 > `smoke/`; pass `--watch-ignore 'smoke/**'` if you edit tests while a smoke run

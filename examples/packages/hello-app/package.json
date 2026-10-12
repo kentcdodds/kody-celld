@@ -1,0 +1,13 @@
+{
+  "name": "hello-app",
+  "version": "1.0.0",
+  "description": "Smallest package app: echoes what the host hands it and counts visits.",
+  "exports": {
+    ".": "./index.js"
+  },
+  "kody": {
+    "app": {
+      "entry": "./app/server.js"
+    }
+  }
+}
