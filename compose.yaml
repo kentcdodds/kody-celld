@@ -28,6 +28,7 @@ services:
       KODY_MASTER_KEY: ${KODY_MASTER_KEY:-}
       KODY_MASTER_KEY_PREVIOUS: ${KODY_MASTER_KEY_PREVIOUS:-}
       KODY_PRIVATE_HOSTS: ${KODY_PRIVATE_HOSTS:-}
+      KODY_APP_BASE_URL: ${KODY_APP_BASE_URL:-}
       # Limits and quota defaults (docs/operations.md); empty = built-in default.
       KODY_EXECUTE_TIMEOUT_MS: ${KODY_EXECUTE_TIMEOUT_MS:-}
       KODY_RUN_RETENTION_COUNT: ${KODY_RUN_RETENTION_COUNT:-}

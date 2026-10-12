@@ -1,4 +1,5 @@
 import { WorkerEntrypoint } from 'cloudflare:workers'
+import { recordAppFailure } from '../apps/run-report.ts'
 import type { CapabilityContext } from '../capabilities/define.ts'
 import { mcpDeps } from '../capabilities/mcp-servers.ts'
 import { runCapability } from '../capabilities/registry.ts'
@@ -108,6 +109,23 @@ export class RuntimeHost extends WorkerEntrypoint<Env, RuntimeProps> {
 			})
 			throw new Error(`${json.error}: ${json.message}`, { cause: error })
 		}
+	}
+
+	/** Package-app wrapper: a thrown handler or a >= 500 response becomes an `app` error run. */
+	async appRunReport(input: { status: number; error: { name: string; message: string } | null; logs: Array<unknown> }) {
+		const packageName = this.ctx.props.packageName
+		if (!packageName) return
+		const status = typeof input?.status === 'number' ? input.status : 500
+		const error =
+			input?.error && typeof input.error.name === 'string' && typeof input.error.message === 'string'
+				? { name: input.error.name.slice(0, 200), message: input.error.message.slice(0, 2000) }
+				: { name: 'app_http_error', message: `The app responded ${status}.` }
+		await recordAppFailure(this.env, {
+			userId: this.ctx.props.userId,
+			packageName,
+			error,
+			logs: Array.isArray(input?.logs) ? input.logs : [],
+		})
 	}
 
 	async storageGet(packageName: string, key: string): Promise<unknown> {

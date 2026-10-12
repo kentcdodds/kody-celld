@@ -46,6 +46,7 @@ services:
       KODY_MASTER_KEY: ${KODY_MASTER_KEY:?set KODY_MASTER_KEY in .env (32+ random characters)}
       KODY_MASTER_KEY_PREVIOUS: ${KODY_MASTER_KEY_PREVIOUS:-}
       KODY_PRIVATE_HOSTS: ${KODY_PRIVATE_HOSTS:-}
+      KODY_APP_BASE_URL: ${KODY_APP_BASE_URL:-}
       KODY_PUBLIC_URL: ${KODY_PUBLIC_URL:?set KODY_PUBLIC_URL in .env}
       KODY_ALLOW_HTTP_PUBLIC_URL: ${KODY_ALLOW_HTTP_PUBLIC_URL:-0}
       # Limits and quota defaults (docs/operations.md); empty = built-in default.
