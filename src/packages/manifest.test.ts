@@ -471,7 +471,6 @@ describe('kody.app', () => {
 		assert.deepEqual(parsed.app, { entry: 'app/server.ts', assets: 'public', client: true })
 		assert.deepEqual(manifestWarnings(parsed), [
 			'kody.app.client is not built on kody-celld yet; the app is served server-rendered only.',
-			'kody.app.assets is not served on kody-celld yet; /_assets comes in a follow-up.',
 		])
 	})
 	it('accepts the object client form', () => {
@@ -483,13 +482,8 @@ describe('kody.app', () => {
 		)
 		assert.equal(parsed.app?.client, true)
 	})
-	it('has no warnings without a client or assets', () => {
+	it('has no warnings without a client', () => {
 		assert.deepEqual(manifestWarnings(parsePackageManifest(appFiles({ entry: 'app/server.ts' }))), [])
-	})
-	it('warns when assets are declared but not yet served', () => {
-		assert.deepEqual(manifestWarnings(parsePackageManifest(appFiles({ entry: 'app/server.ts', assets: 'public' }))), [
-			'kody.app.assets is not served on kody-celld yet; /_assets comes in a follow-up.',
-		])
 	})
 	it('rejects an entry that is not a code module', () => {
 		assert.throws(
