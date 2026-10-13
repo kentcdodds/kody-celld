@@ -54,6 +54,7 @@
     "remix": "3.0.0",
     "shiki": "^4.5.0",
     "strip-json-comments": "5.0.3",
-    "sucrase": "3.35.1"
+    "sucrase": "3.35.1",
+    "tldts": "^7.4.18"
   }
 }

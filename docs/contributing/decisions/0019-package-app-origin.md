@@ -50,7 +50,9 @@ Alternatives considered:
 - Apps cannot be shared or made public yet, and have no client bundles, binary
   assets, realtime or `packageAppFetch`. See [known-gaps.md](../../known-gaps.md).
 - Apps and Kody should sit on different registrable domains; on a shared parent
-  domain, app JS can plant cookies the Kody origin receives (see
+  domain, app JS can plant cookies the Kody origin receives. https installs
+  harden first-party cookies with `__Host-` prefixes
+  ([0020](./0020-host-prefixed-kody-cookies.md); see
   [package-apps.md](../../package-apps.md)).
 - Rotating `KODY_MASTER_KEY` signs everyone out of their apps.
 - Only failures write run records, so a busy app does not fill run history.

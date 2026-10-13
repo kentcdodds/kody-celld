@@ -35,3 +35,4 @@ Follow the principles, especially
 - [Entity CLA](../legal/entity-cla.md)
 - [0018: Inbound CLA](./decisions/0018-inbound-cla.md)
 - [0019: Package apps run on a separate origin](./decisions/0019-package-app-origin.md)
+- [0020: `__Host-` prefixes for Kody first-party cookies](./decisions/0020-host-prefixed-kody-cookies.md)

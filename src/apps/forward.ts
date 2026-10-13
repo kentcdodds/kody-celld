@@ -1,3 +1,5 @@
+import { kodyFirstPartyCookieNames } from '../auth/cookies.ts'
+
 // What crosses between the app origin and package code. Kody credentials and
 // host-internal headers never reach the app; the app cannot set Kody cookies.
 
@@ -6,7 +8,7 @@ export const appStateCookieName = 'kody_app_state'
 export const handoffParam = '__kody_handoff'
 export const appContextHeader = 'x-kody-app-context'
 
-const kodyCookieNames = new Set([appSessionCookieName, appStateCookieName, 'kody_session', 'kody_console'])
+const kodyCookieNames = new Set([appSessionCookieName, appStateCookieName, ...kodyFirstPartyCookieNames])
 
 export type AppPackageContext = {
 	packageName: string

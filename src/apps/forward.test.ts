@@ -30,11 +30,15 @@ describe('searchWithoutHandoff', () => {
 })
 
 describe('cookieHeaderWithoutKody', () => {
-	it('strips every Kody cookie and keeps the app’s own', () => {
+	it('strips every Kody cookie (including __Host- names) and keeps the app’s own', () => {
 		assert.equal(
 			cookieHeaderWithoutKody(
 				'kody_session=s; theme=dark; kody_app_session=a; kody_app_state=st; kody_console=c; cart=1',
 			),
+			'theme=dark; cart=1',
+		)
+		assert.equal(
+			cookieHeaderWithoutKody('__Host-kody_session=s; theme=dark; __Host-kody_console=c; kody_app_session=a; cart=1'),
 			'theme=dark; cart=1',
 		)
 		assert.equal(cookieHeaderWithoutKody('kody_app_session=a'), null)
@@ -82,6 +86,8 @@ describe('sanitizeAppResponse', () => {
 		})
 		headers.append('set-cookie', 'kody_app_session=forged; Path=/')
 		headers.append('set-cookie', 'kody_session=forged; Path=/')
+		headers.append('set-cookie', '__Host-kody_session=forged; Path=/; Secure')
+		headers.append('set-cookie', '__Host-kody_console=forged; Path=/; Secure')
 		headers.append('set-cookie', 'kody_app_state=forged; Path=/')
 		headers.append('set-cookie', 'theme=dark; Path=/')
 		const clean = sanitizeAppResponse(new Response('body', { status: 302, headers }))

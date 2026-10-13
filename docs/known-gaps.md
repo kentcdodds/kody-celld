@@ -150,11 +150,12 @@ roadmap is now shipped; the roadmap below is kept as the change log.
   are not planned yet (packages are UTF-8 only).
 - **Realtime.** No WebSockets or other realtime facets for apps.
 - **`packageAppFetch`** (calling an app from package code) does not exist.
-- **Same-site cookie tossing.** If `KODY_APP_BASE_URL` shares a registrable
-  domain with `KODY_PUBLIC_URL`, untrusted app JS can plant cookies the Kody
-  origin receives (account-page lock-out; on multi-user installs, signing a
-  browser into another account). Use a different registrable domain;
-  `__Host-`-prefixed Kody cookies are planned hardening.
+- **Same-site cookie tossing (mitigated on https).** If `KODY_APP_BASE_URL`
+  shares a registrable domain with `KODY_PUBLIC_URL`, untrusted app JS can
+  still plant non-`__Host-` cookies the Kody origin receives. https installs
+  use `__Host-kody_session` / `__Host-kody_console` so those names cannot be
+  shadowed; prefer a separate registrable domain anyway
+  ([decision 0020](./contributing/decisions/0020-host-prefixed-kody-cookies.md)).
 - **Public or shared apps.** Apps are owner-only. In path mode all users share
   one app origin, so multi-user installs should use subdomain mode.
 

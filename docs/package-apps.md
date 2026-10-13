@@ -119,12 +119,12 @@ sit on a different registrable domain from `KODY_PUBLIC_URL` (for example
 `kody.example.com` for Kody and `example-apps.net` for apps). If they share
 one, untrusted app JavaScript can set a cookie such as
 `kody_session=x; Domain=example.com; Path=/account` that the Kody origin then
-receives alongside (and ahead of) the real host-only cookie. The consequence is
-a lock-out of account pages until the browser's cookies are cleared, and on
-multi-user installs, signing a browser into another account. Server-side
-`Set-Cookie` filtering cannot stop script running in the browser. Hardening with
-`__Host-`-prefixed Kody cookies is planned as a follow-up, not part of this
-release.
+receives. On https installs Kody's own cookies are `__Host-kody_session` and
+`__Host-kody_console` (Secure, Path=/, no Domain), so sibling hosts cannot
+plant or shadow those names; a separate domain is still recommended. The node
+logs a startup warning when the two origins share a registrable domain.
+Server-side `Set-Cookie` filtering cannot stop script running in the browser.
+See [decision 0020](./contributing/decisions/0020-host-prefixed-kody-cookies.md).
 
 ## Opening an app
 
@@ -181,22 +181,22 @@ sign-in, console and the rest are never reachable there.
   account, so a script in an app cannot read Kody pages or call Kody's browser
   routes as you. This is a one-way door: there is no same-origin mode (see
   [decision 0019](./contributing/decisions/0019-package-app-origin.md)).
-- **Credentials never reach app code.** The host removes `kody_session`,
-  `kody_console`, `kody_app_session` and `kody_app_state` from the `Cookie`
-  header, drops `__kody_handoff` from the URL, and deletes every incoming
-  `x-kody-*` header. On the way out it drops `x-kody-*` response headers and any
-  `Set-Cookie` for those four cookies, and adds `X-Content-Type-Options:
-nosniff`. Other cookies and headers pass through; the app owns its own CSP.
+- **Credentials never reach app code.** The host removes `kody_session` /
+  `__Host-kody_session`, `kody_console` / `__Host-kody_console`,
+  `kody_app_session` and `kody_app_state` from the `Cookie` header, drops
+  `__kody_handoff` from the URL, and deletes every incoming `x-kody-*` header.
+  On the way out it drops `x-kody-*` response headers and any `Set-Cookie` for
+  those cookies, and adds `X-Content-Type-Options: nosniff`. Other cookies and
+  headers pass through; the app owns its own CSP.
 - **Cross-origin writes refused.** A non-GET/HEAD request with an `Origin` that
   is not the app's own origin, or a `Sec-Fetch-Site` other than `same-origin`,
   is refused with 403. Sibling apps in subdomain mode are same-site, and CORS
   would only block their reads.
 - **Same-site cookie tossing.** When the app host and the Kody host share a
   registrable domain, app JavaScript can plant cookies that the Kody origin
-  receives (lock-out until cookies are cleared; on multi-user installs, signing
-  a browser into another account). Use a different registrable domain for
-  `KODY_APP_BASE_URL`; `__Host-` cookie prefixes are planned as follow-up
-  hardening.
+  receives. https installs use `__Host-kody_session` / `__Host-kody_console` so
+  those names cannot be planted with a `Domain` attribute; still use a
+  different registrable domain for `KODY_APP_BASE_URL`.
 - **Path-mode caveat.** In path mode every user's apps share one origin, and the
   cookie path does not stop one user's script from reading another's pages. Use
   subdomain mode on any install with more than one user.

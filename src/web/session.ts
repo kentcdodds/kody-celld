@@ -3,6 +3,7 @@ import {
 	assertSameOrigin,
 	clearCookie,
 	consoleCookieName,
+	consoleCookiePath,
 	consoleSessionTtlMs,
 	cookiesAreSecure,
 	csrfToken,
@@ -26,7 +27,8 @@ export type WebSession = {
 const registry = (env: Env) => env.REGISTRY.getByName('registry')
 
 export async function readWebSession(request: Request, env: Env): Promise<WebSession | null> {
-	const raw = await readCookie(request, sessionCookieName)
+	const secure = cookiesAreSecure(env.KODY_PUBLIC_URL)
+	const raw = await readCookie(request, sessionCookieName(secure))
 	if (!raw) return null
 	const resolved = await registry(env).sessionResolve(raw, sessionTtlMs)
 	if (!resolved) return null
@@ -44,16 +46,18 @@ export async function startWebSession(request: Request, env: Env, userId: string
 		ttlMs: sessionTtlMs,
 		userAgent: request.headers.get('user-agent'),
 	})
-	return await serializeCookie(sessionCookieName, created.id, {
+	const secure = cookiesAreSecure(env.KODY_PUBLIC_URL)
+	return await serializeCookie(sessionCookieName(secure), created.id, {
 		maxAgeSeconds: sessionTtlMs / 1000,
-		secure: cookiesAreSecure(env.KODY_PUBLIC_URL),
+		secure,
 	})
 }
 
 export async function endWebSession(request: Request, env: Env) {
-	const raw = await readCookie(request, sessionCookieName)
+	const secure = cookiesAreSecure(env.KODY_PUBLIC_URL)
+	const raw = await readCookie(request, sessionCookieName(secure))
 	if (raw) await registry(env).sessionDelete(raw)
-	return clearCookie(sessionCookieName, cookiesAreSecure(env.KODY_PUBLIC_URL))
+	return clearCookie(sessionCookieName(secure), secure)
 }
 
 /** Every state-changing browser form: same-origin headers plus the session's CSRF token. */
@@ -90,21 +94,24 @@ async function consoleSignature(env: Env, expiresAt: number) {
 export async function startConsoleSession(env: Env) {
 	const expiresAt = Date.now() + consoleSessionTtlMs
 	const value = `${expiresAt}.${await consoleSignature(env, expiresAt)}`
-	return await serializeCookie(consoleCookieName, value, {
+	const secure = cookiesAreSecure(env.KODY_PUBLIC_URL)
+	return await serializeCookie(consoleCookieName(secure), value, {
 		maxAgeSeconds: consoleSessionTtlMs / 1000,
-		secure: cookiesAreSecure(env.KODY_PUBLIC_URL),
-		path: '/console',
+		secure,
+		path: consoleCookiePath(secure),
 	})
 }
 
 export async function endConsoleSession(env: Env) {
-	return clearCookie(consoleCookieName, cookiesAreSecure(env.KODY_PUBLIC_URL), '/console')
+	const secure = cookiesAreSecure(env.KODY_PUBLIC_URL)
+	return clearCookie(consoleCookieName(secure), secure, consoleCookiePath(secure))
 }
 
 export type ConsoleSession = { csrf: string; expiresAt: number }
 
 export async function readConsoleSession(request: Request, env: Env): Promise<ConsoleSession | null> {
-	const raw = await readCookie(request, consoleCookieName)
+	const secure = cookiesAreSecure(env.KODY_PUBLIC_URL)
+	const raw = await readCookie(request, consoleCookieName(secure))
 	if (!raw) return null
 	const [expiresRaw, signature] = raw.split('.')
 	const expiresAt = Number(expiresRaw)

@@ -56,19 +56,22 @@ add a same-origin fallback ([decision 0019](./decisions/0019-package-app-origin.
 `KODY_APP_BASE_URL` SHOULD use a different registrable domain from
 `KODY_PUBLIC_URL` (e.g. `kody.example.com` and `example-apps.net`). With a
 shared parent domain, untrusted app JS can set `Domain=<parent>` cookies that
-the Kody origin receives and that shadow the host-only `kody_session`
-(lock-out; on multi-user installs, login-CSRF). Server-side `Set-Cookie`
-filtering cannot stop client JS. Planned hardening: `__Host-`-prefixed Kody
-cookies (follow-up).
+the Kody origin receives. On https installs the first-party cookies are
+`__Host-kody_session` / `__Host-kody_console` (Secure, Path=/, no Domain), so
+sibling hosts cannot plant or shadow those names
+([decision 0020](./decisions/0020-host-prefixed-kody-cookies.md)); a separate
+domain remains recommended. Startup logs a warning when the two origins share
+a registrable domain. Server-side `Set-Cookie` filtering cannot stop client JS.
 
 ## Kody credentials never reach package-app code
 
-Kody cookies (`kody_session`, `kody_console`, `kody_app_session`,
-`kody_app_state`), the `__kody_handoff` parameter and every `x-kody-*` request
-header are stripped before a request reaches app code, and apps cannot set
-those cookies or `x-kody-*` headers on responses. Both directions live in
-`src/apps/forward.ts` (`buildAppRequest`, `sanitizeAppResponse`); change them
-only with tests that pin the stripping.
+Kody cookies (`kody_session` / `__Host-kody_session`, `kody_console` /
+`__Host-kody_console`, `kody_app_session`, `kody_app_state`), the
+`__kody_handoff` parameter and every `x-kody-*` request header are stripped
+before a request reaches app code, and apps cannot set those cookies or
+`x-kody-*` headers on responses. Both directions live in `src/apps/forward.ts`
+(`buildAppRequest`, `sanitizeAppResponse`); change them only with tests that
+pin the stripping.
 
 ## Errors cross RPC by name
 

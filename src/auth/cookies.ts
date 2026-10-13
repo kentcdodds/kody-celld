@@ -1,10 +1,43 @@
 import { createCookie } from 'remix/cookie'
 import { KodyError } from '../lib/errors.ts'
 
-export const sessionCookieName = 'kody_session'
-export const consoleCookieName = 'kody_console'
+/**
+ * Browser session and operator-console cookies.
+ *
+ * On https installs the names use the `__Host-` prefix (Secure, Path=/, no
+ * Domain) so a package app on a sibling host cannot plant or shadow them —
+ * same defense as hosted `__Host-kody_pkg_session` (ADR 0017). Plain-http
+ * local/LAN keeps the unprefixed names because browsers refuse `__Host-`
+ * without Secure. Hard rename: the server never reads the other name.
+ */
+const insecureSessionCookieName = 'kody_session'
+const secureSessionCookieName = '__Host-kody_session'
+const insecureConsoleCookieName = 'kody_console'
+const secureConsoleCookieName = '__Host-kody_console'
+
 export const sessionTtlMs = 30 * 24 * 60 * 60 * 1000
 export const consoleSessionTtlMs = 12 * 60 * 60 * 1000
+
+export function sessionCookieName(secure: boolean) {
+	return secure ? secureSessionCookieName : insecureSessionCookieName
+}
+
+export function consoleCookieName(secure: boolean) {
+	return secure ? secureConsoleCookieName : insecureConsoleCookieName
+}
+
+/** Path for the console cookie. `__Host-` requires `/`; http keeps `/console`. */
+export function consoleCookiePath(secure: boolean) {
+	return secure ? '/' : '/console'
+}
+
+/** Every Kody first-party cookie name (both prefixes) for strip lists. */
+export const kodyFirstPartyCookieNames = [
+	insecureSessionCookieName,
+	secureSessionCookieName,
+	insecureConsoleCookieName,
+	secureConsoleCookieName,
+] as const
 
 function appCookie(name: string, options: { secure: boolean; path?: string }) {
 	return createCookie(name, {

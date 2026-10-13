@@ -2,6 +2,7 @@ import { isAppOriginHost, readAppConfig } from './apps/app-url.ts'
 import { appErrorPage } from './apps/pages.ts'
 import { handleAppOrigin } from './apps/handler.ts'
 import { handleAppsOpen, isAppsOpenRoute } from './apps/open.ts'
+import { warnSharedRegistrableDomainOnce } from './apps/shared-registrable-domain.ts'
 import { aiConfigFromEnv, describeAiConfig } from './ai/config.ts'
 import { authenticateBearer, bearer, mcpUnauthorized, type Principal } from './auth/authenticate.ts'
 import { blobConfigFromEnv, describeBlobConfig } from './blobs/config.ts'
@@ -479,6 +480,8 @@ export default {
 		try {
 			const insecure = insecureConfigError(env, url)
 			if (insecure) return json({ error: 'insecure_configuration', problems: insecure }, 500)
+
+			warnSharedRegistrableDomainOnce(env)
 
 			const apps = readAppConfig(env)
 			if (apps?.ok && isAppOriginHost(apps.config, url)) {

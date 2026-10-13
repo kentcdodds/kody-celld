@@ -59,10 +59,12 @@ Accounts are created by the operator — there is no open registration:
   ([email.md](./email.md)). The form answers identically whether or not the
   address has an account. Links are valid 15 minutes and single-use.
 - **Sessions**: a random id, stored **hashed** in the registry, in an
-  `HttpOnly; SameSite=Lax` cookie (`Secure` when `KODY_PUBLIC_URL` is https),
-  30 days. Every state-changing form carries a session-bound CSRF token and
-  must be a same-origin `POST` (cross-site `Origin` / `Sec-Fetch-Site` are
-  refused). Sessions are listed and revocable at `/account/sessions`.
+  `HttpOnly; SameSite=Lax` cookie named `kody_session` on http or
+  `__Host-kody_session` on https (`Secure`, Path=/, no Domain), 30 days.
+  Upgrading an https install to `__Host-` signs everyone out once. Every
+  state-changing form carries a session-bound CSRF token and must be a
+  same-origin `POST` (cross-site `Origin` / `Sec-Fetch-Site` are refused).
+  Sessions are listed and revocable at `/account/sessions`.
 - `?next=` after sign-in only accepts same-origin paths (`/account/…`,
   `/oauth/authorize?…`); anything else falls back to `/account`.
 
@@ -99,8 +101,9 @@ approved list and tells the user to ask.
 
 ## Operator console (`/console`)
 
-Sign in with `KODY_ADMIN_TOKEN` (12-hour cookie, separate from user sessions,
-`Path=/console`). Pages:
+Sign in with `KODY_ADMIN_TOKEN` (12-hour cookie, separate from user sessions;
+`kody_console` with `Path=/console` on http, `__Host-kody_console` with
+`Path=/` on https). Pages:
 
 - **Users** — list with usage; add a user (returns an invite link); issue a
   reset link or an API token for a user; force a jobs dispatch.

@@ -3,14 +3,33 @@ import { describe, it } from 'node:test'
 import {
 	assertSameOrigin,
 	clearCookie,
+	consoleCookieName,
+	consoleCookiePath,
 	cookiesAreSecure,
 	csrfToken,
+	kodyFirstPartyCookieNames,
 	readCookie,
 	serializeCookie,
+	sessionCookieName,
 	sessionSignature,
 } from './cookies.ts'
 
 describe('cookies', () => {
+	it('uses unprefixed names on http and __Host- names on https', () => {
+		assert.equal(sessionCookieName(false), 'kody_session')
+		assert.equal(consoleCookieName(false), 'kody_console')
+		assert.equal(consoleCookiePath(false), '/console')
+		assert.equal(sessionCookieName(true), '__Host-kody_session')
+		assert.equal(consoleCookieName(true), '__Host-kody_console')
+		assert.equal(consoleCookiePath(true), '/')
+		assert.deepEqual(kodyFirstPartyCookieNames, [
+			'kody_session',
+			'__Host-kody_session',
+			'kody_console',
+			'__Host-kody_console',
+		])
+	})
+
 	it('reads a named Cookie header value and decodes it', async () => {
 		const request = new Request('https://kody.example', {
 			headers: { cookie: 'a=1; kody_session=kss_abc%3Ddef; =ignored; bare' },
@@ -18,6 +37,18 @@ describe('cookies', () => {
 		assert.equal(await readCookie(request, 'kody_session'), 'kss_abc=def')
 		assert.equal(await readCookie(request, 'missing'), null)
 		assert.equal(await readCookie(new Request('https://kody.example'), 'kody_session'), null)
+	})
+
+	it('does not read the unprefixed name when looking for the __Host- name', async () => {
+		const request = new Request('https://kody.example', {
+			headers: { cookie: 'kody_session=old; __Host-kody_session=new' },
+		})
+		assert.equal(await readCookie(request, sessionCookieName(true)), 'new')
+		assert.equal(await readCookie(request, sessionCookieName(false)), 'old')
+		const onlyOld = new Request('https://kody.example', {
+			headers: { cookie: 'kody_session=old' },
+		})
+		assert.equal(await readCookie(onlyOld, sessionCookieName(true)), null)
 	})
 
 	it('round-trips values using the existing cookie encoding', async () => {
@@ -37,16 +68,34 @@ describe('cookies', () => {
 		assert.equal(await readCookie(request, 'kody_console'), '1700000000000.abcdef')
 	})
 
-	it('serializes HttpOnly SameSite=Lax cookies, Secure only for https deployments', async () => {
-		const plain = await serializeCookie('kody_session', 'kss_x', { maxAgeSeconds: 60, secure: false })
+	it('serializes HttpOnly SameSite=Lax cookies, Secure and __Host- only for https', async () => {
+		const plain = await serializeCookie(sessionCookieName(false), 'kss_x', { maxAgeSeconds: 60, secure: false })
 		assert.equal(plain, 'kody_session=kss_x; HttpOnly; Max-Age=60; Path=/; SameSite=Lax')
-		const secure = await serializeCookie('kody_console', 'v', {
+		const hostSession = await serializeCookie(sessionCookieName(true), 'kss_y', {
+			maxAgeSeconds: 60,
+			secure: true,
+		})
+		assert.equal(hostSession, '__Host-kody_session=kss_y; HttpOnly; Max-Age=60; Path=/; SameSite=Lax; Secure')
+		const secureConsole = await serializeCookie(consoleCookieName(true), 'v', {
 			maxAgeSeconds: 1.9,
 			secure: true,
-			path: '/console',
+			path: consoleCookiePath(true),
 		})
-		assert.equal(secure, 'kody_console=v; HttpOnly; Max-Age=1; Path=/console; SameSite=Lax; Secure')
-		assert.equal(await clearCookie('kody_session', false), 'kody_session=; HttpOnly; Max-Age=0; Path=/; SameSite=Lax')
+		assert.equal(secureConsole, '__Host-kody_console=v; HttpOnly; Max-Age=1; Path=/; SameSite=Lax; Secure')
+		const plainConsole = await serializeCookie(consoleCookieName(false), 'v', {
+			maxAgeSeconds: 1.9,
+			secure: false,
+			path: consoleCookiePath(false),
+		})
+		assert.equal(plainConsole, 'kody_console=v; HttpOnly; Max-Age=1; Path=/console; SameSite=Lax')
+		assert.equal(
+			await clearCookie(sessionCookieName(false), false),
+			'kody_session=; HttpOnly; Max-Age=0; Path=/; SameSite=Lax',
+		)
+		assert.equal(
+			await clearCookie(sessionCookieName(true), true),
+			'__Host-kody_session=; HttpOnly; Max-Age=0; Path=/; SameSite=Lax; Secure',
+		)
 		assert.equal(cookiesAreSecure('https://kody.example'), true)
 		assert.equal(cookiesAreSecure('http://127.0.0.1:8787'), false)
 		assert.equal(cookiesAreSecure('not a url'), false)
