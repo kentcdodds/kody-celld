@@ -50,7 +50,10 @@ describe('sharedRegistrableDomainWarning', () => {
 		assert.ok(message)
 		assert.match(message!, /share the registrable domain "example\.com"/)
 		assert.match(message!, /Domain=example\.com/)
+		assert.match(message!, /On http installs/)
+		assert.match(message!, /On https installs/)
 		assert.match(message!, /__Host-kody_session/)
+		assert.match(message!, /non-__Host- cookies still can/)
 		assert.match(message!, /separate registrable domain/)
 	})
 

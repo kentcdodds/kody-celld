@@ -40,10 +40,11 @@ export function sharedRegistrableDomainWarning(env: {
 	if (!domain || !shareRegistrableDomain(publicHostname, apps.config.hostname)) return null
 	return (
 		`[kody-celld] KODY_PUBLIC_URL and KODY_APP_BASE_URL share the registrable domain "${domain}". ` +
-		`Untrusted package-app JavaScript can plant Domain=${domain} cookies that the Kody origin receives ` +
-		`(account lock-out; on multi-user installs, login CSRF). Prefer a separate registrable domain for apps ` +
-		`(e.g. example-apps.net). https installs use __Host-kody_session / __Host-kody_console so sibling hosts ` +
-		`cannot shadow those names, but a separate domain remains recommended.`
+		`Untrusted package-app JavaScript can plant Domain=${domain} cookies that the Kody origin receives. ` +
+		`On http installs that can lock out account pages or (on multi-user installs) sign a browser into ` +
+		`another account, because session cookies are unprefixed. On https installs, __Host-kody_session / ` +
+		`__Host-kody_console cannot be planted that way, but other non-__Host- cookies still can; prefer a ` +
+		`separate registrable domain for apps (e.g. example-apps.net).`
 	)
 }
 
