@@ -404,7 +404,8 @@ See [docs/principles/](./docs/principles/index.md) for engineering principles,
 
 ## Community
 
-Join the [Kody Discord](https://kcd.im/kody-discord) to ask questions, share what you're building on kody-celld, and help shape self-hosted Kody.
+Join the [Kody Discord](https://kcd.im/kody-discord) to ask questions, share
+what you're building on kody-celld, and help shape self-hosted Kody.
 
 ## License
 
