@@ -1,5 +1,7 @@
 # kody-celld
 
+[![Discord](https://img.shields.io/badge/Discord-Kody-5865F2?logo=discord&logoColor=white)](https://kcd.im/kody-discord)
+
 A self-hosted **Kody core** that runs on [Deno celld](https://celld.dev) — the
 Cloudflare Workers + Durable Objects programming model on your own machines,
 with an S3-compatible bucket for durability.
@@ -399,6 +401,10 @@ docs/                     getting started, architecture, run paths, operations, 
 See [docs/principles/](./docs/principles/index.md) for engineering principles,
 [AGENTS.md](./AGENTS.md) for the agent map, and
 [CONTRIBUTING.md](./CONTRIBUTING.md) for the inbound CLA.
+
+## Community
+
+Join the [Kody Discord](https://kcd.im/kody-discord) to ask questions, share what you're building on kody-celld, and help shape self-hosted Kody.
 
 ## License
 
