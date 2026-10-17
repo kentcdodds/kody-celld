@@ -2,7 +2,7 @@
 // docker/entrypoint.sh. Integration coverage is the CI smoke job.
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -25,7 +25,7 @@ describe('single-local helpers', () => {
 		mkdirSync(project, { recursive: true })
 		writeFileSync(join(project, 'wrangler.jsonc'), '{ "name": "x", "main": "i.js" }\n')
 		writeFileSync(join(project, 'i.js'), 'export default {}\n')
-		assert.equal(resolveProjectDir(project), project)
+		assert.equal(resolveProjectDir(project), realpathSync(project))
 	})
 
 	it('resolveProjectDir fails loudly when no Wrangler config exists', () => {

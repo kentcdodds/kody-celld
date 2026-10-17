@@ -58,7 +58,7 @@ export function readDeployPointerEtag(databasePath) {
 	if (!existsSync(databasePath)) return null
 	let db
 	try {
-		db = new DatabaseSync(databasePath, { readOnly: true, timeout: 1_000 })
+		db = new DatabaseSync(databasePath, { readOnly: true, timeout: 5_000 })
 		const row = db.prepare('SELECT etag FROM objects WHERE key = ?').get(DEPLOY_POINTER)
 		return row == null ? null : Number(row.etag)
 	} catch {
