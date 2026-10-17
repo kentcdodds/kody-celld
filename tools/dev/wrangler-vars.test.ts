@@ -1,7 +1,8 @@
-// Regression: single-node Docker runs `celld dev`, which loads wrangler.jsonc
-// vars and lets .dev.vars override only what the entrypoint writes. Dev-only
-// email / private-host / insecure-host values must not live in wrangler.jsonc
-// or a default install inherits them (reported by Alan Żur).
+// Regression: single-node Docker deploys through celld.dev (which loads
+// wrangler.jsonc vars and lets .dev.vars override only what the entrypoint
+// writes), then runs the node directly. Dev-only email / private-host /
+// insecure-host values must not live in wrangler.jsonc or a default install
+// inherits them (reported by Alan Żur).
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { describe, it } from 'node:test'

@@ -134,8 +134,10 @@ with:
 
 ```
 kody-1  | [kody-celld] wrote operator values to /data/kody.env (admin token + master key).
+kody-1  | [kody-celld] single deploy: writing Worker into /data/celld/dev/objects.sqlite3 via celld.dev
 kody-1  | [kody-celld] single node: MCP at http://<kody-host>:8080/mcp (listening on 0.0.0.0:8080)
-kody-1  |   ready  http://0.0.0.0:8080
+kody-1  | [kody-celld] single node: running celld directly against the local store
+kody-1  | celld listening on 0.0.0.0:8080 (ownership=dev)
 ```
 
 Check it: `curl http://<kody-host>:8080/health` → `{"ok":true, ...}`.
@@ -244,8 +246,12 @@ itself is reached.
 default (`kody-celld_kody-data` for a git checkout, `kody_kody-data` for a
 folder called `kody`); `docker volume ls` shows it.
 
-The single-node mode uses celld's local object store, so there is no bucket to
-manage. If you later want failover, move to Path B — the code, users, and MCP
+The single-node mode uses celld's local object store under the `kody-data`
+volume (`/data/celld/dev`), so there is no bucket to manage. On each start the
+entrypoint deploys the Worker into that store, then runs the celld node
+directly (not under the `celld.dev` supervisor). That keeps long-lived installs
+from crash-looping on the supervisor's fixed announce deadline once LTX state
+has grown. If you later want failover, move to Path B: the code, users, and MCP
 contract are identical; only the storage layer changes.
 
 ### What was actually run

@@ -74,8 +74,8 @@ index and usage.
 
 ### Where the bytes live
 
-- **Single node (Docker `compose.yaml` or `celld dev`)**: celld's local object
-  store inside the `kody-data` volume / `.celld/dev`. Backing up the volume backs
+- **Single node (Docker `compose.yaml` or local `celld.dev`)**: celld's local
+  object store inside the `kody-data` volume / `.celld/dev`. Backing up the volume backs
   up the blobs.
 - **Fleet**: the R2 binding maps to `r2/kody-blobs/` inside `CELLD_BUCKET`, so
   blobs share the durability, replication, and backup story of the rest of the

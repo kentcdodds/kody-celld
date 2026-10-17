@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # kody-celld container entrypoint. Modes:
-#   single   one celld node with local durable state under $KODY_STATE_DIR (default)
+#   single   local durable state under $KODY_STATE_DIR: deploy via celld.dev, then
+#            exec the node directly (not a long-lived celld.dev; see issue #89)
 #   deploy   render the fleet config from env and publish the Worker to $CELLD_BUCKET
 #   node     run a fleet node against $CELLD_BUCKET (celld reads its own CELLD_* env)
 #   celld    pass the remaining arguments straight to the celld binary
@@ -70,15 +71,17 @@ load_or_generate_operator_values() {
 run_single() {
 	load_or_generate_operator_values
 	export KODY_PUBLIC_URL="${KODY_PUBLIC_URL:-http://localhost:$port}"
-	mkdir -p "$state_dir/celld"
-	# celld dev keeps its state in <project>/.celld/dev; point it at the volume.
+	mkdir -p "$state_dir/celld/dev"
+	# Local durable state lives under <project>/.celld/dev (same layout celld.dev
+	# uses). Point the project path at the volume so upgrades keep existing data.
 	if [[ ! -L /app/.celld ]]; then
 		rm -rf /app/.celld
 		ln -s "$state_dir/celld" /app/.celld
 	fi
-	# .dev.vars overrides wrangler.jsonc vars; celld dev reads it beside the config.
-	# Email / private-host / insecure-host smoke values are not in wrangler.jsonc,
-	# so unset operator env leaves those features off (no public dev fallbacks).
+	# .dev.vars overrides wrangler.jsonc vars; the deploy step reads it beside
+	# the config and bakes values into the Worker deployment. Email /
+	# private-host / insecure-host smoke values are not in wrangler.jsonc, so
+	# unset operator env leaves those features off (no public dev fallbacks).
 	umask 077
 	{
 		echo "KODY_ADMIN_TOKEN=$KODY_ADMIN_TOKEN"
@@ -92,8 +95,37 @@ run_single() {
 		done
 	} >/app/.dev.vars
 	umask 022
+
+	# Do not leave `celld.dev` as the long-running process. Its supervisor
+	# waits a fixed ~30s for the child to announce its operator listener; a
+	# large uncompacted local store can miss that window and crash-loop
+	# (kentcdodds/kody-celld#89). Deploy through celld.dev (only public writer
+	# for the local store), then exec the node the same way celld.dev would.
+	local single_state="$state_dir/celld/dev"
+	# shellcheck disable=SC2086 # CELLD_DEV_FLAGS is an optional flag string for the deploy step only
+	node /app/docker/single-local.mjs deploy \
+		--project /app \
+		--state "$single_state" \
+		--host 127.0.0.1 \
+		--port "$port" \
+		-- ${CELLD_DEV_FLAGS:-}
+
+	# Scrub fleet-oriented env so the local-dev store guard accepts this node.
+	unset CELLD_BUCKET CELLD_ADDR CELLD_ADVERTISE CELLD_INTERNAL_ADDR \
+		CELLD_CLOUD CELLD_TEST_BUCKET CELLD_TRUST_FORWARDED_HEADERS \
+		CELLD_UNSAFE_PUBLIC_ADVERTISE S3_ENDPOINT AWS_REGION AWS_DEFAULT_REGION \
+		CELLD_INTERNAL_DEV_STORE || true
+	# shellcheck disable=SC1091
+	eval "$(node /app/docker/single-local.mjs node-env --project /app --state "$single_state")"
+	export CELLD_INTERNAL_DEV_STORE CELLD_WATCH CELLD_NODE
+
 	echo "[kody-celld] single node: MCP at $KODY_PUBLIC_URL/mcp (listening on 0.0.0.0:$port)"
-	exec celld dev /app --host 0.0.0.0 --port "$port" --no-watch ${CELLD_DEV_FLAGS:-}
+	echo "[kody-celld] single node: running celld directly against the local store (node=$CELLD_NODE)"
+	exec celld \
+		--no-control-plane \
+		--bucket celld-dev \
+		--listen "0.0.0.0:$port" \
+		--internal-listen 127.0.0.1:0
 }
 
 run_deploy() {

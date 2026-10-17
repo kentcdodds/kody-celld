@@ -7,10 +7,40 @@ external service.
 
 Every setting is an environment variable read by the Worker (`src/lib/limits.ts`).
 Set them in `.env` for Docker (`compose.yaml` and `compose.fleet.yaml` pass them
-through), in `.dev.vars` for `celld dev`, or in the rendered fleet config. On a
-fleet they are baked into the deployed Worker config: re-run the `deploy`
-service (or `celld deploy`) after changing them. Invalid values fail loudly at
-startup rather than silently falling back.
+through), in `.dev.vars` for local `celld.dev`, or in the rendered fleet config.
+On a single-node Docker install the entrypoint writes operator env into
+`.dev.vars`, deploys the Worker into the local store, then runs the celld node
+directly. Restart the container after changing env so the deploy step picks
+them up. On a fleet they are baked into the deployed Worker config: re-run the
+`deploy` service (or `celld deploy`) after changing them. Invalid values fail
+loudly at startup rather than silently falling back.
+
+## Single-node Docker startup
+
+`command: ['single']` (the `compose.yaml` default) keeps durable state in the
+`kody-data` volume at `/data/celld/dev` (the same layout `celld.dev` uses). Each
+start:
+
+1. Writes `/app/.dev.vars` from operator env (admin token, master key, tunables).
+2. Runs a short `celld.dev` only long enough to publish a new deployment into
+   that local store (`deploy/current.json`).
+3. Stops the `celld.dev` supervisor and `exec`s the celld node directly against
+   the same store (`--no-control-plane --bucket celld-dev` with
+   `CELLD_INTERNAL_DEV_STORE`), matching the child process `celld.dev` itself
+   would spawn.
+
+The long-running process is therefore the node, not the `celld.dev` wrapper.
+That matters once the local store has grown: the wrapper waits a fixed ~30s for
+the child to announce its operator listener, and a large uncompacted LTX backlog
+can miss that window and crash-loop the container
+([issue #89](https://github.com/kentcdodds/kody-celld/issues/89)). The direct
+node has no announce deadline and runs LTX compaction.
+
+Existing volumes keep working across image upgrades; the store layout is
+unchanged. Optional: `CELLD_DEV_FLAGS` is forwarded to the short deploy-step
+`celld.dev` only (for example `--logs`). `KODY_SINGLE_DEPLOY_TIMEOUT_MS`
+(default `600000`) caps how long the deploy step may take before failing
+loudly with a path to `/data/celld/dev/.last-deploy.log`.
 
 ## Runtime limits
 

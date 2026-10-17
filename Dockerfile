@@ -2,7 +2,8 @@
 # kody-celld runtime image: celld (from the official release image) + Node/esbuild
 # (celld deploy bundles Workers with esbuild) + this project. One image serves
 # every mode of docker/entrypoint.sh:
-#   single  — one node with local durable state (NAS / laptop / single VPS)
+#   single  — one node with local durable state (NAS / laptop / single VPS);
+#             deploys via celld.dev then execs the node directly (see #89)
 #   deploy  — bundle and publish the Worker to the fleet bucket (one-shot job)
 #   node    — a fleet node that serves the bucket's current deployment
 ARG CELLD_VERSION=0.6.1
