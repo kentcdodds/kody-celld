@@ -19,6 +19,7 @@
  */
 import { createHash } from 'node:crypto'
 import { spawn } from 'node:child_process'
+import { createConnection } from 'node:net'
 import { realpathSync, existsSync, mkdirSync, openSync, closeSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -48,14 +49,26 @@ export function objectsDbPath(stateDir) {
 	return join(stateDir, 'objects.sqlite3')
 }
 
+/**
+ * Read the deploy pointer etag, or null when the store is missing / not ready.
+ * Transient SQLite errors (file mid-create, SQLITE_BUSY, missing table) must
+ * not abort the deploy poll: celld.dev may still be opening or writing the DB.
+ */
 export function readDeployPointerEtag(databasePath) {
 	if (!existsSync(databasePath)) return null
-	const db = new DatabaseSync(databasePath, { readOnly: true })
+	let db
 	try {
+		db = new DatabaseSync(databasePath, { readOnly: true, timeout: 1_000 })
 		const row = db.prepare('SELECT etag FROM objects WHERE key = ?').get(DEPLOY_POINTER)
 		return row == null ? null : Number(row.etag)
+	} catch {
+		return null
 	} finally {
-		db.close()
+		try {
+			db?.close()
+		} catch {
+			/* ignore close races while celld.dev still holds the file */
+		}
 	}
 }
 
@@ -114,24 +127,57 @@ function shellQuote(value) {
 	return `'${String(value).replace(/'/g, `'\\''`)}'`
 }
 
-async function stopProcess(child) {
-	if (child.exitCode != null || child.signalCode != null) return
+function signalProcessTree(pid, signal) {
+	if (pid == null) return
+	// celld.dev puts its node in a new process group; kill the whole tree so a
+	// SIGTERM to the supervisor alone cannot leave the node holding the port
+	// or the local store lock.
 	try {
-		child.kill('SIGTERM')
+		process.kill(-pid, signal)
 	} catch {
-		return
+		try {
+			process.kill(pid, signal)
+		} catch {
+			/* already gone */
+		}
 	}
-	const deadline = Date.now() + 40_000
+}
+
+async function waitForListenFree(host, port, timeoutMs = 15_000) {
+	const deadline = Date.now() + timeoutMs
 	while (Date.now() < deadline) {
-		if (child.exitCode != null || child.signalCode != null) return
+		const free = await new Promise((resolve) => {
+			const socket = createConnection({ host, port })
+			socket.once('connect', () => {
+				socket.destroy()
+				resolve(false)
+			})
+			socket.once('error', () => resolve(true))
+		})
+		if (free) return
 		await delay(100)
 	}
-	try {
-		child.kill('SIGKILL')
-	} catch {
-		/* already gone */
+	throw new Error(
+		`port ${host}:${port} still in use after stopping celld.dev; refuse to start the direct node on a contested listener`,
+	)
+}
+
+async function stopProcess(child, { host, port } = {}) {
+	if (child.exitCode == null && child.signalCode == null) {
+		signalProcessTree(child.pid, 'SIGTERM')
+		const deadline = Date.now() + 40_000
+		while (Date.now() < deadline) {
+			if (child.exitCode != null || child.signalCode != null) break
+			await delay(100)
+		}
+		if (child.exitCode == null && child.signalCode == null) {
+			signalProcessTree(child.pid, 'SIGKILL')
+			await delay(200)
+		}
 	}
-	await delay(200)
+	if (host != null && port != null) {
+		await waitForListenFree(host, Number(port))
+	}
 }
 
 async function deployLocal(options) {
@@ -184,9 +230,12 @@ async function deployLocal(options) {
 
 	process.stderr.write(`[kody-celld] single deploy: writing Worker into ${database} via celld.dev (log: ${logPath})\n`)
 
+	// detached so child.pid is a process-group leader; stopProcess can then
+	// signal -pid and tear down both the supervisor and the node it spawned.
 	const child = spawn('celld', args, {
 		env,
 		stdio: ['ignore', logFd, logFd],
+		detached: true,
 	})
 	closeSync(logFd)
 
@@ -201,6 +250,7 @@ async function deployLocal(options) {
 		nodeId: celldDevNodeId(projectDir),
 		database,
 	})
+	const stopOpts = { host: options.host, port: options.port }
 
 	const deadline = Date.now() + timeoutMs
 	try {
@@ -213,7 +263,7 @@ async function deployLocal(options) {
 				process.stderr.write(
 					`[kody-celld] single deploy: ${DEPLOY_POINTER} updated (etag ${priorEtag ?? 'none'} -> ${etag}); stopping celld.dev supervisor\n`,
 				)
-				await stopProcess(child)
+				await stopProcess(child, stopOpts)
 				return success()
 			}
 			if (child.exitCode != null || child.signalCode != null) {
@@ -223,6 +273,7 @@ async function deployLocal(options) {
 				// success when the pointer moved. If it did not, surface the log.
 				const etagAfter = readDeployPointerEtag(database)
 				if (etagAfter != null && etagAfter !== priorEtag) {
+					await stopProcess(child, stopOpts)
 					return success()
 				}
 				throw new Error(
@@ -236,12 +287,12 @@ async function deployLocal(options) {
 		}
 		const etag = readDeployPointerEtag(database)
 		if (etag != null && etag !== priorEtag) {
-			await stopProcess(child)
+			await stopProcess(child, stopOpts)
 			return success()
 		}
 		throw new Error(`timed out after ${timeoutMs}ms waiting for ${DEPLOY_POINTER} to update; see ${logPath}`)
 	} finally {
-		await stopProcess(child)
+		await stopProcess(child, stopOpts)
 	}
 }
 

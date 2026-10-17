@@ -62,6 +62,16 @@ describe('single-local helpers', () => {
 		assert.equal(readDeployPointerEtag(database), 42)
 	})
 
+	it('readDeployPointerEtag returns null when the objects table is missing', () => {
+		const state = join(scratch, 'empty-db')
+		mkdirSync(state, { recursive: true })
+		const database = objectsDbPath(state)
+		const db = new DatabaseSync(database)
+		db.exec('CREATE TABLE unrelated (id INTEGER)')
+		db.close()
+		assert.equal(readDeployPointerEtag(database), null)
+	})
+
 	it('entrypoint runs deploy then execs the direct node (no long-lived celld.dev)', () => {
 		const body = readFileSync(new URL('./entrypoint.sh', import.meta.url), 'utf8')
 		assert.match(body, /single-local\.mjs deploy/)
