@@ -8,7 +8,7 @@ import {
 } from '../execute/strip-types.ts'
 import { KodyError } from '../lib/errors.ts'
 
-// Mirrors kentcdodds/kody `package.json#kody` shapes for the surfaces this
+// Mirrors kody-hq/kody `package.json#kody` shapes for the surfaces this
 // runtime supports: exports, jobs, webhooks, subscriptions, dependencies,
 // description, and hidden.
 

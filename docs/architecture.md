@@ -176,8 +176,8 @@ the `bridge` provider real. [email.md](./email.md).
 `src/ai/providers.ts` implements the OpenAI-compatible chat + embeddings
 adapter (plain `fetch`, host-side, keys only in request headers). The
 Anthropic chat adapter was removed
-([#67](https://github.com/kentcdodds/kody-celld/pull/67); notice
-[#63](https://github.com/kentcdodds/kody-celld/issues/63)).
+([#67](https://github.com/kody-hq/kody-celld/pull/67); notice
+[#63](https://github.com/kody-hq/kody-celld/issues/63)).
 `src/ai/vector-store.ts` implements the `VectorStore` interface for
 sqlite-vec (`vec0`, inside the cell) and Qdrant (REST). `MemoryCell` owns the
 per-user memories and embeds them on write; `memorySearch` fuses FTS5 and vector
@@ -215,7 +215,7 @@ detection), `src/oauth/routes.ts` the HTTP surface incl. the signed consent
 form.
 
 Browser sign-in (`src/web/*`, `src/auth/*`) is server-rendered with the same
-Remix 3 / `remix/component` stack and design system as kentcdodds/kody (`client/`,
+Remix 3 / `remix/component` stack and design system as kody-hq/kody (`client/`,
 `universal/`, `src/app/` mirror `packages/worker/`), with a
 hashed session cookie, PBKDF2 passwords with lockout, one-time invite / reset /
 magic tokens, session-bound CSRF + same-origin checks, and a separate

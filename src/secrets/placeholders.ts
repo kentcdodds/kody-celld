@@ -1,5 +1,5 @@
 // Kody-compatible secret placeholder syntax. Ported from
-// kentcdodds/kody packages/worker/src/mcp/secrets/placeholders.ts so agents can
+// kody-hq/kody packages/worker/src/mcp/secrets/placeholders.ts so agents can
 // reuse the same `{{secret:name}}` strings against this runtime.
 
 export type SecretScope = 'user' | 'package' | 'session'

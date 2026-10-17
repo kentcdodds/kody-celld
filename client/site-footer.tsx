@@ -39,10 +39,10 @@ export function SiteFooter(handle: Handle<SiteFooterProps>) {
 				</p>
 				<nav aria-label="Footer" mix={css(footerNavCss)}>
 					<a href="/community">Community</a>
-					<a href="https://github.com/kentcdodds/kody-celld/tree/main/docs">
+					<a href="https://github.com/kody-hq/kody-celld/tree/main/docs">
 						Docs
 					</a>
-					<a href="https://github.com/kentcdodds/kody-celld">Source</a>
+					<a href="https://github.com/kody-hq/kody-celld">Source</a>
 					<a href="https://kody.codes">kody.codes</a>
 					{handle.props.loggedIn ? (
 						<a href="/account">Account</a>

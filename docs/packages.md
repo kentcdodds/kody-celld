@@ -125,7 +125,7 @@ fork. Secrets are never transferred from the remote.
 import { kody } from 'kody:runtime'
 export default async function main() {
   // GitHub: github:owner/repo[/sub/dir][#ref] or a github.com URL
-  await kody.packageInstall({ source: 'github:kentcdodds/kody-celld/examples/packages/http-probe#main' })
+  await kody.packageInstall({ source: 'github:kody-hq/kody-celld/examples/packages/http-probe#main' })
   await kody.packageInstall({ source: 'https://github.com/owner/repo/tree/v1.2.0/packages/hello' })
   // Public kody.codes package: listing URL or `.git` (read-only smart-HTTP clone)
   const preview = await kody.packagePreview({ source: 'https://kody.codes/@kody/cloudflare' })

@@ -6,12 +6,12 @@
  *
  * Explicit `KODY_BLOB_PROVIDER=r2` was removed as a separate adapter name —
  * omit the setting to use the binding, or set `s3`. See
- * https://github.com/kentcdodds/kody-celld/issues/63.
+ * https://github.com/kody-hq/kody-celld/issues/63.
  */
 
 export type BlobProviderKind = 'binding' | 's3'
 
-const noticeUrl = 'https://github.com/kentcdodds/kody-celld/issues/63'
+const noticeUrl = 'https://github.com/kody-hq/kody-celld/issues/63'
 
 export type BlobEnv = {
 	KODY_BLOB_PROVIDER?: string

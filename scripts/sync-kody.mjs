@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Pin and verify files copied from kentcdodds/kody.
+ * Pin and verify files copied from kody-hq/kody.
  *
  *   npm run sync:kody          # pull from kody main, copy verbatim files, rewrite pins
  *   npm run sync:kody -- --commit <sha>
@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const manifestPath = path.join(repoRoot, 'shared-from-kody.json')
-const kodyRepo = 'kentcdodds/kody'
+const kodyRepo = 'kody-hq/kody'
 const rawBase = `https://raw.githubusercontent.com/${kodyRepo}`
 
 const args = process.argv.slice(2)

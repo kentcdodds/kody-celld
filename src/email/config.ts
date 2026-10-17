@@ -7,7 +7,7 @@
  *  - outbound: the mail-bridge sidecar (SMTP relay)
  *
  * Vendor-specific adapters (Resend, Postmark, Mailgun, SendGrid, Cloudflare)
- * were removed — see https://github.com/kentcdodds/kody-celld/issues/63.
+ * were removed — see https://github.com/kody-hq/kody-celld/issues/63.
  * Provider tokens are deployment settings; they never reach sandbox code and
  * are not stored in any cell.
  */
@@ -20,7 +20,7 @@ export type OutboundProvider = (typeof outboundProviders)[number]
 
 const removedOutboundProviders = ['resend', 'postmark', 'mailgun', 'sendgrid'] as const
 const removedInboundProviders = ['postmark', 'mailgun', 'sendgrid', 'cloudflare'] as const
-const noticeUrl = 'https://github.com/kentcdodds/kody-celld/issues/63'
+const noticeUrl = 'https://github.com/kody-hq/kody-celld/issues/63'
 
 export type EmailEnv = {
 	/** Domain users receive mail on: `<local>@<domain>`. Unset disables the inbox surface. */

@@ -14,7 +14,7 @@ tree.
 ## Contributor bar
 
 kody-celld is a faithful self-host of
-[hosted Kody](https://github.com/kentcdodds/kody). Before opening a PR:
+[hosted Kody](https://github.com/kody-hq/kody). Before opening a PR:
 
 1. State the **need** and how hosted Kody does it (cite the hosted file).
 2. Justify any **new dependency**, abstraction, or `KODY_` variable

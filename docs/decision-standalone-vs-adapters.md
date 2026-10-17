@@ -1,7 +1,7 @@
 # Decision: faithful self-host of hosted Kody on celld
 
 **Status:** accepted (Kent, Oct 10, 2026). kody-celld is a faithful
-self-host of [kentcdodds/kody](https://github.com/kentcdodds/kody), not a
+self-host of [kody-hq/kody](https://github.com/kody-hq/kody), not a
 separate product.
 
 ## Reality (replace older claims)
@@ -21,7 +21,7 @@ See [architecture.md](./architecture.md) for the runtime shape and
 
 ## Options considered (historical)
 
-1. **One codebase with adapters** inside kentcdodds/kody for a celld target.
+1. **One codebase with adapters** inside kody-hq/kody for a celld target.
 2. **Fork** hosted Kody and strip Cloudflare-only pieces.
 3. **Standalone tree** that re-implements contracts on celld, with hosted Kody
    as the reference. Chosen for the early experiment so production deploys
@@ -40,34 +40,34 @@ through a sync lock now and a `@kody/core` package later.
 2. **Package apps (#42) on a separate app origin.** Never same-origin on the
    operator URL. Match hosted's configured app base URL and handoff-token
    design. Decision recorded on
-   [#42](https://github.com/kentcdodds/kody-celld/issues/42).
+   [#42](https://github.com/kody-hq/kody-celld/issues/42).
 3. **Code sharing.** For now: a pinned, CI-checked sync lock
    ([shared-from-kody.md](./contributing/shared-from-kody.md),
    `shared-from-kody.json`) for principle pages, verbatim UI files, and
    contract modules tracked as adapted. A shared `@kody/core` package comes
    later; interim contract copies are tracked in
-   [#69](https://github.com/kentcdodds/kody-celld/issues/69).
+   [#69](https://github.com/kody-hq/kody-celld/issues/69).
 4. **Generic vendor adapters only.** Keep SMTP (mail-bridge),
    OpenAI-compatible AI, S3-compatible blobs, and a CDP browser. Vendor-named
    adapters (Postmark, Mailgun, SendGrid, Resend, Anthropic, browserless as a
    platform type, and similar) move to packages or are deleted. Landed in
-   [#67](https://github.com/kentcdodds/kody-celld/pull/67) (advance notice
-   [#63](https://github.com/kentcdodds/kody-celld/issues/63)); this doc records
+   [#67](https://github.com/kody-hq/kody-celld/pull/67) (advance notice
+   [#63](https://github.com/kody-hq/kody-celld/issues/63)); this doc records
    the decision.
 5. **One private-host allowlist.** Collapse the four private-host allowlist
    settings into a single `KODY_PRIVATE_HOSTS` (or equivalent). Landed in
-   [#66](https://github.com/kentcdodds/kody-celld/pull/66); this doc records
+   [#66](https://github.com/kody-hq/kody-celld/pull/66); this doc records
    the decision.
 
 ## What we share with hosted Kody
 
-| Layer                                                                     | How                                                                                                   |
-| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Contracts (MCP tools, placeholders, manifests, schedules, `kody:runtime`) | Match hosted behaviour; cite the hosted file in the PR                                                |
-| Principle pages                                                           | Verbatim pins in `shared-from-kody.json`                                                              |
-| Design tokens, style primitives, icons, shared UI helpers, fonts          | Verbatim pins when they match; adapted entries when celld must differ                                 |
-| Contract module source                                                    | Interim local copies (adapted); replace via [#69](https://github.com/kentcdodds/kody-celld/issues/69) |
-| Runtime                                                                   | celld Worker Loader, Durable Objects, S3 durability: celld-only                                       |
+| Layer                                                                     | How                                                                                                |
+| ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Contracts (MCP tools, placeholders, manifests, schedules, `kody:runtime`) | Match hosted behaviour; cite the hosted file in the PR                                             |
+| Principle pages                                                           | Verbatim pins in `shared-from-kody.json`                                                           |
+| Design tokens, style primitives, icons, shared UI helpers, fonts          | Verbatim pins when they match; adapted entries when celld must differ                              |
+| Contract module source                                                    | Interim local copies (adapted); replace via [#69](https://github.com/kody-hq/kody-celld/issues/69) |
+| Runtime                                                                   | celld Worker Loader, Durable Objects, S3 durability: celld-only                                    |
 
 Because contracts match, packages and `execute` snippets written for
 kody.codes that only use these surfaces run here (the smoke suite's

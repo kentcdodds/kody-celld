@@ -5,7 +5,7 @@ export const privateHostsEnvKey = 'KODY_PRIVATE_HOSTS'
 
 /**
  * Removed in favour of {@link privateHostsEnvKey}. Presence (even empty) fails at
- * config load — see https://github.com/kentcdodds/kody-celld/issues/62.
+ * config load — see https://github.com/kody-hq/kody-celld/issues/62.
  */
 export const removedPrivateHostEnvKeys = [
 	'KODY_MCP_ALLOW_PRIVATE_HOSTS',
@@ -22,7 +22,7 @@ export type PrivateHostsEnv = {
 	KODY_ALLOW_INSECURE_SECRET_HOSTS?: string
 }
 
-const noticeUrl = 'https://github.com/kentcdodds/kody-celld/issues/62'
+const noticeUrl = 'https://github.com/kody-hq/kody-celld/issues/62'
 
 /** Fail loudly when any removed allowlist variable is still set. */
 export function assertNoRemovedPrivateHostEnv(env: PrivateHostsEnv): void {

@@ -1,6 +1,6 @@
 /**
  * Corpus-agnostic ranking primitives shared by capability search and memory
- * search. Mirrors the shape of kentcdodds/kody `worker/src/vectorize/scoring.ts`
+ * search. Mirrors the shape of kody-hq/kody `worker/src/vectorize/scoring.ts`
  * (RRF fusion of a lexical list and a vector list).
  */
 

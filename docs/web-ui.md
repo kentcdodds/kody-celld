@@ -2,7 +2,7 @@
 
 kody-celld ships a server-rendered web UI so that people who self-host it do
 not have to drive everything with `curl` and an admin token. It is built on the
-same stack and design system as [kentcdodds/kody](https://github.com/kentcdodds/kody)
+same stack and design system as [kody-hq/kody](https://github.com/kody-hq/kody)
 — Remix 3 (`remix/component` components, `remix/routes` typed routes,
 `remix/component/server` streaming SSR) with a Vite-built browser bundle — so that
 upstream UI changes can be ported with a path strip (see
@@ -199,7 +199,7 @@ pages.
 - **Never hand-roll `maxWidth` + `margin: 0 auto`.** Without `width: 100%` a
   box inside a flex or grid parent shrinks to its content, which is exactly
   how the account pages ended up different widths
-  ([#14](https://github.com/kentcdodds/kody-celld/issues/14)). The helpers
+  ([#14](https://github.com/kody-hq/kody-celld/issues/14)). The helpers
   carry `width: 100%`, the shared `pageGutter`, and `box-sizing`.
 - **Sections, not cards.** Inside a shell, blocks are hairline-topped
   `AccountManagementPanel`s spaced by the shell's `gap` (per-child margins
@@ -238,7 +238,7 @@ heading and the header brand should not move.
 The package files explorer is a port of kody's
 (`client/package-files-explorer.tsx` + `markdown-view`, `syntax-highlight`,
 `src/app/highlight-code.ts`, `packages/highlight-worker`) at
-kentcdodds/kody@2bfeb29. kody reaches Shiki through the `HIGHLIGHT` service
+kody-hq/kody@2bfeb29. kody reaches Shiki through the `HIGHLIGHT` service
 binding; here `src/highlight/binding.ts` runs the same handler in-process.
 Differences are marked `// kody-celld:` (no community repo chrome, no media
 or raw routes — media-named files show as text).

@@ -4,7 +4,7 @@ Short, durable rules for how we build kody-celld. Each page is one principle.
 Load only the page the task needs.
 
 kody-celld is a faithful self-host of
-[hosted Kody](https://github.com/kentcdodds/kody). Shared principle pages are
+[hosted Kody](https://github.com/kody-hq/kody). Shared principle pages are
 copied from that repo and pinned in
 [`shared-from-kody.json`](../../shared-from-kody.json). Do not hand-edit them.
 Change them upstream in hosted Kody, then run `npm run sync:kody`. See
@@ -27,9 +27,9 @@ Change them upstream in hosted Kody, then run `npm run sync:kody`. See
 | [Test the workflow](./test-the-workflow.md)                                 | Adding or reshaping tests                                                                                 |
 
 Related maps that live only in hosted Kody (open them there):
-[contributing index](https://github.com/kentcdodds/kody/blob/main/docs/contributing/index.md),
-[decision records](https://github.com/kentcdodds/kody/blob/main/docs/contributing/decisions/index.md),
-[harness engineering](https://github.com/kentcdodds/kody/blob/main/docs/contributing/harness-engineering.md).
+[contributing index](https://github.com/kody-hq/kody/blob/main/docs/contributing/index.md),
+[decision records](https://github.com/kody-hq/kody/blob/main/docs/contributing/decisions/index.md),
+[harness engineering](https://github.com/kody-hq/kody/blob/main/docs/contributing/harness-engineering.md).
 
 ## kody-celld only
 

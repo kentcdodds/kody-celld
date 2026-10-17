@@ -5,7 +5,7 @@
  * Production `single` mode must not keep `celld.dev` as the long-running
  * process: that wrapper gives the child a fixed 30s announce deadline
  * (denoland/celld crates/celld/dev.rs), which fails once the local store has
- * enough uncompacted LTX state (kentcdodds/kody-celld#89).
+ * enough uncompacted LTX state (kody-hq/kody-celld#89).
  *
  * `celld.dev` is still the only public way to write a deployment into the
  * local object store (`.celld/dev/objects.sqlite3`). This module drives that

@@ -63,40 +63,40 @@ const tgzResponse = (bytes: Uint8Array) => () =>
 
 describe('parsePackageSource', () => {
 	it('parses github: shorthand with subdir and ref', () => {
-		assert.deepEqual(parsePackageSource('github:kentcdodds/kody-celld'), {
+		assert.deepEqual(parsePackageSource('github:kody-hq/kody-celld'), {
 			kind: 'github',
-			owner: 'kentcdodds',
+			owner: 'kody-hq',
 			repo: 'kody-celld',
 			ref: null,
 			subdir: null,
 		})
-		const full = parsePackageSource('github:kentcdodds/kody-celld/examples/hello#v1.0.0')
+		const full = parsePackageSource('github:kody-hq/kody-celld/examples/hello#v1.0.0')
 		assert.deepEqual(full, {
 			kind: 'github',
-			owner: 'kentcdodds',
+			owner: 'kody-hq',
 			repo: 'kody-celld',
 			ref: 'v1.0.0',
 			subdir: 'examples/hello',
 		})
-		assert.equal(describePackageSource(full), 'github:kentcdodds/kody-celld/examples/hello#v1.0.0')
+		assert.equal(describePackageSource(full), 'github:kody-hq/kody-celld/examples/hello#v1.0.0')
 		assert.ok(full.kind === 'github')
-		assert.equal(githubTarballUrl(full), 'https://codeload.github.com/kentcdodds/kody-celld/tar.gz/v1.0.0')
+		assert.equal(githubTarballUrl(full), 'https://codeload.github.com/kody-hq/kody-celld/tar.gz/v1.0.0')
 		const bare = parsePackageSource('github:a/b')
 		assert.ok(bare.kind === 'github')
 		assert.equal(githubTarballUrl(bare), 'https://codeload.github.com/a/b/tar.gz/HEAD')
 	})
 
 	it('parses github.com URLs including /tree/<ref>/<subdir>', () => {
-		assert.deepEqual(parsePackageSource('https://github.com/kentcdodds/kody-celld.git'), {
+		assert.deepEqual(parsePackageSource('https://github.com/kody-hq/kody-celld.git'), {
 			kind: 'github',
-			owner: 'kentcdodds',
+			owner: 'kody-hq',
 			repo: 'kody-celld',
 			ref: null,
 			subdir: null,
 		})
-		assert.deepEqual(parsePackageSource('https://github.com/kentcdodds/kody-celld/tree/main/examples/hello'), {
+		assert.deepEqual(parsePackageSource('https://github.com/kody-hq/kody-celld/tree/main/examples/hello'), {
 			kind: 'github',
-			owner: 'kentcdodds',
+			owner: 'kody-hq',
 			repo: 'kody-celld',
 			ref: 'main',
 			subdir: 'examples/hello',

@@ -33,7 +33,7 @@ The long-running process is therefore the node, not the `celld.dev` wrapper.
 That matters once the local store has grown: the wrapper waits a fixed ~30s for
 the child to announce its operator listener, and a large uncompacted LTX backlog
 can miss that window and crash-loop the container
-([issue #89](https://github.com/kentcdodds/kody-celld/issues/89)). The direct
+([issue #89](https://github.com/kody-hq/kody-celld/issues/89)). The direct
 node has no announce deadline and runs LTX compaction.
 
 Existing volumes keep working across image upgrades; the store layout is

@@ -1,6 +1,6 @@
 # kody-celld agent index
 
-Self-hosted [Kody](https://github.com/kentcdodds/kody) core on
+Self-hosted [Kody](https://github.com/kody-hq/kody) core on
 [Deno celld](https://celld.dev). Read [README.md](./README.md) first.
 
 `npm run validate` is the single authoritative local gate (typecheck, oxlint,

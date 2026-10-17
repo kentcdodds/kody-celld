@@ -6,7 +6,7 @@ import { decodePreviewSource, encodePreviewSource } from './preview-source.ts'
 describe('preview source segment', () => {
 	it('round-trips source and subdir through one URL-safe segment', () => {
 		for (const ref of [
-			{ source: 'github:kentcdodds/kody-celld/examples/packages/http-probe#main', subdir: null },
+			{ source: 'github:kody-hq/kody-celld/examples/packages/http-probe#main', subdir: null },
 			{ source: 'https://example.com/pkg.tgz', subdir: 'package' },
 			{ source: 'kody:@kody/żółw', subdir: null },
 		]) {

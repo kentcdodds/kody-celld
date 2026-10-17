@@ -1,7 +1,7 @@
 # Shared-from-kody sync lock
 
 kody-celld copies selected files from
-[kentcdodds/kody](https://github.com/kentcdodds/kody) and pins them in
+[kody-hq/kody](https://github.com/kody-hq/kody) and pins them in
 [`shared-from-kody.json`](../../shared-from-kody.json). CI fails when a pinned
 file drifts from the upstream bytes at the pinned commit.
 
@@ -61,10 +61,10 @@ These three adapted copies are an interim second lane, not the end state:
 
 Replace them with a shared `@kody/core` package, then delete the interim copies
 and every doc about them. Tracked in
-[#69](https://github.com/kentcdodds/kody-celld/issues/69).
+[#69](https://github.com/kody-hq/kody-celld/issues/69).
 
 ## Related
 
 - [Match hosted first](../principles/match-hosted-first.md)
 - [Keep agent context lean](../principles/lean-agent-context.md)
-- [#69 Replace interim contract modules with @kody/core](https://github.com/kentcdodds/kody-celld/issues/69)
+- [#69 Replace interim contract modules with @kody/core](https://github.com/kody-hq/kody-celld/issues/69)

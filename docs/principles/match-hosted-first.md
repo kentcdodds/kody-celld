@@ -1,7 +1,7 @@
 # Match hosted first
 
 kody-celld is a faithful self-host of
-[hosted Kody](https://github.com/kentcdodds/kody), not a separate product.
+[hosted Kody](https://github.com/kody-hq/kody), not a separate product.
 Copy hosted Kody's behaviour, contracts, and code before inventing a celld-only
 shape. Capability names, arguments, placeholder grammar, package manifests, and
 UI patterns should match hosted unless there is a written reason they cannot.

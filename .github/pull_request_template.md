@@ -21,7 +21,7 @@
 
 <!-- State the need. How does hosted Kody do this today? Cite the hosted file or say it is new in both. -->
 
-**Hosted Kody:** <!-- path in kentcdodds/kody, or "n/a (celld runtime only)", or "lands in hosted first / same change" -->
+**Hosted Kody:** <!-- path in kody-hq/kody, or "n/a (celld runtime only)", or "lands in hosted first / same change" -->
 
 ## Summary
 

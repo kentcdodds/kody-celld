@@ -6,7 +6,7 @@ gate.
 
 ## Checklist
 
-- [ ] States the need and how [hosted Kody](https://github.com/kentcdodds/kody)
+- [ ] States the need and how [hosted Kody](https://github.com/kody-hq/kody)
       does it (cite the hosted file), or why celld must differ
 - [ ] Capability names and arguments match hosted when the surface exists there
 - [ ] Any new dependency has a stated need and size; hosted uses it at the same

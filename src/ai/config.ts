@@ -4,7 +4,7 @@
  * vars and are read by the worker itself, never by sandboxed package code.
  *
  * Chat is OpenAI-compatible only (Ollama, LM Studio, OpenRouter, vLLM, OpenAI).
- * The Anthropic adapter was removed — see https://github.com/kentcdodds/kody-celld/issues/63.
+ * The Anthropic adapter was removed — see https://github.com/kody-hq/kody-celld/issues/63.
  */
 
 export type ChatProviderKind = 'openai'
@@ -12,7 +12,7 @@ export type EmbedProviderKind = 'openai'
 export type VectorProviderKind = 'local' | 'qdrant'
 export type RerankMode = 'off' | 'llm'
 
-const noticeUrl = 'https://github.com/kentcdodds/kody-celld/issues/63'
+const noticeUrl = 'https://github.com/kody-hq/kody-celld/issues/63'
 
 export type AiEnv = {
 	KODY_AI_PROVIDER?: string

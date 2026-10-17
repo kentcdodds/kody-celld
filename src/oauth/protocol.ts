@@ -46,7 +46,7 @@ export function authorizationServerMetadata(issuer: string) {
 		token_endpoint_auth_methods_supported: [...tokenEndpointAuthMethods],
 		revocation_endpoint_auth_methods_supported: [...tokenEndpointAuthMethods],
 		code_challenge_methods_supported: ['S256'],
-		service_documentation: 'https://github.com/kentcdodds/kody-celld/blob/main/docs/mcp-oauth.md',
+		service_documentation: 'https://github.com/kody-hq/kody-celld/blob/main/docs/mcp-oauth.md',
 	}
 }
 
@@ -56,7 +56,7 @@ export function protectedResourceMetadata(issuer: string) {
 		authorization_servers: [issuer],
 		scopes_supported: [...oauthScopes],
 		bearer_methods_supported: ['header'],
-		resource_documentation: 'https://github.com/kentcdodds/kody-celld/blob/main/docs/mcp-oauth.md',
+		resource_documentation: 'https://github.com/kody-hq/kody-celld/blob/main/docs/mcp-oauth.md',
 	}
 }
 

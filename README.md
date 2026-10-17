@@ -7,7 +7,7 @@ Cloudflare Workers + Durable Objects programming model on your own machines,
 with an S3-compatible bucket for durability.
 
 It is a faithful self-host of
-[kentcdodds/kody](https://github.com/kentcdodds/kody) for your own hardware:
+[kody-hq/kody](https://github.com/kody-hq/kody) for your own hardware:
 the same MCP contract (`search` + `execute`, packages, secrets, jobs) plus every
 surface production Kody gets from Cloudflare, provided here as a self-hosted
 built-in, a generic adapter for a service you already run, or both. See the
@@ -63,7 +63,7 @@ NAS's Compose/"stack" UI) and run `docker compose up -d`:
 ```yaml
 services:
   kody:
-    image: ghcr.io/kentcdodds/kody-celld:latest
+    image: ghcr.io/kody-hq/kody-celld:latest
     init: true
     restart: unless-stopped
     ports:
@@ -87,7 +87,7 @@ The commands below use `http://localhost:8080`; if you set a different
 running Docker).
 
 Prefer to build from source (or want the AI / browser / mail / fleet overlays)?
-`git clone https://github.com/kentcdodds/kody-celld && cd kody-celld && docker compose up -d`
+`git clone https://github.com/kody-hq/kody-celld && cd kody-celld && docker compose up -d`
 uses the same image name and builds it locally when it is not present.
 
 **2. Check it and read your admin token**
@@ -311,8 +311,8 @@ get `kody.aiChat()`, `kody.aiEmbed()`, embedding-based memory recall and hybrid
 ranking in `search` — vectors live in sqlite-vec inside the cell by default, or
 in Qdrant (`KODY_VECTOR_PROVIDER=qdrant`); `KODY_SEARCH_RERANK=llm` adds a
 chat-model re-rank. (`KODY_AI_PROVIDER=anthropic` was removed; see
-[#67](https://github.com/kentcdodds/kody-celld/pull/67) /
-[#63](https://github.com/kentcdodds/kody-celld/issues/63).) Provider keys stay
+[#67](https://github.com/kody-hq/kody-celld/pull/67) /
+[#63](https://github.com/kody-hq/kody-celld/issues/63).) Provider keys stay
 operator-side and never reach sandboxed code.
 
 ```sh
@@ -410,6 +410,6 @@ what you're building on kody-celld, and help shape self-hosted Kody.
 ## License
 
 [FSL-1.1-ALv2](./LICENSE) — the same Functional Source License as
-[kentcdodds/kody](https://github.com/kentcdodds/kody). Use, modify, and
+[kody-hq/kody](https://github.com/kody-hq/kody). Use, modify, and
 self-host freely; competing commercial use is not permitted until the
 Apache-2.0 future license kicks in.

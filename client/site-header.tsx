@@ -36,7 +36,7 @@ export type SiteHeaderProps = {
 const marketingLinks = [
 	{ href: routes.community.href(), label: 'Community' },
 	{
-		href: 'https://github.com/kentcdodds/kody-celld/tree/main/docs',
+		href: 'https://github.com/kody-hq/kody-celld/tree/main/docs',
 		label: 'Docs',
 	},
 ] as const

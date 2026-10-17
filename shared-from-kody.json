@@ -1,5 +1,5 @@
 {
-  "kodyRepo": "kentcdodds/kody",
+  "kodyRepo": "kody-hq/kody",
   "kodyCommit": "0bf31fb32793eedadd13b63aaf442408a37debec",
   "updatedAt": "2026-10-10T23:54:09Z",
   "notes": "Verbatim files must match upstream bytes at kodyCommit. Adapted files share a path with hosted Kody but are intentionally different; sync:kody reports their diffs and does not overwrite them.",

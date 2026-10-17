@@ -106,7 +106,7 @@ compose `deploy` service). Every node uses the same service.
   resolved through DNS-over-HTTPS before every hop and private answers are
   refused ([mcp-servers.md](./mcp-servers.md)). It has the same fast-rebinding
   gap, because `fetch` resolves the name again when it connects; tracked in
-  [kody-celld#45](https://github.com/kentcdodds/kody-celld/issues/45).
+  [kody-celld#45](https://github.com/kody-hq/kody-celld/issues/45).
 
 - **The browser is not the gateway.** Pages are fetched by Chromium, so
   `{{secret:…}}` placeholders are never resolved in browser requests and

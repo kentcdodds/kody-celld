@@ -1,7 +1,7 @@
 # Inbound contributions
 
 How outside patches enter
-[this repository](https://github.com/kentcdodds/kody-celld). The decision and
+[this repository](https://github.com/kody-hq/kody-celld). The decision and
 the why live in [0018 — Inbound CLA](./decisions/0018-inbound-cla.md).
 
 This page is the repository contribution path. Most reusable behavior for a

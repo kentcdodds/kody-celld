@@ -73,7 +73,7 @@ Portainer → Stacks:
 ```yaml
 services:
   kody:
-    image: ghcr.io/kentcdodds/kody-celld:latest
+    image: ghcr.io/kody-hq/kody-celld:latest
     init: true
     restart: unless-stopped
     ports:
@@ -112,14 +112,14 @@ want to control when you upgrade.
 and the fleet, or if you want to hack on it:
 
 ```sh
-git clone https://github.com/kentcdodds/kody-celld.git
+git clone https://github.com/kody-hq/kody-celld.git
 cd kody-celld
 cp .env.example .env     # KODY_PUBLIC_URL defaults to http://localhost:8080; change it per the table above
 ```
 
 (No git on the NAS? Download the ZIP from GitHub and unpack it into a shared
 folder, then open a terminal/SSH session in that folder.) `docker compose up -d`
-builds the image under the same `ghcr.io/kentcdodds/kody-celld` name when it is
+builds the image under the same `ghcr.io/kody-hq/kody-celld` name when it is
 not present locally; `docker compose pull` swaps in the prebuilt one.
 
 ### 3. Start it
@@ -279,7 +279,7 @@ it, or for a beefy NAS); spread the nodes over machines for real redundancy.
 ### 1. Configure
 
 ```sh
-git clone https://github.com/kentcdodds/kody-celld.git && cd kody-celld
+git clone https://github.com/kody-hq/kody-celld.git && cd kody-celld
 cp .env.example .env
 ```
 

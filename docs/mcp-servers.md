@@ -51,7 +51,7 @@ A server that answers `401` without a bearer token and advertises an OAuth
 authorization server (RFC 9728 protected resource metadata) is added as an
 OAuth server. A bearer token and OAuth are exclusive on celld: a server added
 with `bearerToken` never starts OAuth (hosted Kody allows both; see
-kentcdodds/kody#3203).
+kody-hq/kody#3203).
 
 ### Flow
 
@@ -312,7 +312,7 @@ KODY_PRIVATE_HOSTS=homeassistant.lan,*.home.arpa,172.30.0.0/16,10.0.0.5
   `fetch` resolves the name again when it connects, so a name that changes its
   answer between the check and the connect is not excluded. Closing this needs
   the connected IP to be checked; that is tracked in
-  [kody-celld#45](https://github.com/kentcdodds/kody-celld/issues/45), after
+  [kody-celld#45](https://github.com/kody-hq/kody-celld/issues/45), after
   which this pre-check is removed.
 - URLs with credentials (`https://user:pass@…`) are refused; use
   `bearerToken`.

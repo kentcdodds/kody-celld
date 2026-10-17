@@ -5,7 +5,7 @@
 
 ## Context
 
-Issue [#81](https://github.com/kentcdodds/kody-celld/issues/81) (reported by
+Issue [#81](https://github.com/kody-hq/kody-celld/issues/81) (reported by
 [@Averus89](https://github.com/Averus89)): when `KODY_APP_BASE_URL` and
 `KODY_PUBLIC_URL` share a registrable domain, untrusted package-app JavaScript
 can plant `Domain=<parent>` cookies that the Kody origin receives and that
@@ -16,7 +16,7 @@ stop client JS.
 Hosted Kody keeps `kody_session` unprefixed because its package-app origin is
 always a separate registrable domain. It already uses `__Host-kody_pkg_session`
 on the app origin itself
-([ADR 0017](https://github.com/kentcdodds/kody/blob/main/docs/contributing/decisions/0017-per-user-package-app-subdomains.md)).
+([ADR 0017](https://github.com/kody-hq/kody/blob/main/docs/contributing/decisions/0017-per-user-package-app-subdomains.md)).
 
 Alternatives considered:
 

@@ -99,7 +99,7 @@ run_single() {
 	# Do not leave `celld.dev` as the long-running process. Its supervisor
 	# waits a fixed ~30s for the child to announce its operator listener; a
 	# large uncompacted local store can miss that window and crash-loop
-	# (kentcdodds/kody-celld#89). Deploy through celld.dev (only public writer
+	# (kody-hq/kody-celld#89). Deploy through celld.dev (only public writer
 	# for the local store), then exec the node the same way celld.dev would.
 	local single_state="$state_dir/celld/dev"
 	# shellcheck disable=SC2086 # CELLD_DEV_FLAGS is an optional flag string for the deploy step only

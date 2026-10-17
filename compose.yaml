@@ -16,7 +16,7 @@
 services:
   kody:
     build: .
-    image: ${KODY_IMAGE:-ghcr.io/kentcdodds/kody-celld:latest}
+    image: ${KODY_IMAGE:-ghcr.io/kody-hq/kody-celld:latest}
     command: ['single']
     init: true
     restart: unless-stopped

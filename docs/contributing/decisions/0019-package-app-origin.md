@@ -5,7 +5,7 @@
 
 ## Context
 
-Issue [#42](https://github.com/kentcdodds/kody-celld/issues/42) asks for hosted
+Issue [#42](https://github.com/kody-hq/kody-celld/issues/42) asks for hosted
 Kody's package apps on kody-celld: a package declares `kody.app` and serves a
 browser app. Package code is installed by users, often from elsewhere, and runs
 with the owner's secrets and capabilities. Served on the Kody origin, a script

@@ -17,7 +17,7 @@ Developer Certificate of Origin records provenance only; it does not move those
 rights.
 
 kody-celld mirrors the inbound CLA already used by
-[kentcdodds/kody](https://github.com/kentcdodds/kody). The first external pull
+[kody-hq/kody](https://github.com/kody-hq/kody). The first external pull
 request arrived before this gate existed; community merges should wait on the
 same signing flow.
 

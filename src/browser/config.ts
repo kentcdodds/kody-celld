@@ -5,14 +5,14 @@
  * deployment settings and never reach sandbox code.
  *
  * The Cloudflare Browser Rendering adapter was removed — see
- * https://github.com/kentcdodds/kody-celld/issues/63.
+ * https://github.com/kody-hq/kody-celld/issues/63.
  */
 
 import { privateHostsFromEnv, type PrivateHostsEnv } from '../lib/private-hosts-env.ts'
 
 export type BrowserProviderKind = 'browserless'
 
-const noticeUrl = 'https://github.com/kentcdodds/kody-celld/issues/63'
+const noticeUrl = 'https://github.com/kody-hq/kody-celld/issues/63'
 
 export type BrowserEnv = PrivateHostsEnv & {
 	KODY_BROWSER_PROVIDER?: string
